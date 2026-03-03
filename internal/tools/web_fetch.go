@@ -140,6 +140,7 @@ func (t *WebFetchTool) doFetch(ctx context.Context, rawURL, extractMode string, 
 	client := &http.Client{
 		Timeout: time.Duration(fetchTimeoutSeconds) * time.Second,
 		Transport: &http.Transport{
+			ForceAttemptHTTP2:   true,
 			MaxIdleConns:        10,
 			IdleConnTimeout:     30 * time.Second,
 			TLSHandshakeTimeout: 15 * time.Second,
@@ -163,8 +164,9 @@ func (t *WebFetchTool) doFetch(ctx context.Context, rawURL, extractMode string, 
 	}
 	defer resp.Body.Close()
 
-	// Limit body reading to avoid memory issues
-	limitReader := io.LimitReader(resp.Body, int64(maxChars*4)) // read extra for HTML overhead
+	// Read enough HTML to reach <body> content — pages often have 30-50KB+ <head> sections.
+	readLimit := int64(max(maxChars*10, 512*1024))
+	limitReader := io.LimitReader(resp.Body, readLimit)
 	body, err := io.ReadAll(limitReader)
 	if err != nil {
 		return "", fmt.Errorf("read body: %w", err)
@@ -195,6 +197,10 @@ func (t *WebFetchTool) doFetch(ctx context.Context, rawURL, extractMode string, 
 		} else {
 			text = htmlToText(string(body))
 			extractor = "html-to-text"
+		}
+		if text == "" && len(body) > 0 {
+			text = "[No content extracted. The page may require JavaScript to render, " +
+				"or returned a bot-protection challenge. Try using browser automation instead.]"
 		}
 
 	default:
