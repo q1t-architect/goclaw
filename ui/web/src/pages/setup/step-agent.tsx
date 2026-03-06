@@ -82,6 +82,7 @@ export function StepAgent({ provider, model, onComplete }: StepAgentProps) {
         provider: provider.name,
         model: model || "",
         agent_type: "predefined",
+        is_default: true,
         other_config: description.trim() ? { description: description.trim() } : undefined,
       };
 

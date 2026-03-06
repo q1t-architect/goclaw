@@ -128,11 +128,7 @@ func (h *AgentsHandler) handleCreate(w http.ResponseWriter, r *http.Request) {
 		req.MaxToolIterations = 20
 	}
 	if req.Workspace == "" {
-		if req.IsDefault {
-			req.Workspace = "~/.goclaw/workspace"
-		} else {
-			req.Workspace = fmt.Sprintf("~/.goclaw/%s-workspace", req.AgentKey)
-		}
+		req.Workspace = fmt.Sprintf("~/.goclaw/%s-workspace", req.AgentKey)
 	}
 	req.RestrictToWorkspace = true
 
