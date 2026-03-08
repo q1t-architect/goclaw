@@ -53,17 +53,26 @@ function ToolEventCard({ p, resolveAgent }: { p: EnrichedAgentEventPayload; reso
   const isError = isResult && p.payload?.is_error;
   const args = p.payload?.arguments;
   const agentName = resolveAgent(p.agentId);
+  const isSkill = toolName === "use_skill";
+  const skillName = isSkill ? (args?.name as string) || "unknown" : null;
+
+  // Display label: show "skill: <name>" for use_skill, raw tool name otherwise
+  const displayName = isSkill ? `skill: ${skillName}` : toolName;
 
   return (
     <div className="space-y-1 text-sm">
       <div className="flex min-w-0 flex-wrap items-center gap-x-1.5 gap-y-0.5">
         {isResult ? (
           <>
-            {toolName && <span className="truncate font-mono font-medium">{toolName}</span>}
+            {displayName && (
+              <span className={`truncate font-mono font-medium ${isSkill ? "text-amber-600 dark:text-amber-400" : ""}`}>
+                {displayName}
+              </span>
+            )}
             <span className="shrink-0 text-muted-foreground">&rarr;</span>
             <span className="truncate font-medium">{agentName}</span>
-            <Badge variant={isError ? "destructive" : "success"} className="shrink-0 text-xs">
-              {isError ? "error" : "ok"}
+            <Badge variant={isError ? "destructive" : isSkill ? "warning" : "success"} className="shrink-0 text-xs">
+              {isError ? "error" : isSkill ? "activated" : "ok"}
             </Badge>
             {p.runKind && <RunKindBadge kind={p.runKind} />}
           </>
@@ -71,14 +80,18 @@ function ToolEventCard({ p, resolveAgent }: { p: EnrichedAgentEventPayload; reso
           <>
             <span className="truncate font-medium">{agentName}</span>
             <span className="shrink-0 text-muted-foreground">&rarr;</span>
-            {toolName && <span className="truncate font-mono font-medium">{toolName}</span>}
+            {displayName && (
+              <span className={`truncate font-mono font-medium ${isSkill ? "text-amber-600 dark:text-amber-400" : ""}`}>
+                {displayName}
+              </span>
+            )}
             {p.runKind && <RunKindBadge kind={p.runKind} />}
           </>
         )}
       </div>
 
-      {/* Structured tool arguments (only for tool.call) */}
-      {!isResult && args && <ToolArgs args={args} />}
+      {/* Structured tool arguments (only for tool.call, skip for use_skill) */}
+      {!isResult && args && !isSkill && <ToolArgs args={args} />}
 
       <ContextRow p={p} resolveAgent={resolveAgent} showCallId />
     </div>
