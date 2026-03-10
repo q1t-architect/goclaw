@@ -10,12 +10,14 @@ import {
   MiniMap,
   type Node,
   type Edge,
+  type ColorMode,
   Handle,
   Position,
 } from "@xyflow/react";
 import { forceSimulation, forceLink, forceManyBody, forceCenter, forceCollide, forceX, forceY, type SimulationNodeDatum } from "d3-force";
 import "@xyflow/react/dist/style.css";
 import { useTranslation } from "react-i18next";
+import { useUiStore } from "@/stores/use-ui-store";
 import type { KGEntity, KGRelation } from "@/types/knowledge-graph";
 
 // Color mapping for entity types
@@ -141,6 +143,8 @@ export function KGGraphView(props: KGGraphViewProps) {
 function KGGraphViewInner({ entities, relations, onEntityClick }: KGGraphViewProps) {
   const { t } = useTranslation("memory");
   const { fitView } = useReactFlow();
+  const theme = useUiStore((s) => s.theme);
+  const colorMode: ColorMode = theme === "system" ? "system" : theme;
   const { nodes: initialNodes, edges: initialEdges } = useMemo(
     () => buildGraph(entities, relations),
     [entities, relations],
@@ -190,6 +194,7 @@ function KGGraphViewInner({ entities, relations, onEntityClick }: KGGraphViewPro
           onEdgesChange={onEdgesChange}
           onNodeClick={handleNodeClick}
           nodeTypes={nodeTypes}
+          colorMode={colorMode}
           fitView
           minZoom={0.1}
           maxZoom={3}
