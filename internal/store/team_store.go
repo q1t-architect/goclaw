@@ -16,8 +16,9 @@ const (
 
 // Team member role constants.
 const (
-	TeamRoleLead   = "lead"
-	TeamRoleMember = "member"
+	TeamRoleLead     = "lead"
+	TeamRoleMember   = "member"
+	TeamRoleReviewer = "reviewer"
 )
 
 // Team task status constants.

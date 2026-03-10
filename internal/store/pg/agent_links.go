@@ -158,7 +158,9 @@ func (s *PGAgentLinkStore) DelegateTargets(ctx context.Context, fromAgentID uuid
 		 JOIN agents sa ON sa.id = l.source_agent_id
 		 JOIN agents ta ON ta.id = l.target_agent_id
 		 LEFT JOIN agent_teams tm ON tm.id = l.team_id
-		 WHERE l.status = 'active' AND (
+		 WHERE l.status = 'active'
+		   AND CASE WHEN l.source_agent_id = $1 THEN ta.status ELSE sa.status END = 'active'
+		   AND (
 			(l.source_agent_id = $1 AND l.direction IN ('outbound', 'bidirectional'))
 			OR
 			(l.target_agent_id = $1 AND l.direction IN ('inbound', 'bidirectional'))
@@ -205,6 +207,7 @@ func (s *PGAgentLinkStore) SearchDelegateTargets(ctx context.Context, fromAgentI
 		 JOIN agents ta ON ta.id = l.target_agent_id
 		 LEFT JOIN agent_teams tm ON tm.id = l.team_id
 		 WHERE l.status = 'active'
+		   AND CASE WHEN l.source_agent_id = $1 THEN ta.status ELSE sa.status END = 'active'
 		   AND (
 		     (l.source_agent_id = $1 AND l.direction IN ('outbound', 'bidirectional'))
 		     OR
@@ -238,6 +241,7 @@ func (s *PGAgentLinkStore) SearchDelegateTargetsByEmbedding(ctx context.Context,
 		 JOIN agents ta ON ta.id = l.target_agent_id
 		 LEFT JOIN agent_teams tm ON tm.id = l.team_id
 		 WHERE l.status = 'active'
+		   AND CASE WHEN l.source_agent_id = $1 THEN ta.status ELSE sa.status END = 'active'
 		   AND (
 		     (l.source_agent_id = $1 AND l.direction IN ('outbound', 'bidirectional'))
 		     OR

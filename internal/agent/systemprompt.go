@@ -79,7 +79,13 @@ var coreToolSummaries = map[string]string{
 	"create_video":     "Generate videos from text descriptions using AI",
 	"read_document":    "Analyze documents (PDF, DOCX, etc.) attached to the conversation. MUST call this when you see <media:document> tags",
 	"create_image":            "Generate images from text descriptions using AI",
+	"create_audio":            "Generate music or sound effects from text descriptions using AI",
 	"knowledge_graph_search":  "Search entities and traverse relationships in the knowledge graph",
+	"handoff":                 "Transfer conversation to another agent (ONLY when user explicitly asks to switch agents — NOT for task delegation)",
+	"evaluate_loop":           "Run a generate→evaluate→revise loop between two agents for quality-critical tasks",
+	"delegate_search":         "Search for agents by expertise to find the right delegation target",
+	"team_tasks":              "Manage team task board (list, create, complete, cancel tasks)",
+	"team_message":            "Send messages to teammates (progress updates, questions)",
 }
 
 // BuildSystemPrompt constructs the full system prompt with all sections.

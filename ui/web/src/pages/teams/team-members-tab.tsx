@@ -2,6 +2,7 @@ import { useState, useMemo, useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import { Combobox } from "@/components/ui/combobox";
 import { Label } from "@/components/ui/label";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { UserPlus, Info } from "lucide-react";
 import {
   Tooltip,
@@ -13,11 +14,12 @@ import { useTranslation } from "react-i18next";
 import { useAgents } from "@/pages/agents/hooks/use-agents";
 import type { TeamMemberData } from "@/types/team";
 import { MemberList } from "./member-sections";
+import { MEMBER_ROLE_OPTIONS } from "./member-sections/member-utils";
 
 interface TeamMembersTabProps {
   teamId: string;
   members: TeamMemberData[];
-  onAddMember?: (agentId: string) => Promise<void>;
+  onAddMember?: (agentId: string, role?: string) => Promise<void>;
   onRemoveMember?: (agentId: string) => Promise<void>;
 }
 
@@ -25,6 +27,7 @@ export function TeamMembersTab({ members, onAddMember, onRemoveMember }: TeamMem
   const { t } = useTranslation("teams");
   const { agents, refresh: refreshAgents } = useAgents();
   const [selectedAgent, setSelectedAgent] = useState("");
+  const [selectedRole, setSelectedRole] = useState("member");
   const [adding, setAdding] = useState(false);
 
   useEffect(() => {
@@ -45,8 +48,9 @@ export function TeamMembersTab({ members, onAddMember, onRemoveMember }: TeamMem
     if (!selectedAgent || !onAddMember) return;
     setAdding(true);
     try {
-      await onAddMember(selectedAgent);
+      await onAddMember(selectedAgent, selectedRole);
       setSelectedAgent("");
+      setSelectedRole("member");
     } catch {
       // error handled upstream
     } finally {
@@ -80,6 +84,18 @@ export function TeamMembersTab({ members, onAddMember, onRemoveMember }: TeamMem
                 placeholder={availableAgents.length === 0 ? t("members.noAvailableAgents") : t("members.searchAgents")}
               />
             </div>
+            <Select value={selectedRole} onValueChange={setSelectedRole}>
+              <SelectTrigger className="h-9 w-[120px]">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {MEMBER_ROLE_OPTIONS.map((opt) => (
+                  <SelectItem key={opt.value} value={opt.value}>
+                    {opt.label}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
             <Button
               size="sm"
               className="h-9 gap-1"

@@ -151,6 +151,41 @@
     "toast": {
       "toggled": "Tool updated",
       "failedToggle": "Failed to update tool"
+    },
+    "descriptions": {
+      "read_file": "Read the contents of a file from the agent's workspace by path",
+      "write_file": "Write content to a file in the workspace, creating directories as needed",
+      "list_files": "List files and directories in a given path within the workspace",
+      "edit": "Apply targeted search-and-replace edits to existing files without rewriting the entire file",
+      "exec": "Execute a shell command in the workspace and return stdout/stderr",
+      "web_search": "Search the web for information using a search engine (Brave or DuckDuckGo)",
+      "web_fetch": "Fetch a web page or API endpoint and extract its text content",
+      "memory_search": "Search through the agent's long-term memory using semantic similarity",
+      "memory_get": "Retrieve a specific memory document by its file path",
+      "knowledge_graph_search": "Search entities, relationships, and observations in the agent's knowledge graph",
+      "read_image": "Analyze images using a vision-capable LLM provider",
+      "read_document": "Analyze documents (PDF, Word, Excel, PowerPoint, CSV, etc.) using a document-capable LLM provider",
+      "create_image": "Generate images from text prompts using an image generation provider",
+      "read_audio": "Analyze audio files (speech, music, sounds) using an audio-capable LLM provider",
+      "read_video": "Analyze video files using a video-capable LLM provider",
+      "create_video": "Generate videos from text descriptions using AI",
+      "create_audio": "Generate music or sound effects from text descriptions using AI",
+      "tts": "Convert text to natural-sounding speech audio",
+      "browser": "Automate browser interactions: navigate pages, click elements, fill forms, take screenshots",
+      "sessions_list": "List active chat sessions across all channels",
+      "session_status": "Get the current status and metadata of a specific chat session",
+      "sessions_history": "Retrieve the message history of a specific chat session",
+      "sessions_send": "Send a message to an active chat session on behalf of the agent",
+      "message": "Send a proactive message to a user on a connected channel (Telegram, Discord, etc.)",
+      "cron": "Schedule or manage recurring tasks using cron expressions, at-times, or intervals",
+      "spawn": "Spawn a subagent for background work or delegate a task to a linked agent",
+      "skill_search": "Search for available skills by keyword or description to find relevant capabilities",
+      "use_skill": "Activate a skill to use its specialized capabilities (tracing marker)",
+      "delegate_search": "Search for available delegation targets by keyword when there are too many linked agents to list",
+      "evaluate_loop": "Run a generate→evaluate→revise loop between two agents for quality-critical output",
+      "handoff": "Transfer the conversation to another agent — the user will talk directly to that agent",
+      "team_tasks": "View, create, update, and complete tasks on the team task board",
+      "team_message": "Send a direct message or broadcast to teammates in the agent team"
     }
   }
 }

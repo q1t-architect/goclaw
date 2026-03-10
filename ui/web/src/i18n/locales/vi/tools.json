@@ -151,6 +151,41 @@
     "toast": {
       "toggled": "Đã cập nhật công cụ",
       "failedToggle": "Không thể cập nhật công cụ"
+    },
+    "descriptions": {
+      "read_file": "Đọc nội dung tệp từ workspace của agent theo đường dẫn",
+      "write_file": "Ghi nội dung vào tệp trong workspace, tự tạo thư mục nếu cần",
+      "list_files": "Liệt kê tệp và thư mục trong một đường dẫn trong workspace",
+      "edit": "Áp dụng chỉnh sửa tìm-và-thay-thế vào tệp hiện có mà không cần ghi lại toàn bộ",
+      "exec": "Thực thi lệnh shell trong workspace và trả về stdout/stderr",
+      "web_search": "Tìm kiếm thông tin trên web bằng công cụ tìm kiếm (Brave hoặc DuckDuckGo)",
+      "web_fetch": "Tải trang web hoặc API endpoint và trích xuất nội dung văn bản",
+      "memory_search": "Tìm kiếm trong bộ nhớ dài hạn của agent bằng độ tương đồng ngữ nghĩa",
+      "memory_get": "Lấy tài liệu bộ nhớ cụ thể theo đường dẫn tệp",
+      "knowledge_graph_search": "Tìm kiếm thực thể, mối quan hệ và quan sát trong đồ thị tri thức của agent",
+      "read_image": "Phân tích hình ảnh bằng provider LLM hỗ trợ thị giác",
+      "read_document": "Phân tích tài liệu (PDF, Word, Excel, PowerPoint, CSV, v.v.) bằng provider LLM hỗ trợ tài liệu",
+      "create_image": "Tạo hình ảnh từ prompt văn bản bằng provider tạo ảnh",
+      "read_audio": "Phân tích tệp âm thanh (giọng nói, nhạc, âm thanh) bằng provider LLM hỗ trợ âm thanh",
+      "read_video": "Phân tích tệp video bằng provider LLM hỗ trợ video",
+      "create_video": "Tạo video từ mô tả văn bản bằng AI",
+      "create_audio": "Tạo nhạc hoặc hiệu ứng âm thanh từ mô tả văn bản bằng AI",
+      "tts": "Chuyển văn bản thành giọng nói tự nhiên",
+      "browser": "Tự động hóa tương tác trình duyệt: điều hướng trang, nhấp phần tử, điền form, chụp ảnh màn hình",
+      "sessions_list": "Liệt kê các phiên chat đang hoạt động trên tất cả kênh",
+      "session_status": "Lấy trạng thái và metadata hiện tại của một phiên chat cụ thể",
+      "sessions_history": "Lấy lịch sử tin nhắn của một phiên chat cụ thể",
+      "sessions_send": "Gửi tin nhắn vào phiên chat đang hoạt động thay mặt agent",
+      "message": "Gửi tin nhắn chủ động đến người dùng trên kênh đã kết nối (Telegram, Discord, v.v.)",
+      "cron": "Lên lịch hoặc quản lý tác vụ định kỳ bằng biểu thức cron, thời gian cụ thể hoặc khoảng thời gian",
+      "spawn": "Tạo subagent cho công việc nền hoặc ủy quyền tác vụ cho agent được liên kết",
+      "skill_search": "Tìm kiếm skill khả dụng theo từ khóa hoặc mô tả để tìm khả năng phù hợp",
+      "use_skill": "Kích hoạt skill để sử dụng khả năng chuyên biệt (đánh dấu tracing)",
+      "delegate_search": "Tìm kiếm mục tiêu ủy quyền khả dụng theo từ khóa khi có quá nhiều agent liên kết",
+      "evaluate_loop": "Chạy vòng lặp tạo→đánh giá→chỉnh sửa giữa hai agent cho đầu ra cần chất lượng cao",
+      "handoff": "Chuyển cuộc hội thoại sang agent khác — người dùng sẽ nói chuyện trực tiếp với agent đó",
+      "team_tasks": "Xem, tạo, cập nhật và hoàn thành tác vụ trên bảng tác vụ nhóm",
+      "team_message": "Gửi tin nhắn trực tiếp hoặc broadcast đến đồng đội trong nhóm agent"
     }
   }
 }

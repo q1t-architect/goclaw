@@ -5,7 +5,7 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Switch } from "@/components/ui/switch";
 import type { AgentLinkData } from "@/types/agent";
-import { directionBadgeVariant, linkTargetName } from "./link-utils";
+import { directionBadgeVariant, effectiveDirection, linkTargetName } from "./link-utils";
 
 interface LinkListProps {
   links: AgentLinkData[];
@@ -85,8 +85,8 @@ export function LinkList({
               </p>
             )}
           </div>
-          <Badge variant={directionBadgeVariant(link.direction)}>
-            {link.direction}
+          <Badge variant={directionBadgeVariant(effectiveDirection(link, agentId))}>
+            {effectiveDirection(link, agentId)}
           </Badge>
           <Switch
             checked={link.status === "active"}

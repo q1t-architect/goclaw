@@ -113,18 +113,24 @@ func (m *MemoryInterceptor) ReadFile(ctx context.Context, path string) (string, 
 	return content, true, nil
 }
 
+// MemoryWriteResult holds the outcome of a memory write operation.
+type MemoryWriteResult struct {
+	Handled     bool
+	KGTriggered bool
+}
+
 // WriteFile attempts to write a memory file to the DB (+ re-index chunks for .md files).
 // Non-.md files are stored but NOT indexed/chunked/embedded,
 // matching TS behavior where only .md files are indexed.
-// Returns (true, nil) if handled, or (false, nil) if not a memory path.
-func (m *MemoryInterceptor) WriteFile(ctx context.Context, path, content string) (bool, error) {
+// Returns MemoryWriteResult with Handled=true if this was a memory path, KGTriggered=true if KG extraction was started.
+func (m *MemoryInterceptor) WriteFile(ctx context.Context, path, content string) (MemoryWriteResult, error) {
 	if !isMemoryPath(path, m.workspace) {
-		return false, nil
+		return MemoryWriteResult{}, nil
 	}
 
 	agentID := store.AgentIDFromContext(ctx)
 	if agentID == uuid.Nil {
-		return false, nil // no agent context
+		return MemoryWriteResult{}, nil // no agent context
 	}
 
 	// Normalize absolute path to workspace-relative for DB storage
@@ -135,7 +141,7 @@ func (m *MemoryInterceptor) WriteFile(ctx context.Context, path, content string)
 
 	// Write document to DB
 	if err := m.memStore.PutDocument(ctx, agentStr, userID, relPath, content); err != nil {
-		return true, err
+		return MemoryWriteResult{Handled: true}, err
 	}
 
 	// Only index .md files (chunk + embed). Non-.md files (JSON, etc.) are stored
@@ -148,11 +154,13 @@ func (m *MemoryInterceptor) WriteFile(ctx context.Context, path, content string)
 	}
 
 	// Trigger KG extraction in background if configured
+	kgTriggered := false
 	if m.kgExtractFn != nil && content != "" {
 		go m.kgExtractFn(context.WithoutCancel(ctx), agentStr, userID, content)
+		kgTriggered = true
 	}
 
-	return true, nil
+	return MemoryWriteResult{Handled: true, KGTriggered: kgTriggered}, nil
 }
 
 // ListFiles lists memory documents from the DB when path is the memory directory.

@@ -19,6 +19,7 @@ import (
 type teamsAddMemberParams struct {
 	TeamID string `json:"teamId"`
 	Agent  string `json:"agent"` // agent key or UUID
+	Role   string `json:"role"`  // "member" (default) or "reviewer"
 }
 
 func (m *TeamsMethods) handleAddMember(ctx context.Context, client *gateway.Client, req *protocol.RequestFrame) {
@@ -64,8 +65,20 @@ func (m *TeamsMethods) handleAddMember(ctx context.Context, client *gateway.Clie
 		return
 	}
 
+	// Validate and default role
+	role := params.Role
+	switch role {
+	case store.TeamRoleMember, store.TeamRoleReviewer:
+		// valid
+	case "":
+		role = store.TeamRoleMember
+	default:
+		client.SendResponse(protocol.NewErrorResponse(req.ID, protocol.ErrInvalidRequest, "role must be member or reviewer"))
+		return
+	}
+
 	// Add member
-	if err := m.teamStore.AddMember(ctx, teamID, ag.ID, store.TeamRoleMember); err != nil {
+	if err := m.teamStore.AddMember(ctx, teamID, ag.ID, role); err != nil {
 		client.SendResponse(protocol.NewErrorResponse(req.ID, protocol.ErrInternal, i18n.T(locale, i18n.MsgFailedToCreate, "member", err.Error())))
 		return
 	}
@@ -93,7 +106,7 @@ func (m *TeamsMethods) handleAddMember(ctx context.Context, client *gateway.Clie
 				AgentID:     ag.ID.String(),
 				AgentKey:    ag.AgentKey,
 				DisplayName: ag.DisplayName,
-				Role:        store.TeamRoleMember,
+				Role:        role,
 			},
 		})
 	}

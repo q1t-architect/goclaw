@@ -52,6 +52,11 @@ func buildDelegateAgentsMD(targets []store.AgentLinkData) string {
 	sb.WriteString("- You lack the tools or knowledge to handle it well\n")
 	sb.WriteString("- The user explicitly asks to involve another agent\n")
 
+	sb.WriteString("\n## Important\n\n")
+	sb.WriteString("- Do NOT use `handoff` to delegate tasks. Use `spawn` instead.\n")
+	sb.WriteString("- `handoff` transfers the ENTIRE conversation — the user will talk directly to the other agent.\n")
+	sb.WriteString("- Only use `handoff` when the user explicitly asks to be transferred/switched to another agent.\n")
+
 	return sb.String()
 }
 
@@ -111,6 +116,31 @@ func buildTeamMD(team *store.TeamData, members []store.TeamMemberData, selfID uu
 		sb.WriteString("\n")
 	}
 
+	// Reviewers section (visible to leads)
+	if selfRole == store.TeamRoleLead {
+		var reviewers []store.TeamMemberData
+		for _, m := range members {
+			if m.Role == store.TeamRoleReviewer {
+				reviewers = append(reviewers, m)
+			}
+		}
+		if len(reviewers) > 0 {
+			sb.WriteString("\n## Reviewers\n")
+			sb.WriteString("Use reviewers as evaluators in `evaluate_loop` for quality-critical tasks.\n\n")
+			for _, r := range reviewers {
+				if r.DisplayName != "" {
+					sb.WriteString(fmt.Sprintf("- **%s** `%s`", r.DisplayName, r.AgentKey))
+				} else {
+					sb.WriteString(fmt.Sprintf("- **%s**", r.AgentKey))
+				}
+				if r.Frontmatter != "" {
+					sb.WriteString(": " + r.Frontmatter)
+				}
+				sb.WriteString("\n")
+			}
+		}
+	}
+
 	// Workflow guidance
 	sb.WriteString("\n## Workflow\n\n")
 	if selfRole == store.TeamRoleLead {
@@ -146,8 +176,23 @@ func buildTeamMD(team *store.TeamData, members []store.TeamMemberData, selfID uu
 		sb.WriteString("- action=search, query=<text> → search tasks by subject/description\n")
 		sb.WriteString("- action=complete, task_id=<id>, result=<summary> → manually complete a task\n")
 		sb.WriteString("- action=cancel, task_id=<id>, reason=<why> → cancel a pending task that is no longer needed\n\n")
-		sb.WriteString("For simple questions about team composition, answer directly from the member list above.\n")
+		sb.WriteString("For simple questions about team composition, answer directly from the member list above.\n\n")
+		sb.WriteString("## Quality Review (evaluate_loop)\n\n")
+		sb.WriteString("For important tasks that need quality review, use `evaluate_loop`:\n")
+		sb.WriteString("- generator: the agent who creates content\n")
+		sb.WriteString("- evaluator: a team reviewer (see Reviewers section above)\n")
+		sb.WriteString("- Use when: content for publishing, formal documents, quality-critical output\n")
+		sb.WriteString("- Don't use for: simple questions, quick tasks, internal notes\n\n")
+		sb.WriteString("Example: `evaluate_loop(generator=\"writer\", evaluator=\"reviewer\", task=\"...\", pass_criteria=\"...\")`\n\n")
+		sb.WriteString("## Handoff vs Spawn\n\n")
+		sb.WriteString("- Do NOT use `handoff` to delegate tasks. Use `spawn` instead.\n")
+		sb.WriteString("- `handoff` transfers the ENTIRE conversation — the user will talk directly to the other agent.\n")
+		sb.WriteString("- Only use `handoff` when the user explicitly asks to be transferred/switched to another agent.\n")
 	} else {
+		if selfRole == store.TeamRoleReviewer {
+			sb.WriteString("You are a **reviewer**. You may be used as an evaluator in `evaluate_loop`.\n")
+			sb.WriteString("When evaluating, respond with **APPROVED** or **REJECTED: <feedback>**.\n\n")
+		}
 		sb.WriteString("As a member, when you receive a delegated task, just do the work.\n")
 		sb.WriteString("Task completion is handled automatically by the system.\n\n")
 		sb.WriteString("For long-running tasks, send progress updates to your lead:\n")

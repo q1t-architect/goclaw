@@ -30,6 +30,12 @@ export function linkTargetName(link: AgentLinkData, currentAgentId: string): str
   return link.source_agent_key || link.source_agent_id;
 }
 
+export function effectiveDirection(link: AgentLinkData, currentAgentId: string): string {
+  if (link.direction === "bidirectional") return "bidirectional";
+  if (link.source_agent_id === currentAgentId) return link.direction;
+  return link.direction === "outbound" ? "inbound" : "outbound";
+}
+
 export function buildSettings(userAllow: string, userDeny: string): AgentLinkSettings | undefined {
   const allow = parseCommaSeparated(userAllow);
   const deny = parseCommaSeparated(userDeny);

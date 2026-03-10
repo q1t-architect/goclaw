@@ -56,8 +56,8 @@ export function TeamDetailPage({ teamId, onBack }: TeamDetailPageProps) {
     return () => { cancelled = true; };
   }, [teamId, getTeam]);
 
-  const handleAddMember = useCallback(async (agentId: string) => {
-    await addMember(teamId, agentId);
+  const handleAddMember = useCallback(async (agentId: string, role?: string) => {
+    await addMember(teamId, agentId, role);
     await reload();
   }, [teamId, addMember, reload]);
 

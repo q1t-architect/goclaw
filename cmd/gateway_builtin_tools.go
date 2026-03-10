@@ -14,30 +14,30 @@ import (
 func builtinToolSeedData() []store.BuiltinToolDef {
 	return []store.BuiltinToolDef{
 		// filesystem
-		{Name: "read_file", DisplayName: "Read File", Description: "Read file contents from the workspace", Category: "filesystem", Enabled: true},
-		{Name: "write_file", DisplayName: "Write File", Description: "Write or create files in the workspace", Category: "filesystem", Enabled: true},
-		{Name: "list_files", DisplayName: "List Files", Description: "List files and directories in the workspace", Category: "filesystem", Enabled: true},
-		{Name: "edit", DisplayName: "Edit File", Description: "Apply targeted edits to files (search and replace)", Category: "filesystem", Enabled: true},
+		{Name: "read_file", DisplayName: "Read File", Description: "Read the contents of a file from the agent's workspace by path", Category: "filesystem", Enabled: true},
+		{Name: "write_file", DisplayName: "Write File", Description: "Write content to a file in the workspace, creating directories as needed", Category: "filesystem", Enabled: true},
+		{Name: "list_files", DisplayName: "List Files", Description: "List files and directories in a given path within the workspace", Category: "filesystem", Enabled: true},
+		{Name: "edit", DisplayName: "Edit File", Description: "Apply targeted search-and-replace edits to existing files without rewriting the entire file", Category: "filesystem", Enabled: true},
 
 		// runtime
-		{Name: "exec", DisplayName: "Execute Command", Description: "Execute shell commands in the workspace", Category: "runtime", Enabled: true,
+		{Name: "exec", DisplayName: "Execute Command", Description: "Execute a shell command in the workspace and return stdout/stderr", Category: "runtime", Enabled: true,
 			Metadata: json.RawMessage(`{"config_hint":"Config → Tools → Exec Approval"}`),
 		},
 
 		// web
-		{Name: "web_search", DisplayName: "Web Search", Description: "Search the web using Brave or DuckDuckGo", Category: "web", Enabled: true,
+		{Name: "web_search", DisplayName: "Web Search", Description: "Search the web for information using a search engine (Brave or DuckDuckGo)", Category: "web", Enabled: true,
 			Metadata: json.RawMessage(`{"config_hint":"Config → Tools → Web Search"}`),
 		},
-		{Name: "web_fetch", DisplayName: "Web Fetch", Description: "Fetch and extract content from web URLs", Category: "web", Enabled: true},
+		{Name: "web_fetch", DisplayName: "Web Fetch", Description: "Fetch a web page or API endpoint and extract its text content", Category: "web", Enabled: true},
 
 		// memory
-		{Name: "memory_search", DisplayName: "Memory Search", Description: "Search through stored memory entries", Category: "memory", Enabled: true,
+		{Name: "memory_search", DisplayName: "Memory Search", Description: "Search through the agent's long-term memory using semantic similarity", Category: "memory", Enabled: true,
 			Requires: []string{"memory"},
 		},
-		{Name: "memory_get", DisplayName: "Memory Get", Description: "Retrieve a specific memory entry by key", Category: "memory", Enabled: true,
+		{Name: "memory_get", DisplayName: "Memory Get", Description: "Retrieve a specific memory document by its file path", Category: "memory", Enabled: true,
 			Requires: []string{"memory"},
 		},
-		{Name: "knowledge_graph_search", DisplayName: "Knowledge Graph Search", Description: "Search entities and traverse relationships in the knowledge graph", Category: "memory", Enabled: true,
+		{Name: "knowledge_graph_search", DisplayName: "Knowledge Graph Search", Description: "Search entities, relationships, and observations in the agent's knowledge graph", Category: "memory", Enabled: true,
 			Settings: json.RawMessage(`{"extract_on_memory_write":false,"extraction_provider":"","extraction_model":"","min_confidence":0.75}`),
 			Requires: []string{"knowledge_graph"},
 		},
@@ -71,56 +71,56 @@ func builtinToolSeedData() []store.BuiltinToolDef {
 			Settings: json.RawMessage(`{"provider":"minimax","model":"music-2.5+"}`),
 			Requires: []string{"audio_gen_provider"},
 		},
-		{Name: "tts", DisplayName: "Text to Speech", Description: "Convert text to speech audio", Category: "media", Enabled: true,
+		{Name: "tts", DisplayName: "Text to Speech", Description: "Convert text to natural-sounding speech audio", Category: "media", Enabled: true,
 			Requires: []string{"tts_provider"},
 			Metadata: json.RawMessage(`{"config_hint":"Config → TTS"}`),
 		},
 
 		// browser
-		{Name: "browser", DisplayName: "Browser", Description: "Automate browser interactions (navigate, click, screenshot)", Category: "browser", Enabled: true,
+		{Name: "browser", DisplayName: "Browser", Description: "Automate browser interactions: navigate pages, click elements, fill forms, take screenshots", Category: "browser", Enabled: true,
 			Requires: []string{"browser"},
 			Metadata: json.RawMessage(`{"config_hint":"Config → Tools → Browser"}`),
 		},
 
 		// sessions
-		{Name: "sessions_list", DisplayName: "List Sessions", Description: "List active chat sessions", Category: "sessions", Enabled: true},
-		{Name: "session_status", DisplayName: "Session Status", Description: "Get status of a chat session", Category: "sessions", Enabled: true},
-		{Name: "sessions_history", DisplayName: "Session History", Description: "Get message history of a chat session", Category: "sessions", Enabled: true},
-		{Name: "sessions_send", DisplayName: "Send to Session", Description: "Send a message to a chat session", Category: "sessions", Enabled: true},
+		{Name: "sessions_list", DisplayName: "List Sessions", Description: "List active chat sessions across all channels", Category: "sessions", Enabled: true},
+		{Name: "session_status", DisplayName: "Session Status", Description: "Get the current status and metadata of a specific chat session", Category: "sessions", Enabled: true},
+		{Name: "sessions_history", DisplayName: "Session History", Description: "Retrieve the message history of a specific chat session", Category: "sessions", Enabled: true},
+		{Name: "sessions_send", DisplayName: "Send to Session", Description: "Send a message to an active chat session on behalf of the agent", Category: "sessions", Enabled: true},
 
 		// messaging
-		{Name: "message", DisplayName: "Message", Description: "Send messages to connected channels (Telegram, Discord, etc.)", Category: "messaging", Enabled: true},
+		{Name: "message", DisplayName: "Message", Description: "Send a proactive message to a user on a connected channel (Telegram, Discord, etc.)", Category: "messaging", Enabled: true},
 
 		// scheduling
-		{Name: "cron", DisplayName: "Cron Scheduler", Description: "Schedule recurring tasks with cron expressions", Category: "scheduling", Enabled: true,
+		{Name: "cron", DisplayName: "Cron Scheduler", Description: "Schedule or manage recurring tasks using cron expressions, at-times, or intervals", Category: "scheduling", Enabled: true,
 			Metadata: json.RawMessage(`{"config_hint":"Config → Cron"}`),
 		},
 
 		// subagents & delegation (unified spawn tool)
-		{Name: "spawn", DisplayName: "Spawn / Delegate", Description: "Spawn a subagent or delegate to another agent", Category: "subagents", Enabled: true,
+		{Name: "spawn", DisplayName: "Spawn / Delegate", Description: "Spawn a subagent for background work or delegate a task to a linked agent", Category: "subagents", Enabled: true,
 			Metadata: json.RawMessage(`{"config_hint":"Config → Agents Defaults"}`),
 		},
 
 		// skills
-		{Name: "skill_search", DisplayName: "Skill Search", Description: "Search available skills by keyword or description", Category: "skills", Enabled: true},
-		{Name: "use_skill", DisplayName: "Use Skill", Description: "Activate a skill (marker for tracing and observability)", Category: "skills", Enabled: true},
+		{Name: "skill_search", DisplayName: "Skill Search", Description: "Search for available skills by keyword or description to find relevant capabilities", Category: "skills", Enabled: true},
+		{Name: "use_skill", DisplayName: "Use Skill", Description: "Activate a skill to use its specialized capabilities (tracing marker)", Category: "skills", Enabled: true},
 
 		// delegation
-		{Name: "delegate_search", DisplayName: "Delegate Search", Description: "Search for agents to delegate tasks to", Category: "delegation", Enabled: true,
+		{Name: "delegate_search", DisplayName: "Delegate Search", Description: "Search for available delegation targets by keyword when there are too many linked agents to list", Category: "delegation", Enabled: true,
 			Requires: []string{"managed_mode", "agent_links"},
 		},
-		{Name: "evaluate_loop", DisplayName: "Evaluate Loop", Description: "Run an evaluate-optimize loop with delegated agents", Category: "delegation", Enabled: true,
+		{Name: "evaluate_loop", DisplayName: "Evaluate Loop", Description: "Run a generate→evaluate→revise loop between two agents for quality-critical output", Category: "delegation", Enabled: true,
 			Requires: []string{"managed_mode", "agent_links"},
 		},
-		{Name: "handoff", DisplayName: "Handoff", Description: "Transfer conversation to another agent", Category: "delegation", Enabled: true,
+		{Name: "handoff", DisplayName: "Handoff", Description: "Transfer the conversation to another agent — the user will talk directly to that agent", Category: "delegation", Enabled: true,
 			Requires: []string{"managed_mode", "agent_links"},
 		},
 
 		// teams
-		{Name: "team_tasks", DisplayName: "Team Tasks", Description: "Manage tasks within a team of agents", Category: "teams", Enabled: true,
+		{Name: "team_tasks", DisplayName: "Team Tasks", Description: "View, create, update, and complete tasks on the team task board", Category: "teams", Enabled: true,
 			Requires: []string{"managed_mode", "teams"},
 		},
-		{Name: "team_message", DisplayName: "Team Message", Description: "Send messages between team agents", Category: "teams", Enabled: true,
+		{Name: "team_message", DisplayName: "Team Message", Description: "Send a direct message or broadcast to teammates in the agent team", Category: "teams", Enabled: true,
 			Requires: []string{"managed_mode", "teams"},
 		},
 	}

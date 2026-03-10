@@ -87,7 +87,42 @@
       "toggled": "工具已更新"
     },
     "toolCount": "{{count}} 个工具",
-    "toolCountPlural": "{{count}} 个工具"
+    "toolCountPlural": "{{count}} 个工具",
+    "descriptions": {
+      "read_file": "按路径读取Agent工作区中的文件内容",
+      "write_file": "将内容写入工作区中的文件，自动创建所需目录",
+      "list_files": "列出工作区中指定路径下的文件和目录",
+      "edit": "对现有文件应用搜索替换编辑，无需重写整个文件",
+      "exec": "在工作区中执行Shell命令并返回stdout/stderr",
+      "web_search": "使用搜索引擎（Brave或DuckDuckGo）在网上搜索信息",
+      "web_fetch": "获取网页或API端点并提取文本内容",
+      "memory_search": "使用语义相似度搜索Agent的长期记忆",
+      "memory_get": "按文件路径检索特定记忆文档",
+      "knowledge_graph_search": "搜索Agent知识图谱中的实体、关系和观察",
+      "read_image": "使用支持视觉的LLM Provider分析图像",
+      "read_document": "使用支持文档的LLM Provider分析文档（PDF、Word、Excel、PowerPoint、CSV等）",
+      "create_image": "使用图像生成Provider从文本提示生成图像",
+      "read_audio": "使用支持音频的LLM Provider分析音频文件（语音、音乐、声音）",
+      "read_video": "使用支持视频的LLM Provider分析视频文件",
+      "create_video": "使用AI从文本描述生成视频",
+      "create_audio": "使用AI从文本描述生成音乐或音效",
+      "tts": "将文本转换为自然发声的语音音频",
+      "browser": "自动化浏览器交互：导航页面、点击元素、填写表单、截屏",
+      "sessions_list": "列出所有渠道上的活跃聊天Session",
+      "session_status": "获取特定聊天Session的当前状态和元数据",
+      "sessions_history": "检索特定聊天Session的消息历史",
+      "sessions_send": "代表Agent向活跃聊天Session发送消息",
+      "message": "向已连接渠道（Telegram、Discord等）上的用户发送主动消息",
+      "cron": "使用cron表达式、定时或间隔调度或管理定期任务",
+      "spawn": "生成子Agent进行后台工作或将任务委托给已链接的Agent",
+      "skill_search": "按关键字或描述搜索可用Skill以找到相关能力",
+      "use_skill": "激活Skill以使用其专业能力（追踪标记）",
+      "delegate_search": "当链接Agent太多时按关键字搜索可用委托目标",
+      "evaluate_loop": "在两个Agent之间运行生成→评估→修订循环以产出高质量内容",
+      "handoff": "将对话转移给另一个Agent — 用户将直接与该Agent交流",
+      "team_tasks": "查看、创建、更新和完成团队任务板上的任务",
+      "team_message": "向Agent团队中的队友发送直接消息或广播"
+    }
   },
   "custom": {
     "columns": {

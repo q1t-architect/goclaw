@@ -202,7 +202,7 @@ function ToolRow({
         </div>
         {tool.description && (
           <p className="text-xs text-muted-foreground leading-snug truncate mt-0.5">
-            {tool.description}
+            {t(`builtin.descriptions.${tool.name}`, tool.description)}
           </p>
         )}
       </div>

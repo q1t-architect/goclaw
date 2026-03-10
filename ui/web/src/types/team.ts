@@ -27,7 +27,7 @@ export interface TeamMemberData {
   agent_key?: string;
   display_name?: string;
   frontmatter?: string;
-  role: "lead" | "member";
+  role: "lead" | "member" | "reviewer";
   joined_at?: string;
 }
 

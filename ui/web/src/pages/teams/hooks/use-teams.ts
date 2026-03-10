@@ -69,8 +69,8 @@ export function useTeams() {
   );
 
   const addMember = useCallback(
-    async (teamId: string, agent: string) => {
-      await ws.call(Methods.TEAMS_MEMBERS_ADD, { teamId, agent });
+    async (teamId: string, agent: string, role?: string) => {
+      await ws.call(Methods.TEAMS_MEMBERS_ADD, { teamId, agent, role });
     },
     [ws],
   );

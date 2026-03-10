@@ -137,10 +137,15 @@ func (t *EditTool) Execute(ctx context.Context, args map[string]any) *Result {
 			if result != nil {
 				return result
 			}
-			if _, err := t.memIntc.WriteFile(ctx, path, newContent); err != nil {
+			mwr, err := t.memIntc.WriteFile(ctx, path, newContent)
+			if err != nil {
 				return ErrorResult(fmt.Sprintf("failed to write memory file: %v", err))
 			}
-			return SilentResult(fmt.Sprintf("Memory file edited: %s", path))
+			msg := fmt.Sprintf("Memory file edited: %s", path)
+			if mwr.KGTriggered {
+				msg += "\n\n[Knowledge graph extraction triggered in background. The knowledge system may take a moment to fully update with new entities and relationships.]"
+			}
+			return SilentResult(msg)
 		}
 	}
 

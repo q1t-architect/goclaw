@@ -105,11 +105,15 @@ func (t *WriteFileTool) Execute(ctx context.Context, args map[string]any) *Resul
 
 	// Virtual FS: route memory files to DB
 	if t.memIntc != nil {
-		if handled, err := t.memIntc.WriteFile(ctx, path, content); handled {
+		if mwr, err := t.memIntc.WriteFile(ctx, path, content); mwr.Handled {
 			if err != nil {
 				return ErrorResult(fmt.Sprintf("failed to write memory file: %v", err))
 			}
-			return SilentResult(fmt.Sprintf("Memory file written: %s (%d bytes)", path, len(content)))
+			msg := fmt.Sprintf("Memory file written: %s (%d bytes)", path, len(content))
+			if mwr.KGTriggered {
+				msg += "\n\n[Knowledge graph extraction triggered in background. The knowledge system may take a moment to fully update with new entities and relationships.]"
+			}
+			return SilentResult(msg)
 		}
 	}
 
