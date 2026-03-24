@@ -737,7 +737,6 @@ func (l *Loop) runLoop(ctx context.Context, req RunRequest) (*RunResult, error) 
 			slog.Info("tool call", "agent", l.id, "tool", tc.Name, "args_len", len(argsJSON))
 
 			registryName := l.resolveToolCallName(tc.Name)
-			argsHash := rs.loopDetector.record(registryName, tc.Arguments)
 
 			toolSpanStart := time.Now().UTC()
 			toolSpanID := l.emitToolSpanStart(ctx, toolSpanStart, tc.Name, tc.ID, string(argsJSON))
@@ -771,119 +770,20 @@ func (l *Loop) runLoop(ctx context.Context, req RunRequest) (*RunResult, error) 
 			// Record tool execution time for adaptive thresholds.
 			toolTiming.Record(tc.Name, time.Since(toolSpanStart).Milliseconds())
 
-			// Record result for loop detection.
-			rs.loopDetector.recordResult(argsHash, result.ForLLM)
-			rs.loopDetector.recordMutation(registryName)
-
-			if result.Async {
-				rs.asyncToolCalls = append(rs.asyncToolCalls, tc.Name)
-			}
-
-			if result.IsError {
-				errMsg := result.ForLLM
-				if len(errMsg) > 200 {
-					errMsg = errMsg[:200] + "..."
-				}
-				slog.Warn("tool error", "agent", l.id, "tool", tc.Name, "error", errMsg)
-			}
-
-			// Count successful spawn calls for orphan detection (post-execution).
-			if registryName == "spawn" && !result.IsError {
-				if tid, _ := tc.Arguments["team_task_id"].(string); tid != "" {
-					rs.teamTaskSpawns++
-				}
-			}
-			if hadBootstrap && bootstrapToolAllowlist[registryName] {
-				rs.bootstrapWriteDetected = true
-			}
-
-			toolResultPayload := map[string]any{
-				"name":      tc.Name,
-				"id":        tc.ID,
-				"is_error":  result.IsError,
-				"arguments": tc.Arguments,
-				"result":    truncateStr(result.ForLLM, 1000),
-			}
-			if result.IsError && result.ForLLM != "" {
-				toolResultPayload["content"] = result.ForLLM
-			}
-			emitRun(AgentEvent{
-				Type:    protocol.AgentEventToolResult,
-				AgentID: l.id,
-				RunID:   req.RunID,
-				Payload: toolResultPayload,
-			})
-
-			l.scanWebToolResult(tc.Name, result)
-
-			// Collect MEDIA: paths from tool results.
-			// Prefer result.Media (explicit) over ForLLM MEDIA: prefix (legacy) to avoid duplicates.
-			if len(result.Media) > 0 {
-				for _, mf := range result.Media {
-					ct := mf.MimeType
-					if ct == "" {
-						ct = mimeFromExt(filepath.Ext(mf.Path))
-					}
-					rs.mediaResults = append(rs.mediaResults, MediaResult{Path: mf.Path, ContentType: ct})
-				}
-			} else if mr := parseMediaResult(result.ForLLM); mr != nil {
-				rs.mediaResults = append(rs.mediaResults, *mr)
-			}
-			// Auto-attach workspace media to task (covers create_image/audio/video).
-			if teamWs := tools.ToolTeamWorkspaceFromCtx(ctx); teamWs != "" {
-				for _, mf := range result.Media {
-					tools.AutoAttachWorkspaceFile(ctx, l.teamStore, teamWs, mf.Path)
-				}
-			}
-			if result.Deliverable != "" {
-				rs.deliverables = append(rs.deliverables, result.Deliverable)
-			}
-
-			toolMsg := providers.Message{
-				Role:       "tool",
-				Content:    result.ForLLM,
-				ToolCallID: tc.ID,
-				IsError:    result.IsError,
-			}
+			// Process tool result: loop detection, events, media, deliverables.
+			toolMsg, warningMsgs, action := l.processToolResult(ctx, rs, &req, emitRun, tc, registryName, result, hadBootstrap)
 			messages = append(messages, toolMsg)
 			rs.pendingMsgs = append(rs.pendingMsgs, toolMsg)
-
-			// Check for tool call loop after recording result.
-			if level, msg := rs.loopDetector.detect(registryName, argsHash); level != "" {
-				if level == "critical" {
-					slog.Warn("tool loop critical", "agent", l.id, "tool", registryName, "message", msg)
-					rs.finalContent = "I was unable to complete this task — I got stuck repeatedly calling " + registryName + " without making progress. Please try rephrasing your request."
-					break
-				}
-				// Warning: inject message so model knows to change strategy.
-				slog.Warn("tool loop warning", "agent", l.id, "tool", registryName, "message", msg)
-				messages = append(messages, providers.Message{Role: "user", Content: msg})
+			messages = append(messages, warningMsgs...)
+			if action == toolResultBreak {
+				break
 			}
 
-			// Check for read-only streak (no write/edit actions).
-			if level, msg := rs.loopDetector.detectReadOnlyStreak(); level != "" {
-				if level == "critical" {
-					slog.Warn("tool loop critical: read-only streak",
-						"streak", rs.loopDetector.readOnlyStreak, "agent", l.id, "run", req.RunID)
-					rs.finalContent = msg
-					break
-				}
-				slog.Warn("tool loop warning: read-only streak",
-					"streak", rs.loopDetector.readOnlyStreak, "agent", l.id, "run", req.RunID)
-				messages = append(messages, providers.Message{Role: "user", Content: msg})
-			}
-
-			// Check for same tool returning identical results with different args.
-			if rh := hashResult(result.ForLLM); rh != "" {
-				if level, msg := rs.loopDetector.detectSameResult(registryName, rh); level != "" {
-					if level == "critical" {
-						slog.Warn("tool loop critical: same result",
-							"tool", registryName, "agent", l.id, "run", req.RunID)
-						rs.finalContent = msg
-						break
-					}
-					messages = append(messages, providers.Message{Role: "user", Content: msg})
-				}
+			// Check for read-only streak (single tool path).
+			if warnMsg, shouldBreak := l.checkReadOnlyStreak(rs, &req); shouldBreak {
+				break
+			} else if warnMsg != nil {
+				messages = append(messages, *warnMsg)
 			}
 		} else {
 			// Multiple tools: parallel execution via goroutines.
@@ -981,124 +881,23 @@ func (l *Loop) runLoop(ctx context.Context, req RunRequest) (*RunResult, error) 
 				// Record tool execution time for adaptive thresholds.
 				toolTiming.Record(r.tc.Name, time.Since(r.spanStart).Milliseconds())
 
-				// Record for loop detection.
-				argsHash := rs.loopDetector.record(r.registryName, r.tc.Arguments)
-				rs.loopDetector.recordResult(argsHash, r.result.ForLLM)
-				rs.loopDetector.recordMutation(r.registryName)
-
-				if r.result.Async {
-					rs.asyncToolCalls = append(rs.asyncToolCalls, r.tc.Name)
-				}
-
-				if r.result.IsError {
-					errMsg := r.result.ForLLM
-					if len(errMsg) > 200 {
-						errMsg = errMsg[:200] + "..."
-					}
-					slog.Warn("tool error", "agent", l.id, "tool", r.tc.Name, "error", errMsg)
-				}
-
-				// Count successful spawn calls for orphan detection (post-execution).
-				if r.registryName == "spawn" && !r.result.IsError {
-					if tid, _ := r.tc.Arguments["team_task_id"].(string); tid != "" {
-						rs.teamTaskSpawns++
-					}
-				}
-				if hadBootstrap && bootstrapToolAllowlist[r.registryName] {
-					rs.bootstrapWriteDetected = true
-				}
-
-				parToolResultPayload := map[string]any{
-					"name":      r.tc.Name,
-					"id":        r.tc.ID,
-					"is_error":  r.result.IsError,
-					"arguments": r.tc.Arguments,
-					"result":    truncateStr(r.result.ForLLM, 1000),
-				}
-				if r.result.IsError && r.result.ForLLM != "" {
-					parToolResultPayload["content"] = r.result.ForLLM
-				}
-				emitRun(AgentEvent{
-					Type:    protocol.AgentEventToolResult,
-					AgentID: l.id,
-					RunID:   req.RunID,
-					Payload: parToolResultPayload,
-				})
-
-				l.scanWebToolResult(r.tc.Name, r.result)
-
-				// Collect MEDIA: paths from tool results.
-				// Prefer result.Media (explicit) over ForLLM MEDIA: prefix (legacy) to avoid duplicates.
-				if len(r.result.Media) > 0 {
-					for _, mf := range r.result.Media {
-						ct := mf.MimeType
-						if ct == "" {
-							ct = mimeFromExt(filepath.Ext(mf.Path))
-						}
-						rs.mediaResults = append(rs.mediaResults, MediaResult{Path: mf.Path, ContentType: ct})
-					}
-				} else if mr := parseMediaResult(r.result.ForLLM); mr != nil {
-					rs.mediaResults = append(rs.mediaResults, *mr)
-				}
-				// Auto-attach workspace media to task (covers create_image/audio/video).
-				if teamWs := tools.ToolTeamWorkspaceFromCtx(ctx); teamWs != "" {
-					for _, mf := range r.result.Media {
-						tools.AutoAttachWorkspaceFile(ctx, l.teamStore, teamWs, mf.Path)
-					}
-				}
-				if r.result.Deliverable != "" {
-					rs.deliverables = append(rs.deliverables, r.result.Deliverable)
-				}
-
-				toolMsg := providers.Message{
-					Role:       "tool",
-					Content:    r.result.ForLLM,
-					ToolCallID: r.tc.ID,
-					IsError:    r.result.IsError,
-				}
+				// Process tool result: loop detection, events, media, deliverables.
+				toolMsg, warningMsgs, action := l.processToolResult(ctx, rs, &req, emitRun, r.tc, r.registryName, r.result, hadBootstrap)
 				messages = append(messages, toolMsg)
 				rs.pendingMsgs = append(rs.pendingMsgs, toolMsg)
-
-				// Check for tool call loop.
-				if level, msg := rs.loopDetector.detect(r.registryName, argsHash); level != "" {
-					if level == "critical" {
-						slog.Warn("tool loop critical", "agent", l.id, "tool", r.registryName, "message", msg)
-						rs.finalContent = "I was unable to complete this task — I got stuck repeatedly calling " + r.registryName + " without making progress. Please try rephrasing your request."
-						loopStuck = true
-						break
-					}
-					slog.Warn("tool loop warning", "agent", l.id, "tool", r.registryName, "message", msg)
-					messages = append(messages, providers.Message{Role: "user", Content: msg})
-				}
-
-				// Check for same tool returning identical results with different args.
-				if rh := hashResult(r.result.ForLLM); rh != "" {
-					if level, msg := rs.loopDetector.detectSameResult(r.registryName, rh); level != "" {
-						if level == "critical" {
-							slog.Warn("tool loop critical: same result",
-								"tool", r.registryName, "agent", l.id, "run", req.RunID)
-							rs.finalContent = msg
-							loopStuck = true
-							break
-						}
-						messages = append(messages, providers.Message{Role: "user", Content: msg})
-					}
+				messages = append(messages, warningMsgs...)
+				if action == toolResultBreak {
+					loopStuck = true
+					break
 				}
 			}
 
 			// Check read-only streak after processing all parallel results.
 			if !loopStuck {
-				if level, msg := rs.loopDetector.detectReadOnlyStreak(); level != "" {
-					if level == "critical" {
-						slog.Warn("tool loop critical: read-only streak",
-							"streak", rs.loopDetector.readOnlyStreak, "agent", l.id, "run", req.RunID)
-						rs.finalContent = msg
-						loopStuck = true
-					} else {
-						slog.Warn("tool loop warning: read-only streak",
-							"streak", rs.loopDetector.readOnlyStreak, "agent", l.id, "run", req.RunID)
-						messages = append(messages, providers.Message{Role: "user", Content: msg})
-					}
+				if warnMsg, shouldBreak := l.checkReadOnlyStreak(rs, &req); shouldBreak {
+					loopStuck = true
+				} else if warnMsg != nil {
+					messages = append(messages, *warnMsg)
 				}
 			}
 
