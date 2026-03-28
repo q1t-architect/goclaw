@@ -2,8 +2,8 @@ name: Upstream Sync
 
 on:
   schedule:
-    - cron: "0 */6 * * *"  # every 6 hours
-  workflow_dispatch:        # manual trigger
+    - cron: "0 */6 * * *"
+  workflow_dispatch:
 
 permissions:
   contents: write
@@ -12,6 +12,8 @@ permissions:
 jobs:
   sync:
     runs-on: ubuntu-latest
+    outputs:
+      changed: ${{ steps.changes.outputs.changed }}
     steps:
       - name: Checkout fork
         uses: actions/checkout@v4
@@ -31,7 +33,7 @@ jobs:
           git fetch upstream
           git fetch origin main
 
-      - name: Update main branch (mirror of upstream)
+      - name: Update main branch
         run: |
           git checkout main
           git merge --ff-only upstream/main
@@ -57,11 +59,11 @@ jobs:
           fi
 
       - name: Push clean merge
-        if: steps.merge.outputs.status == clean && steps.changes.outputs.changed == true
+        if: steps.merge.outputs.status == 'clean' && steps.changes.outputs.changed == 'true'
         run: git push origin custom
 
       - name: Resolve conflicts with Claude
-        if: steps.merge.outputs.status == conflict
+        if: steps.merge.outputs.status == 'conflict'
         uses: anthropics/claude-code-action@v1
         with:
           claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
@@ -81,12 +83,11 @@ jobs:
           timeout_minutes: 10
 
       - name: Push resolved merge
-        if: steps.merge.outputs.status == conflict
-        run: |
-          git push origin custom
+        if: steps.merge.outputs.status == 'conflict'
+        run: git push origin custom
 
   deploy:
     needs: sync
-    if: always() && needs.sync.result == success
+    if: always() && needs.sync.result == 'success' && needs.sync.outputs.changed == 'true'
     uses: ./.github/workflows/deploy.yml
     secrets: inherit

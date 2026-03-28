@@ -9,10 +9,6 @@ on:
 permissions:
   contents: read
 
-env:
-  DEPLOY_HOST: 100.122.92.55
-  DEPLOY_USER: wn
-
 jobs:
   build:
     runs-on: ubuntu-latest
@@ -42,8 +38,6 @@ jobs:
       - name: Connect to Tailscale
         uses: tailscale/github-action@v2
         with:
-          oauth-client-id: ""
-          oauth-secret: ""
           authkey: ${{ secrets.TAILSCALE_AUTHKEY }}
 
       - name: Setup SSH key
@@ -51,32 +45,27 @@ jobs:
           mkdir -p ~/.ssh
           echo "${{ secrets.DEPLOY_SSH_KEY }}" > ~/.ssh/deploy_key
           chmod 600 ~/.ssh/deploy_key
-          ssh-keyscan -H ${{ env.DEPLOY_HOST }} >> ~/.ssh/known_hosts 2>/dev/null || true
+          ssh-keyscan -H 100.122.92.55 >> ~/.ssh/known_hosts 2>/dev/null || true
 
       - name: Deploy to server
         run: |
-          ssh -o StrictHostKeyChecking=no -i ~/.ssh/deploy_key ${{ env.DEPLOY_USER }}@${{ env.DEPLOY_HOST }} << DEPLOY
+          ssh -o StrictHostKeyChecking=no -i ~/.ssh/deploy_key wn@100.122.92.55 'bash -s' << 'DEPLOY'
           set -e
           cd ~/goclaw
           export PATH=$PATH:/snap/bin
 
-          # Save current commit for rollback
           PREV_COMMIT=$(git rev-parse HEAD)
 
-          # Pull latest
           git pull origin custom
 
-          # Build
           go build -o goclaw .
           cd ui/web && pnpm install && pnpm build && cd ../..
 
-          # Migrate
           sudo systemctl stop goclaw
           infisical run --projectId=ad5e1f28-2946-402d-8745-63bad8790406 --env=dev --domain=https://eu.infisical.com --command "./goclaw migrate up" || true
           sudo systemctl daemon-reload
           sudo systemctl start goclaw
 
-          # Health check
           sleep 5
           if curl -sf http://localhost:18791/ > /dev/null; then
             echo "DEPLOY OK"
