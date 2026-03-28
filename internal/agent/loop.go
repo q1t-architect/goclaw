@@ -205,10 +205,14 @@ func (l *Loop) runLoop(ctx context.Context, req RunRequest) (*RunResult, error) 
 		var allowedTools map[string]bool
 		toolDefs, allowedTools, messages = l.buildFilteredTools(&req, hadBootstrap, rs.iteration, maxIter, messages)
 
-		// Use per-request model override if set (e.g. heartbeat uses cheaper model).
+		// Use per-request overrides if set (e.g. heartbeat uses cheaper provider/model).
 		model := l.model
+		provider := l.provider
 		if req.ModelOverride != "" {
 			model = req.ModelOverride
+		}
+		if req.ProviderOverride != nil {
+			provider = req.ProviderOverride
 		}
 
 		chatReq := providers.ChatRequest{
@@ -231,11 +235,11 @@ func (l *Loop) runLoop(ctx context.Context, req RunRequest) (*RunResult, error) 
 			chatReq.Options[providers.OptTenantID] = tid.String()
 		}
 		if l.thinkingLevel != "" && l.thinkingLevel != "off" {
-			if tc, ok := l.provider.(providers.ThinkingCapable); ok && tc.SupportsThinking() {
+			if tc, ok := provider.(providers.ThinkingCapable); ok && tc.SupportsThinking() {
 				chatReq.Options[providers.OptThinkingLevel] = l.thinkingLevel
 			} else {
 				slog.Debug("thinking_level ignored: provider does not support thinking",
-					"provider", l.provider.Name(), "level", l.thinkingLevel)
+					"provider", provider.Name(), "level", l.thinkingLevel)
 			}
 		}
 
@@ -248,7 +252,7 @@ func (l *Loop) runLoop(ctx context.Context, req RunRequest) (*RunResult, error) 
 		llmSpanID := l.emitLLMSpanStart(callCtx, llmSpanStart, rs.iteration, messages)
 
 		if req.Stream {
-			resp, err = l.provider.ChatStream(callCtx, chatReq, func(chunk providers.StreamChunk) {
+			resp, err = provider.ChatStream(callCtx, chatReq, func(chunk providers.StreamChunk) {
 				if chunk.Thinking != "" {
 					emitRun(AgentEvent{
 						Type:    protocol.ChatEventThinking,

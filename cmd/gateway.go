@@ -872,12 +872,14 @@ func runGateway() {
 
 	// Start heartbeat ticker (routes through scheduler's cron lane)
 	heartbeatTicker := heartbeat.NewTicker(heartbeat.TickerConfig{
-		Store:    pgStores.Heartbeats,
-		Agents:   pgStores.Agents,
-		Sessions: pgStores.Sessions,
-		MsgBus:   msgBus,
-		Sched:    sched,
-		RunAgent: makeHeartbeatRunFn(sched),
+		Store:         pgStores.Heartbeats,
+		Agents:        pgStores.Agents,
+		Sessions:      pgStores.Sessions,
+		ProviderStore: pgStores.Providers,
+		ProviderReg:   providerRegistry,
+		MsgBus:        msgBus,
+		Sched:         sched,
+		RunAgent:      makeHeartbeatRunFn(sched),
 	})
 	heartbeatTicker.SetOnEvent(func(event store.HeartbeatEvent) {
 		server.BroadcastEvent(*protocol.NewEvent(protocol.EventHeartbeat, event))
