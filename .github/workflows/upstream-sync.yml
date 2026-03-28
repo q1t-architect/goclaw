@@ -1,0 +1,92 @@
+name: Upstream Sync
+
+on:
+  schedule:
+    - cron: "0 */6 * * *"  # every 6 hours
+  workflow_dispatch:        # manual trigger
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout fork
+        uses: actions/checkout@v4
+        with:
+          ref: custom
+          fetch-depth: 0
+          token: ${{ secrets.GH_PAT }}
+
+      - name: Configure git
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+
+      - name: Fetch upstream
+        run: |
+          git remote add upstream https://github.com/nextlevelbuilder/goclaw.git || true
+          git fetch upstream
+          git fetch origin main
+
+      - name: Update main branch (mirror of upstream)
+        run: |
+          git checkout main
+          git merge --ff-only upstream/main
+          git push origin main
+
+      - name: Merge main into custom
+        id: merge
+        run: |
+          git checkout custom
+          if git merge main --no-edit; then
+            echo "status=clean" >> $GITHUB_OUTPUT
+          else
+            echo "status=conflict" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Check if anything changed
+        id: changes
+        run: |
+          if git diff --quiet origin/custom; then
+            echo "changed=false" >> $GITHUB_OUTPUT
+          else
+            echo "changed=true" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Push clean merge
+        if: steps.merge.outputs.status == clean && steps.changes.outputs.changed == true
+        run: git push origin custom
+
+      - name: Resolve conflicts with Claude
+        if: steps.merge.outputs.status == conflict
+        uses: anthropics/claude-code-action@v1
+        with:
+          claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+          direct_prompt: |
+            You are resolving merge conflicts between upstream (main) and our fork (custom).
+
+            Rules:
+            - Keep ALL our custom changes (anything unique to custom branch)
+            - Keep ALL upstream changes (new features, fixes)
+            - For migration number collisions: renumber our migrations to 000100+
+            - For RequiredSchemaVersion in version.go: use the highest value, accounting for our migrations
+            - For any other conflicts: integrate both sides logically
+            - After resolving all conflicts, stage everything and commit with message:
+              "upstream-sync: merge upstream with conflict resolution"
+
+            Resolve all conflicts now. Check every file with conflict markers.
+          timeout_minutes: 10
+
+      - name: Push resolved merge
+        if: steps.merge.outputs.status == conflict
+        run: |
+          git push origin custom
+
+  deploy:
+    needs: sync
+    if: always() && needs.sync.result == success
+    uses: ./.github/workflows/deploy.yml
+    secrets: inherit
