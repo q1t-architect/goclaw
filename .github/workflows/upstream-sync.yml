@@ -35,7 +35,7 @@ jobs:
 
       - name: Update main branch
         run: |
-          git checkout main
+          git checkout -B main origin/main
           git merge --ff-only upstream/main
           git push origin main
 
@@ -43,7 +43,7 @@ jobs:
         id: merge
         run: |
           git checkout custom
-          if git merge main --no-edit; then
+          if git merge origin/main --no-edit; then
             echo "status=clean" >> $GITHUB_OUTPUT
           else
             echo "status=conflict" >> $GITHUB_OUTPUT
