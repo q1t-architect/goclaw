@@ -52,7 +52,7 @@ export function AgentAdvancedDialog({ open, onOpenChange, agent, onUpdate }: Age
       } as ChatGPTOAuthRoutingConfig,
       wsSharing: (otherObj.workspace_sharing ?? {}) as WorkspaceSharingConfig,
       comp: a.compaction_config ?? {},
-      pruneEnabled: a.context_pruning != null,
+      pruneEnabled: a.context_pruning?.mode !== "off",
       prune: a.context_pruning ?? {},
       sbEnabled: a.sandbox_config != null,
       sb: a.sandbox_config ?? {},
