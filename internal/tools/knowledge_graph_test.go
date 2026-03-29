@@ -89,12 +89,32 @@ func (m *mockKGStore) Traverse(_ context.Context, _, _, startEntityID string, _ 
 	return m.traversal[startEntityID], nil
 }
 
-func (m *mockKGStore) IngestExtraction(context.Context, string, string, []store.Entity, []store.Relation) error {
-	return nil
+func (m *mockKGStore) IngestExtraction(context.Context, string, string, []store.Entity, []store.Relation) ([]string, error) {
+	return nil, nil
 }
 
 func (m *mockKGStore) PruneByConfidence(context.Context, string, string, float64) (int, error) {
 	return 0, nil
+}
+
+func (m *mockKGStore) DedupAfterExtraction(context.Context, string, string, []string) (int, int, error) {
+	return 0, 0, nil
+}
+
+func (m *mockKGStore) ScanDuplicates(context.Context, string, string, float64, int) (int, error) {
+	return 0, nil
+}
+
+func (m *mockKGStore) ListDedupCandidates(context.Context, string, string, int) ([]store.DedupCandidate, error) {
+	return nil, nil
+}
+
+func (m *mockKGStore) MergeEntities(context.Context, string, string, string, string) error {
+	return nil
+}
+
+func (m *mockKGStore) DismissCandidate(context.Context, string, string) error {
+	return nil
 }
 
 func (m *mockKGStore) Stats(context.Context, string, string) (*store.GraphStats, error) {

@@ -137,10 +137,10 @@ func (s *PGKnowledgeGraphStore) ListAllRelations(ctx context.Context, agentID, u
 	return scanRelations(rows)
 }
 
-func (s *PGKnowledgeGraphStore) IngestExtraction(ctx context.Context, agentID, userID string, entities []store.Entity, relations []store.Relation) error {
+func (s *PGKnowledgeGraphStore) IngestExtraction(ctx context.Context, agentID, userID string, entities []store.Entity, relations []store.Relation) ([]string, error) {
 	tx, err := s.db.BeginTx(ctx, nil)
 	if err != nil {
-		return err
+		return nil, err
 	}
 	defer tx.Rollback() //nolint:errcheck
 
@@ -175,7 +175,7 @@ func (s *PGKnowledgeGraphStore) IngestExtraction(ctx context.Context, agentID, u
 			id, aid, userID, e.ExternalID, e.Name, e.EntityType,
 			e.Description, props, e.SourceID, e.Confidence, tid, now,
 		).Scan(&actualID); err != nil {
-			return err
+			return nil, err
 		}
 		extIDToUUID[e.ExternalID] = actualID
 	}
@@ -229,11 +229,20 @@ func (s *PGKnowledgeGraphStore) IngestExtraction(ctx context.Context, agentID, u
 				tenant_id   = EXCLUDED.tenant_id`,
 			id, aid, userID, src, r.RelationType, tgt, r.Confidence, props, tid, now,
 		); err != nil {
-			return err
+			return nil, err
 		}
 	}
 
-	return tx.Commit()
+	if err := tx.Commit(); err != nil {
+		return nil, err
+	}
+
+	// Collect upserted entity IDs for downstream processing (e.g. dedup)
+	entityIDs := make([]string, 0, len(extIDToUUID))
+	for _, uid := range extIDToUUID {
+		entityIDs = append(entityIDs, uid.String())
+	}
+	return entityIDs, nil
 }
 
 func (s *PGKnowledgeGraphStore) PruneByConfidence(ctx context.Context, agentID, userID string, minConfidence float64) (int, error) {

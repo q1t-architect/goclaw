@@ -113,6 +113,24 @@
       "observations": "Quan sát",
       "relations": "Quan hệ"
     },
+    "dedup": {
+      "button": "Gộp trùng",
+      "title": "Thực thể trùng lặp",
+      "description": "Xem và gộp các thực thể có thể trùng lặp dựa trên độ tương đồng embedding.",
+      "noCandidates": "Không tìm thấy ứng viên trùng lặp.",
+      "similar": "tương đồng",
+      "merge": "Gộp",
+      "dismiss": "Bỏ qua",
+      "merged": "Đã gộp thực thể thành công.",
+      "mergeFailed": "Gộp thực thể thất bại.",
+      "dismissed": "Đã bỏ qua ứng viên.",
+      "dismissFailed": "Bỏ qua ứng viên thất bại.",
+      "scan": "Quét tất cả",
+      "scanning": "Đang quét...",
+      "scanComplete": "Quét hoàn tất.",
+      "scanFailed": "Quét thất bại.",
+      "count": "{{count}} ứng viên"
+    },
     "deleteEntity": {
       "title": "Xóa thực thể",
       "description": "Xóa \"{{name}}\"? Tất cả quan hệ liên quan cũng sẽ bị xóa.",

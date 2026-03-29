@@ -583,11 +583,22 @@ func buildKGExtractFunc(kgStore store.KnowledgeGraphStore, bts store.BuiltinTool
 			result.Relations[i].AgentID = agentID
 			result.Relations[i].UserID = userID
 		}
-		if err := kgStore.IngestExtraction(ctx, agentID, userID, result.Entities, result.Relations); err != nil {
+		entityIDs, err := kgStore.IngestExtraction(ctx, agentID, userID, result.Entities, result.Relations)
+		if err != nil {
 			slog.Warn("kg extract: ingest failed", "agent", agentID, "error", err)
 			return
 		}
 		slog.Info("kg extract: ingested from memory write", "agent", agentID, "entities", len(result.Entities), "relations", len(result.Relations))
+
+		// Run inline dedup on newly upserted entities (best-effort, non-blocking)
+		if len(entityIDs) > 0 {
+			merged, flagged, dedupErr := kgStore.DedupAfterExtraction(ctx, agentID, userID, entityIDs)
+			if dedupErr != nil {
+				slog.Warn("kg extract: dedup failed", "agent", agentID, "error", dedupErr)
+			} else if merged > 0 || flagged > 0 {
+				slog.Info("kg extract: dedup completed", "agent", agentID, "auto_merged", merged, "candidates_flagged", flagged)
+			}
+		}
 	}
 }
 

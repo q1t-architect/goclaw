@@ -113,6 +113,24 @@
       "observations": "观察",
       "relations": "关系"
     },
+    "dedup": {
+      "button": "去重",
+      "title": "重复实体",
+      "description": "查看并合并基于嵌入相似度可能重复的实体。",
+      "noCandidates": "未找到重复候选项。",
+      "similar": "相似",
+      "merge": "合并",
+      "dismiss": "忽略",
+      "merged": "实体合并成功。",
+      "mergeFailed": "合并实体失败。",
+      "dismissed": "候选项已忽略。",
+      "dismissFailed": "忽略候选项失败。",
+      "scan": "全面扫描",
+      "scanning": "扫描中...",
+      "scanComplete": "扫描完成。",
+      "scanFailed": "扫描失败。",
+      "count": "{{count}} 个候选项"
+    },
     "deleteEntity": {
       "title": "删除实体",
       "description": "删除「{{name}}」？这将同时移除所有关联关系。",
