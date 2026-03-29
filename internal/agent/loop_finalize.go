@@ -22,7 +22,7 @@ func isUserFilePopulated(content string) bool {
 		return false
 	}
 	// Template markers: "**Name:**" followed by newline (no value) or just whitespace
-	for _, line := range strings.Split(content, "\n") {
+	for line := range strings.SplitSeq(content, "\n") {
 		line = strings.TrimSpace(line)
 		if line == "- **Name:**" || line == "**Name:**" {
 			return false // name field still empty

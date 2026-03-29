@@ -174,12 +174,12 @@ func readTeamImportArchive(r io.Reader) (*teamImportArchive, error) {
 			continue
 		}
 		rest := strings.TrimPrefix(name, "agents/")
-		slashIdx := strings.Index(rest, "/")
-		if slashIdx < 0 {
+		before, after, ok := strings.Cut(rest, "/")
+		if !ok {
 			continue
 		}
-		agentKey := rest[:slashIdx]
-		relPath := rest[slashIdx+1:]
+		agentKey := before
+		relPath := after
 		if agentKey == "" || relPath == "" {
 			continue
 		}
@@ -358,13 +358,13 @@ func (h *AgentsHandler) doTeamImport(ctx context.Context, r *http.Request, teamA
 		}
 
 		sections := map[string]bool{
-			"context_files":  true,
-			"memory":         true,
+			"context_files":   true,
+			"memory":          true,
 			"knowledge_graph": true,
-			"cron":           true,
-			"user_profiles":  true,
-			"user_overrides": true,
-			"workspace":      true,
+			"cron":            true,
+			"user_profiles":   true,
+			"user_overrides":  true,
+			"workspace":       true,
 		}
 		if _, err := h.doMergeImport(ctx, ag, agArc, sections, progressFn); err != nil {
 			slog.Warn("team.import: merge agent data failed", "key", dedupedKey, "error", err)

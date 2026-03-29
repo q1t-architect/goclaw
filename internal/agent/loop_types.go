@@ -10,6 +10,7 @@ import (
 	"github.com/nextlevelbuilder/goclaw/internal/bootstrap"
 	"github.com/nextlevelbuilder/goclaw/internal/bus"
 	"github.com/nextlevelbuilder/goclaw/internal/config"
+	mcpbridge "github.com/nextlevelbuilder/goclaw/internal/mcp"
 	"github.com/nextlevelbuilder/goclaw/internal/media"
 	"github.com/nextlevelbuilder/goclaw/internal/providers"
 	"github.com/nextlevelbuilder/goclaw/internal/sandbox"
@@ -109,6 +110,12 @@ type Loop struct {
 	bootstrapCleanup  BootstrapCleanupFunc
 	cacheInvalidate   CacheInvalidateFunc   // invalidate context file cache after seeding
 	userSetups sync.Map // userID → *userSetup (workspace + seeding state, per Loop instance)
+
+	// Per-user MCP tools: servers requiring user credentials get connected per-request.
+	mcpStore        store.MCPServerStore   // for credential lookup
+	mcpPool         *mcpbridge.Pool        // user-keyed connection pool
+	mcpUserCredSrvs []store.MCPAccessInfo  // servers needing per-user creds
+	mcpUserTools    sync.Map               // userID → []tools.Tool (cached per-user tools)
 
 	// Compaction config (memory flush settings)
 	compactionCfg *config.CompactionConfig
@@ -304,6 +311,11 @@ type LoopConfig struct {
 
 	// Memory store for extractive memory fallback (writes directly when LLM flush fails)
 	MemoryStore store.MemoryStore
+
+	// Per-user MCP tools (servers requiring per-user credentials)
+	MCPStore        store.MCPServerStore   // for credential lookup
+	MCPPool         *mcpbridge.Pool        // user-keyed connection pool
+	MCPUserCredSrvs []store.MCPAccessInfo  // servers needing per-user creds
 }
 
 const defaultMaxTokens = config.DefaultMaxTokens
@@ -398,6 +410,9 @@ func NewLoop(cfg LoopConfig) *Loop {
 		budgetMonthlyCents:     cfg.BudgetMonthlyCents,
 		tracingStore:           cfg.TracingStore,
 		memStore:               cfg.MemoryStore,
+		mcpStore:               cfg.MCPStore,
+		mcpPool:                cfg.MCPPool,
+		mcpUserCredSrvs:        cfg.MCPUserCredSrvs,
 	}
 }
 

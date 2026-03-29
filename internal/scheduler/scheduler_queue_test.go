@@ -270,7 +270,7 @@ func TestLane_ConcurrencyEnforcement(t *testing.T) {
 	var current atomic.Int32
 	var wg sync.WaitGroup
 
-	for i := 0; i < 10; i++ {
+	for range 10 {
 		wg.Add(1)
 		err := lane.Submit(context.Background(), func() {
 			defer wg.Done()
@@ -400,7 +400,7 @@ func TestSessionQueue_Debounce_CollapsesRapidMessages(t *testing.T) {
 
 	// Send 5 rapid messages within debounce window
 	var channels []<-chan RunOutcome
-	for i := 0; i < 5; i++ {
+	for i := range 5 {
 		ch := sq.Enqueue(ctx, agent.RunRequest{
 			RunID:      "r" + string(rune('0'+i)),
 			SessionKey: "test",

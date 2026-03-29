@@ -16,10 +16,7 @@ func JaroWinkler(a, b string) float64 {
 	}
 
 	// Jaro similarity
-	matchDist := max(len(a), len(b))/2 - 1
-	if matchDist < 0 {
-		matchDist = 0
-	}
+	matchDist := max(max(len(a), len(b))/2-1, 0)
 
 	aMatched := make([]bool, len(a))
 	bMatched := make([]bool, len(b))

@@ -82,13 +82,13 @@ func sweepExportTokens() {
 
 // ExportManifest describes the archive contents.
 type ExportManifest struct {
-	Version    int                    `json:"version"`
-	Format     string                 `json:"format"`
-	ExportedAt string                 `json:"exported_at"`
-	ExportedBy string                 `json:"exported_by"`
-	AgentKey   string                 `json:"agent_key"`
-	AgentID    string                 `json:"agent_id"`
-	Sections   map[string]interface{} `json:"sections"`
+	Version    int            `json:"version"`
+	Format     string         `json:"format"`
+	ExportedAt string         `json:"exported_at"`
+	ExportedBy string         `json:"exported_by"`
+	AgentKey   string         `json:"agent_key"`
+	AgentID    string         `json:"agent_id"`
+	Sections   map[string]any `json:"sections"`
 }
 
 // KGEntityExport is a portable KG entity (no internal UUID).
@@ -293,7 +293,7 @@ func (h *AgentsHandler) writeExportArchive(ctx context.Context, w io.Writer, ag 
 		ExportedBy: store.UserIDFromContext(ctx),
 		AgentKey:   ag.AgentKey,
 		AgentID:    ag.ID.String(),
-		Sections:   make(map[string]interface{}),
+		Sections:   make(map[string]any),
 	}
 
 	// Section: config (always included)
@@ -693,7 +693,7 @@ func parseExportSections(raw string) map[string]bool {
 		return map[string]bool{"config": true, "context_files": true}
 	}
 	out := make(map[string]bool)
-	for _, s := range strings.Split(raw, ",") {
+	for s := range strings.SplitSeq(raw, ",") {
 		if s = strings.TrimSpace(s); s != "" {
 			out[s] = true
 		}

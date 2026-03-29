@@ -18,7 +18,7 @@ type ProgressEvent struct {
 
 // sendSSE writes a named SSE event with JSON payload and flushes.
 // The event format follows the standard SSE spec: "event: <name>\ndata: <json>\n\n".
-func sendSSE(w http.ResponseWriter, flusher http.Flusher, event string, data interface{}) {
+func sendSSE(w http.ResponseWriter, flusher http.Flusher, event string, data any) {
 	jsonData, err := json.Marshal(data)
 	if err != nil {
 		return

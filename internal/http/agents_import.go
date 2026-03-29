@@ -96,7 +96,7 @@ func parseImportSections(raw string) map[string]bool {
 		return all
 	}
 	out := make(map[string]bool)
-	for _, s := range strings.Split(raw, ",") {
+	for s := range strings.SplitSeq(raw, ",") {
 		if s = strings.TrimSpace(s); s != "" {
 			out[s] = true
 		}
@@ -619,4 +619,3 @@ func (h *AgentsHandler) dedupAgentKey(ctx context.Context, base string) string {
 	}
 	return key
 }
-

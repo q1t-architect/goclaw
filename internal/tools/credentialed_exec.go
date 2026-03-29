@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"log/slog"
+	"maps"
 	"os"
 	"os/exec"
 	"regexp"
@@ -133,6 +134,14 @@ func (t *ExecTool) executeCredentialed(ctx context.Context, cred *store.SecureCL
 	if len(cred.EncryptedEnv) > 0 {
 		if err := json.Unmarshal(cred.EncryptedEnv, &envMap); err != nil {
 			return ErrorResult(fmt.Sprintf("credentialed exec: invalid env JSON for %q: %v", binary, err))
+		}
+	}
+
+	// Step 4b: Merge per-user env overrides (user takes priority over base)
+	if len(cred.UserEnv) > 0 {
+		var userEnvMap map[string]string
+		if err := json.Unmarshal(cred.UserEnv, &userEnvMap); err == nil {
+			maps.Copy(envMap, userEnvMap)
 		}
 	}
 
@@ -275,7 +284,9 @@ func (t *ExecTool) lookupCredentialedBinary(ctx context.Context, command string)
 	if agentID != uuid.Nil {
 		agentIDPtr = &agentID
 	}
-	cred, err := t.secureCLIStore.LookupByBinary(ctx, binary, agentIDPtr)
+	// Pass userID for per-user credential resolution (LEFT JOIN, zero extra queries).
+	userID := store.UserIDFromContext(ctx)
+	cred, err := t.secureCLIStore.LookupByBinary(ctx, binary, agentIDPtr, userID)
 	if err != nil || cred == nil {
 		return nil, "", nil
 	}

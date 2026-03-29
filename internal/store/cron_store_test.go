@@ -10,10 +10,10 @@ func TestNextRunForToggle_DisableClearsNextRun(t *testing.T) {
 	now := time.Date(2026, time.March, 28, 12, 0, 0, 0, time.UTC)
 	schedule := &CronSchedule{
 		Kind:    "every",
-		EveryMS: int64Ptr(60_000),
+		EveryMS: new(int64(60_000)),
 	}
 
-	next, err := NextRunForToggle(schedule, false, true, timePtr(now.Add(time.Minute)), now, "")
+	next, err := NextRunForToggle(schedule, false, true, new(now.Add(time.Minute)), now, "")
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -26,7 +26,7 @@ func TestNextRunForToggle_EnableRecomputesEverySchedule(t *testing.T) {
 	now := time.Date(2026, time.March, 28, 12, 0, 0, 0, time.UTC)
 	schedule := &CronSchedule{
 		Kind:    "every",
-		EveryMS: int64Ptr(60_000),
+		EveryMS: new(int64(60_000)),
 	}
 
 	next, err := NextRunForToggle(schedule, true, false, nil, now, "")
@@ -69,7 +69,7 @@ func TestNextRunForToggle_AlreadyEnabledPreservesCurrentNextRun(t *testing.T) {
 	currentNextRun := now.Add(5 * time.Minute)
 	schedule := &CronSchedule{
 		Kind:    "every",
-		EveryMS: int64Ptr(60_000),
+		EveryMS: new(int64(60_000)),
 	}
 
 	next, err := NextRunForToggle(schedule, true, true, &currentNextRun, now.Add(time.Minute), "")
@@ -104,10 +104,12 @@ func TestNextRunForToggle_ExpiredAtReturnsError(t *testing.T) {
 	}
 }
 
+//go:fix inline
 func int64Ptr(v int64) *int64 {
-	return &v
+	return new(v)
 }
 
+//go:fix inline
 func timePtr(v time.Time) *time.Time {
-	return &v
+	return new(v)
 }

@@ -1036,6 +1036,7 @@ CREATE TABLE IF NOT EXISTS channel_contacts (
     username         VARCHAR(255),
     avatar_url       TEXT,
     peer_kind        VARCHAR(20),
+    contact_type     VARCHAR(20) NOT NULL DEFAULT 'user',
     metadata         TEXT DEFAULT '{}',
     merged_id        TEXT,
     tenant_id        TEXT NOT NULL REFERENCES tenants(id),

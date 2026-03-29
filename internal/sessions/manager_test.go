@@ -86,7 +86,7 @@ func TestAddMessage_ConcurrentSafety(t *testing.T) {
 	const n = 100
 	var wg sync.WaitGroup
 	wg.Add(n)
-	for i := 0; i < n; i++ {
+	for i := range n {
 		go func(i int) {
 			defer wg.Done()
 			m.AddMessage(ctx, key, providers.Message{Role: "user", Content: "msg"})
@@ -209,7 +209,7 @@ func TestTruncateHistory(t *testing.T) {
 	ctx := context.Background()
 	key := "agent:a1:s1"
 
-	for i := 0; i < 10; i++ {
+	for range 10 {
 		m.AddMessage(ctx, key, providers.Message{Role: "user", Content: "msg"})
 	}
 

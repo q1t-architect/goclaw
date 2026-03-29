@@ -107,7 +107,7 @@ func TestComputeDelay_JitterRange(t *testing.T) {
 	min := 750 * time.Millisecond
 	max := 1250 * time.Millisecond
 
-	for i := 0; i < 100; i++ {
+	for range 100 {
 		d := computeDelay(cfg, 1, err)
 		if d < min || d > max {
 			t.Fatalf("jitter out of range: got %v, want [%v, %v]", d, min, max)
@@ -123,7 +123,7 @@ func TestComputeDelay_NeverNegative(t *testing.T) {
 	}
 	err := &HTTPError{Status: 500}
 
-	for i := 0; i < 200; i++ {
+	for range 200 {
 		d := computeDelay(cfg, 1, err)
 		if d < 0 {
 			t.Fatalf("negative delay: %v", d)
@@ -158,8 +158,8 @@ func TestParseRetryAfter(t *testing.T) {
 		{"integer_seconds", "30", 30 * time.Second},
 		{"zero", "0", 0},
 		{"negative_int", "-5", -5 * time.Second}, // strconv.Atoi succeeds → returns negative duration (caller should clamp)
-		{"non_numeric", "abc", 0},         // neither int nor date
-		{"float", "1.5", 0},              // not a valid int
+		{"non_numeric", "abc", 0},                // neither int nor date
+		{"float", "1.5", 0},                      // not a valid int
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {

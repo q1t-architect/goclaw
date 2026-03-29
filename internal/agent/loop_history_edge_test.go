@@ -217,7 +217,7 @@ func TestSanitizeHistory_DedupAcrossTwoTurns(t *testing.T) {
 func TestSanitizeHistory_LargeHistory_Performance(t *testing.T) {
 	// Build 1000-message history with proper tool pairing
 	msgs := make([]providers.Message, 0, 1000)
-	for i := 0; i < 250; i++ {
+	for i := range 250 {
 		tcID := "tc_" + strings.Repeat("x", 5) + "_" + string(rune('a'+i%26)) + string(rune('0'+i%10))
 		msgs = append(msgs,
 			providers.Message{Role: "user", Content: "question " + tcID},

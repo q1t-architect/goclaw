@@ -109,7 +109,8 @@ func processNormalMessage(
 	}
 
 	// Auto-collect channel contacts for the contact selector.
-	if deps.ContactCollector != nil && msg.SenderID != "" {
+	// Skip internal senders (system:*, notification:*, teammate:*, ticker:*, session_send_tool).
+	if deps.ContactCollector != nil && msg.SenderID != "" && !bus.IsInternalSender(msg.SenderID) {
 		senderNumericID := msg.SenderID
 		if idx := strings.IndexByte(senderNumericID, '|'); idx > 0 {
 			senderNumericID = senderNumericID[:idx]
@@ -120,7 +121,33 @@ func processNormalMessage(
 		}
 		displayName := sessionMeta["display_name"]
 		username := sessionMeta["username"]
-		deps.ContactCollector.EnsureContact(ctx, channelType, msg.Channel, senderNumericID, userID, displayName, username, peerKind)
+		deps.ContactCollector.EnsureContact(ctx, channelType, msg.Channel, senderNumericID, userID, displayName, username, peerKind, "user")
+
+		// Also collect group chat as a contact (for group permission management / merge).
+		// Group IDs (e.g., Telegram "-100456") differ from user IDs — no UNIQUE conflict.
+		if peerKind == string(sessions.PeerGroup) && msg.ChatID != "" {
+			groupTitle := msg.Metadata["chat_title"] // Telegram: message.Chat.Title
+			deps.ContactCollector.EnsureContact(ctx, channelType, msg.Channel, msg.ChatID, "", groupTitle, "", "group", "group")
+		}
+	}
+
+	// --- Resolve merged tenant user identity ---
+	// If the sender has been merged to a tenant_user, use the tenant user's ID
+	// for DM sessions. This enables per-user features (MCP creds, SecureCLI creds).
+	// Group sessions keep the group-scoped userID; sender resolution happens via SenderID.
+	if deps.ContactCollector != nil && peerKind == string(sessions.PeerDirect) && msg.SenderID != "" && !bus.IsInternalSender(msg.SenderID) {
+		senderNumeric := msg.SenderID
+		if idx := strings.IndexByte(senderNumeric, '|'); idx > 0 {
+			senderNumeric = senderNumeric[:idx]
+		}
+		chType := deps.ChannelMgr.ChannelTypeForName(msg.Channel)
+		if chType == "" {
+			chType = msg.Channel
+		}
+		if resolved, err := deps.ContactCollector.ResolveTenantUserID(ctx, chType, senderNumeric); err == nil && resolved != "" {
+			slog.Debug("contact.resolved_tenant_user", "sender", senderNumeric, "tenant_user", resolved)
+			userID = resolved
+		}
 	}
 
 	// --- Quota check ---

@@ -83,6 +83,11 @@ type Manager struct {
 	deferredTools  map[string]*BridgeTool // registeredName → BridgeTool
 	activatedTools map[string]struct{}     // tracks activated tool names for group:mcp
 	searchMode     bool
+
+	// User-credential servers: servers requiring per-user credentials, stored during
+	// LoadForAgent("") for later per-request tool resolution. These servers are NOT
+	// connected at startup — connections are created per-user via pool.AcquireUser().
+	userCredServers []store.MCPAccessInfo
 }
 
 // ManagerOption configures the Manager.
@@ -276,8 +281,17 @@ func (m *Manager) LoadForAgent(ctx context.Context, agentID uuid.UUID, userID st
 
 	// Unregister all existing MCP tools first
 	m.unregisterAllTools()
+	m.userCredServers = nil
 
 	for _, info := range accessible {
+		// When loading at startup (userID=""), store servers requiring per-user
+		// credentials for later per-request resolution instead of skipping them.
+		if userID == "" && requireUserCreds(info.Server.Settings) && info.Server.Enabled {
+			m.userCredServers = append(m.userCredServers, info)
+			slog.Debug("mcp.server.deferred_user_creds", "server", info.Server.Name)
+			continue
+		}
+
 		rs := m.resolveServerCredentials(ctx, info, userID)
 		if rs == nil {
 			continue

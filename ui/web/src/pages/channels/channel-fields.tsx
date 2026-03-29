@@ -3,6 +3,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
 import { Textarea } from "@/components/ui/textarea";
+import { MultiUserPicker } from "@/components/shared/multi-user-picker";
 import {
   Select,
   SelectContent,
@@ -274,16 +275,10 @@ function FieldRenderer({
       return (
         <div className="grid gap-1.5">
           <Label htmlFor={id}>{label}</Label>
-          <Textarea
-            id={id}
-            value={Array.isArray(value) ? (value as string[]).join("\n") : ""}
-            onChange={(e) => {
-              const lines = e.target.value.split(/[\n,]/).map((l) => l.trim()).filter(Boolean);
-              onChange(lines.length > 0 ? lines : undefined);
-            }}
+          <MultiUserPicker
+            value={(value as string[]) ?? []}
+            onChange={(v) => onChange(v.length > 0 ? v : undefined)}
             placeholder={field.placeholder ?? t("groupOverrides.fields.allowedUsersPlaceholder")}
-            rows={3}
-            className="font-mono text-sm"
           />
           {help && <p className="text-xs text-muted-foreground">{help}</p>}
         </div>

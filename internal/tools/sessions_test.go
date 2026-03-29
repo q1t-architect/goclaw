@@ -111,25 +111,25 @@ func (m *mockSessionStore) SetLabel(_ context.Context, key, label string) {
 }
 
 func (m *mockSessionStore) SetAgentInfo(context.Context, string, uuid.UUID, string) {}
-func (m *mockSessionStore) TruncateHistory(context.Context, string, int)             {}
-func (m *mockSessionStore) SetHistory(context.Context, string, []providers.Message)   {}
-func (m *mockSessionStore) Reset(context.Context, string)                             {}
-func (m *mockSessionStore) Delete(context.Context, string) error                      { return nil }
-func (m *mockSessionStore) Save(context.Context, string) error                        { return nil }
+func (m *mockSessionStore) TruncateHistory(context.Context, string, int)            {}
+func (m *mockSessionStore) SetHistory(context.Context, string, []providers.Message) {}
+func (m *mockSessionStore) Reset(context.Context, string)                           {}
+func (m *mockSessionStore) Delete(context.Context, string) error                    { return nil }
+func (m *mockSessionStore) Save(context.Context, string) error                      { return nil }
 
 func (m *mockSessionStore) UpdateMetadata(context.Context, string, string, string, string) {}
 func (m *mockSessionStore) AccumulateTokens(context.Context, string, int64, int64)         {}
-func (m *mockSessionStore) IncrementCompaction(context.Context, string)                     {}
-func (m *mockSessionStore) GetCompactionCount(context.Context, string) int                  { return 0 }
-func (m *mockSessionStore) GetMemoryFlushCompactionCount(context.Context, string) int       { return 0 }
-func (m *mockSessionStore) SetMemoryFlushDone(context.Context, string)                      {}
-func (m *mockSessionStore) GetSessionMetadata(context.Context, string) map[string]string    { return nil }
-func (m *mockSessionStore) SetSessionMetadata(context.Context, string, map[string]string)   {}
-func (m *mockSessionStore) SetSpawnInfo(context.Context, string, string, int)                {}
-func (m *mockSessionStore) SetContextWindow(context.Context, string, int)                    {}
-func (m *mockSessionStore) GetContextWindow(context.Context, string) int                     { return 0 }
-func (m *mockSessionStore) SetLastPromptTokens(context.Context, string, int, int)            {}
-func (m *mockSessionStore) GetLastPromptTokens(context.Context, string) (int, int)           { return 0, 0 }
+func (m *mockSessionStore) IncrementCompaction(context.Context, string)                    {}
+func (m *mockSessionStore) GetCompactionCount(context.Context, string) int                 { return 0 }
+func (m *mockSessionStore) GetMemoryFlushCompactionCount(context.Context, string) int      { return 0 }
+func (m *mockSessionStore) SetMemoryFlushDone(context.Context, string)                     {}
+func (m *mockSessionStore) GetSessionMetadata(context.Context, string) map[string]string   { return nil }
+func (m *mockSessionStore) SetSessionMetadata(context.Context, string, map[string]string)  {}
+func (m *mockSessionStore) SetSpawnInfo(context.Context, string, string, int)              {}
+func (m *mockSessionStore) SetContextWindow(context.Context, string, int)                  {}
+func (m *mockSessionStore) GetContextWindow(context.Context, string) int                   { return 0 }
+func (m *mockSessionStore) SetLastPromptTokens(context.Context, string, int, int)          {}
+func (m *mockSessionStore) GetLastPromptTokens(context.Context, string) (int, int)         { return 0, 0 }
 
 func (m *mockSessionStore) List(_ context.Context, agentID string) []store.SessionInfo {
 	m.mu.RLock()
@@ -230,7 +230,7 @@ func TestSessionsList_ActiveMinutesFilter(t *testing.T) {
 
 func TestSessionsList_LimitCapsResults(t *testing.T) {
 	ms := newMockSessionStore()
-	for i := 0; i < 5; i++ {
+	for i := range 5 {
 		ms.seed("agent:"+sessTestAgentID+":ws:direct:"+string(rune('a'+i)), nil, "")
 	}
 
@@ -408,7 +408,7 @@ func TestSessionsHistory_LimitFromEnd(t *testing.T) {
 	ms := newMockSessionStore()
 	key := "agent:" + sessTestAgentID + ":ws:direct:1"
 	var msgs []providers.Message
-	for i := 0; i < 10; i++ {
+	for range 10 {
 		msgs = append(msgs, providers.Message{Role: "user", Content: "msg"})
 	}
 	ms.seed(key, msgs, "")

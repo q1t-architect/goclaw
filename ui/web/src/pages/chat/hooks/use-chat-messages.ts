@@ -437,8 +437,15 @@ export function useChatMessages(sessionKey: string, agentId: string) {
         progress_percent?: number;
         progress_step?: string;
         reason?: string;
+        channel?: string;
       };
       if (!event?.team_id) return;
+
+      // Only process team task events from WS channel (matches handleAgentEvent filter).
+      // Prevents channel events (Telegram, Discord, etc.) leaking into web UI chat.
+      if (event.channel && event.channel !== "ws") {
+        return;
+      }
 
       setTeamTasks((prev) => {
         const existing = prev.find((t) => t.taskId === event.task_id);

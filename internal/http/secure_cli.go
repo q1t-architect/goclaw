@@ -37,6 +37,12 @@ func (h *SecureCLIHandler) RegisterRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("PUT /v1/cli-credentials/{id}", h.auth(h.handleUpdate))
 	mux.HandleFunc("DELETE /v1/cli-credentials/{id}", h.auth(h.handleDelete))
 	mux.HandleFunc("POST /v1/cli-credentials/{id}/test", h.auth(h.handleDryRun))
+
+	// Per-user credential management
+	mux.HandleFunc("GET /v1/cli-credentials/{id}/user-credentials", h.auth(h.handleListUserCredentials))
+	mux.HandleFunc("GET /v1/cli-credentials/{id}/user-credentials/{userId}", h.auth(h.handleGetUserCredentials))
+	mux.HandleFunc("PUT /v1/cli-credentials/{id}/user-credentials/{userId}", h.auth(h.handleSetUserCredentials))
+	mux.HandleFunc("DELETE /v1/cli-credentials/{id}/user-credentials/{userId}", h.auth(h.handleDeleteUserCredentials))
 }
 
 func (h *SecureCLIHandler) auth(next http.HandlerFunc) http.HandlerFunc {

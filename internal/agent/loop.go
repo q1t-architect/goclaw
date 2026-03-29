@@ -203,6 +203,11 @@ func (l *Loop) runLoop(ctx context.Context, req RunRequest) (*RunResult, error) 
 		// channel type, and final-iteration stripping.
 		var toolDefs []providers.ToolDefinition
 		var allowedTools map[string]bool
+		// Resolve per-user MCP tools (servers requiring user credentials).
+		// Must run before buildFilteredTools so tools are in the Registry for policy filtering.
+		if req.UserID != "" {
+			l.getUserMCPTools(iterCtx, req.UserID)
+		}
 		toolDefs, allowedTools, messages = l.buildFilteredTools(&req, hadBootstrap, rs.iteration, maxIter, messages)
 
 		// Use per-request overrides if set (e.g. heartbeat uses cheaper provider/model).
@@ -321,10 +326,7 @@ func (l *Loop) runLoop(ctx context.Context, req RunRequest) (*RunResult, error) 
 			// Calibrate overhead on first LLM response with usage data.
 			if !rs.overheadCalibrated && resp.Usage != nil && resp.Usage.PromptTokens > 0 {
 				historyEst := EstimateHistoryTokens(messages)
-				rs.overheadTokens = resp.Usage.PromptTokens - historyEst
-				if rs.overheadTokens < 0 {
-					rs.overheadTokens = 0
-				}
+				rs.overheadTokens = max(resp.Usage.PromptTokens-historyEst, 0)
 				rs.overheadCalibrated = true
 			}
 

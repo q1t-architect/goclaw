@@ -547,10 +547,7 @@ func (l *Loop) maybeSummarize(ctx context.Context, sessionKey string) {
 	// lastPromptTokens includes everything (system prompt, tools, context files, history).
 	// We subtract estimated overhead so the threshold comparison is history-only.
 	lastPT, lastMC := l.sessions.GetLastPromptTokens(ctx, sessionKey)
-	adjustedLastPT := lastPT - l.estimateOverhead(history, lastPT, lastMC)
-	if adjustedLastPT < 0 {
-		adjustedLastPT = 0
-	}
+	adjustedLastPT := max(lastPT-l.estimateOverhead(history, lastPT, lastMC), 0)
 	tokenEstimate := EstimateTokensWithCalibration(history, adjustedLastPT, lastMC)
 
 	// Resolve compaction threshold from config: token-only (no message count guard).
@@ -666,23 +663,14 @@ func (l *Loop) maybeSummarize(ctx context.Context, sessionKey string) {
 func (l *Loop) estimateOverhead(history []providers.Message, lastPromptTokens, lastMsgCount int) int {
 	if lastPromptTokens <= 0 || lastMsgCount <= 0 {
 		// No calibration data — use conservative default (20% of context, capped at 40k).
-		fallback := int(float64(l.contextWindow) * 0.2)
-		if fallback > 40000 {
-			fallback = 40000
-		}
+		fallback := min(int(float64(l.contextWindow)*0.2), 40000)
 		return fallback
 	}
 
 	// Overhead = total prompt tokens - estimated history tokens at calibration time.
-	count := lastMsgCount
-	if count > len(history) {
-		count = len(history)
-	}
+	count := min(lastMsgCount, len(history))
 	historyEstAtCalibration := EstimateHistoryTokens(history[:count])
-	overhead := lastPromptTokens - historyEstAtCalibration
-	if overhead < 0 {
-		overhead = 0
-	}
+	overhead := max(lastPromptTokens-historyEstAtCalibration, 0)
 	// Clamp: overhead shouldn't exceed 40% of context window.
 	maxOverhead := int(float64(l.contextWindow) * 0.4)
 	if overhead > maxOverhead {

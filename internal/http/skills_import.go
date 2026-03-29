@@ -94,12 +94,12 @@ func (h *SkillsHandler) doSkillsImport(ctx context.Context, r io.Reader, userID 
 			continue
 		}
 		rest := strings.TrimPrefix(name, "skills/")
-		slashIdx := strings.Index(rest, "/")
-		if slashIdx < 0 {
+		before, after, ok := strings.Cut(rest, "/")
+		if !ok {
 			continue
 		}
-		slug := rest[:slashIdx]
-		file := rest[slashIdx+1:]
+		slug := before
+		file := after
 		if slug == "" || file == "" {
 			continue
 		}
@@ -240,4 +240,3 @@ func tenantIDForSkillImport(ctx context.Context) uuid.UUID {
 	}
 	return tid
 }
-

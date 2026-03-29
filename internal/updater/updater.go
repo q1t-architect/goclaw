@@ -341,7 +341,7 @@ func removeQuarantine(appPath string) {
 func isNewer(a, b string) bool {
 	pa := parseSemver(a)
 	pb := parseSemver(b)
-	for i := 0; i < 3; i++ {
+	for i := range 3 {
 		if pa[i] > pb[i] {
 			return true
 		}

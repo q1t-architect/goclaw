@@ -1,13 +1,12 @@
-import { useState, useMemo } from "react";
+import { useState } from "react";
 import { useTranslation } from "react-i18next";
 import { Switch } from "@/components/ui/switch";
 import { Badge } from "@/components/ui/badge";
 import { Alert, AlertDescription } from "@/components/ui/alert";
-import { Combobox } from "@/components/ui/combobox";
 import { Shield, X, AlertTriangle, Plus, Brain } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import type { WorkspaceSharingConfig } from "@/types/agent";
-import { useContacts } from "@/pages/contacts/hooks/use-contacts";
+import { UserPickerCombobox } from "@/components/shared/user-picker-combobox";
 import { InfoLabel } from "./config-section";
 
 const MAX_SHARED_USERS = 100;
@@ -22,22 +21,7 @@ export function WorkspaceSharingSection({ value, onChange }: WorkspaceSharingSec
   const s = "configSections.workspaceSharing";
   const [contactSearch, setContactSearch] = useState("");
 
-  // Fetch contacts for the combobox
-  const { contacts } = useContacts({ search: contactSearch, limit: 20 });
-
-  // Build combobox options from contacts, excluding already-added users
   const existingUsers = value.shared_users ?? [];
-  const contactOptions = useMemo(() => {
-    const existing = new Set(existingUsers);
-    return contacts
-      .filter((c) => c.user_id && !existing.has(c.user_id))
-      .map((c) => ({
-        value: c.user_id!,
-        label: c.display_name
-          ? `${c.display_name} (${c.user_id})`
-          : c.user_id!,
-      }));
-  }, [contacts, existingUsers]);
 
   const addUser = (userId: string) => {
     const trimmed = userId.trim();
@@ -139,10 +123,9 @@ export function WorkspaceSharingSection({ value, onChange }: WorkspaceSharingSec
             </div>
           )}
           <div className="flex gap-2">
-            <Combobox
+            <UserPickerCombobox
               value={contactSearch}
               onChange={(val) => setContactSearch(val)}
-              options={contactOptions}
               placeholder={t(`${s}.userIdPlaceholder`)}
               className="flex-1"
             />

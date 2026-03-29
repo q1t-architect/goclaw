@@ -505,6 +505,10 @@ type AgentContextStore interface {
 	GetUserContextFiles(ctx context.Context, agentID uuid.UUID, userID string) ([]UserContextFileData, error)
 	SetUserContextFile(ctx context.Context, agentID uuid.UUID, userID, fileName, content string) error
 	DeleteUserContextFile(ctx context.Context, agentID uuid.UUID, userID, fileName string) error
+	// MigrateUserDataOnMerge moves per-user data from oldUserIDs to newUserID when contacts are merged.
+	// Covers: user_context_files, user_agent_overrides, user_agent_profiles, memory_documents/chunks.
+	// On conflict, keeps the newest by updated_at. Best-effort per table.
+	MigrateUserDataOnMerge(ctx context.Context, oldUserIDs []string, newUserID string) error
 	GetUserOverride(ctx context.Context, agentID uuid.UUID, userID string) (*UserAgentOverrideData, error)
 	SetUserOverride(ctx context.Context, override *UserAgentOverrideData) error
 }

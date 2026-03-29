@@ -19,11 +19,11 @@ func TestValidateSchedule(t *testing.T) {
 		sched   Schedule
 		wantErr bool
 	}{
-		{"at_valid", Schedule{Kind: "at", AtMS: ptrInt64(time.Now().Add(time.Hour).UnixMilli())}, false},
+		{"at_valid", Schedule{Kind: "at", AtMS: new(time.Now().Add(time.Hour).UnixMilli())}, false},
 		{"at_missing_timestamp", Schedule{Kind: "at"}, true},
-		{"every_valid", Schedule{Kind: "every", EveryMS: ptrInt64(5000)}, false},
-		{"every_zero_interval", Schedule{Kind: "every", EveryMS: ptrInt64(0)}, true},
-		{"every_negative_interval", Schedule{Kind: "every", EveryMS: ptrInt64(-1)}, true},
+		{"every_valid", Schedule{Kind: "every", EveryMS: new(int64(5000))}, false},
+		{"every_zero_interval", Schedule{Kind: "every", EveryMS: new(int64(0))}, true},
+		{"every_negative_interval", Schedule{Kind: "every", EveryMS: new(int64(-1))}, true},
 		{"every_nil_interval", Schedule{Kind: "every"}, true},
 		{"cron_valid", Schedule{Kind: "cron", Expr: "*/5 * * * *"}, false},
 		{"cron_empty_expr", Schedule{Kind: "cron", Expr: ""}, true},
@@ -268,7 +268,7 @@ func TestService_NilHandler_NoPanic(t *testing.T) {
 
 	cs.Start()
 	time.Sleep(1500 * time.Millisecond) // wait for at least 1 tick
-	cs.Stop() // should not panic
+	cs.Stop()                           // should not panic
 }
 
 // --- Job failure with retry ---
@@ -354,4 +354,5 @@ func TestService_RunLog_PopulatedByAutoExecution(t *testing.T) {
 
 // --- helpers ---
 
-func ptrInt64(v int64) *int64 { return &v }
+//go:fix inline
+func ptrInt64(v int64) *int64 { return new(v) }

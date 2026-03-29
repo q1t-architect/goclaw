@@ -24,14 +24,14 @@ import (
 
 // TeamExportManifest describes the contents of a team export archive.
 type TeamExportManifest struct {
-	Version    int                    `json:"version"`
-	Format     string                 `json:"format"`
-	ExportedAt string                 `json:"exported_at"`
-	ExportedBy string                 `json:"exported_by"`
-	TeamName   string                 `json:"team_name"`
-	TeamID     string                 `json:"team_id"`
-	AgentKeys  []string               `json:"agent_keys"`
-	Sections   map[string]interface{} `json:"sections"`
+	Version    int            `json:"version"`
+	Format     string         `json:"format"`
+	ExportedAt string         `json:"exported_at"`
+	ExportedBy string         `json:"exported_by"`
+	TeamName   string         `json:"team_name"`
+	TeamID     string         `json:"team_id"`
+	AgentKeys  []string       `json:"agent_keys"`
+	Sections   map[string]any `json:"sections"`
 }
 
 // handleTeamExportPreview returns team export counts without building the archive.
@@ -60,12 +60,12 @@ func (h *AgentsHandler) handleTeamExportPreview(w http.ResponseWriter, r *http.R
 	}
 
 	writeJSON(w, http.StatusOK, map[string]any{
-		"team_name":    teamMeta.Name,
-		"team_id":      teamIDStr,
-		"tasks":        tasks,
-		"members":      members,
-		"agent_links":  links,
-		"agent_count":  len(agentMembers),
+		"team_name":   teamMeta.Name,
+		"team_id":     teamIDStr,
+		"tasks":       tasks,
+		"members":     members,
+		"agent_links": links,
+		"agent_count": len(agentMembers),
 	})
 }
 
@@ -148,7 +148,7 @@ func (h *AgentsHandler) writeTeamExportArchive(ctx context.Context, w io.Writer,
 		TeamName:   teamMeta.Name,
 		TeamID:     teamID.String(),
 		AgentKeys:  []string{},
-		Sections:   make(map[string]interface{}),
+		Sections:   make(map[string]any),
 	}
 
 	// team/team.json
@@ -273,13 +273,13 @@ func (h *AgentsHandler) writeTeamExportArchive(ctx context.Context, w io.Writer,
 	}
 
 	sections := map[string]bool{
-		"context_files":  true,
-		"memory":         true,
+		"context_files":   true,
+		"memory":          true,
 		"knowledge_graph": true,
-		"cron":           true,
-		"user_profiles":  true,
-		"user_overrides": true,
-		"workspace":      true,
+		"cron":            true,
+		"user_profiles":   true,
+		"user_overrides":  true,
+		"workspace":       true,
 	}
 
 	for _, member := range agentMembers {
@@ -467,7 +467,7 @@ func (h *AgentsHandler) writeAgentSectionsToTar(ctx context.Context, tw *tar.Wri
 			exportRelations = append(exportRelations, KGRelationExport{
 				SourceExternalID: idToExternal[rel.SourceEntityID],
 				TargetExternalID: idToExternal[rel.TargetEntityID],
-				UserID: rel.UserID, RelationType: rel.RelationType,
+				UserID:           rel.UserID, RelationType: rel.RelationType,
 				Confidence: rel.Confidence, Properties: rel.Properties,
 			})
 		}

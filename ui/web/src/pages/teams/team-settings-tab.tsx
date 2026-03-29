@@ -6,6 +6,7 @@ import { Combobox } from "@/components/ui/combobox";
 import { X, Save, Bell, ShieldAlert, Clock, FolderLock, FolderSync, Zap, Bot, Loader2 } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { CHANNEL_TYPES } from "@/constants/channels";
+import { MultiUserPicker } from "@/components/shared/multi-user-picker";
 import type { TeamData, TeamAccessSettings, TeamNotifyConfig, EscalationMode, EscalationAction } from "@/types/team";
 import { useTeams } from "./hooks/use-teams";
 
@@ -15,6 +16,7 @@ interface TeamSettingsTabProps {
   onSaved: () => void;
 }
 
+/** Generic multi-select with static options (used for channel type selection). */
 function MultiSelect({
   options,
   selected,
@@ -46,7 +48,7 @@ function MultiSelect({
               <button
                 type="button"
                 onClick={() => onChange(selected.filter((s) => s !== id))}
-                className="ml-0.5 rounded-full p-0.5 hover:bg-muted"
+                className="ml-0.5 cursor-pointer rounded-full p-0.5 hover:bg-muted"
               >
                 <X className="h-3 w-3" />
               </button>
@@ -60,8 +62,7 @@ function MultiSelect({
 
 export function TeamSettingsTab({ teamId, team, onSaved }: TeamSettingsTabProps) {
   const { t } = useTranslation("teams");
-  const { updateTeamSettings, getKnownUsers } = useTeams();
-  const [knownUsers, setKnownUsers] = useState<string[]>([]);
+  const { updateTeamSettings } = useTeams();
 
   // Parse initial settings
   const initial = (team.settings ?? {}) as TeamAccessSettings;
@@ -90,11 +91,6 @@ export function TeamSettingsTab({ teamId, team, onSaved }: TeamSettingsTabProps)
   const [workspaceScope, setWorkspaceScope] = useState<string>(initial.workspace_scope ?? "isolated");
 
   const [saving, setSaving] = useState(false);
-
-  // Load known users for combobox
-  useEffect(() => {
-    getKnownUsers(teamId).then(setKnownUsers).catch(() => {});
-  }, [teamId, getKnownUsers]);
 
   // Reset when team changes
   useEffect(() => {
@@ -165,7 +161,6 @@ export function TeamSettingsTab({ teamId, team, onSaved }: TeamSettingsTabProps)
     }
   }, [teamId, allowUserIds, denyUserIds, allowChannels, denyChannels, notifyDispatched, notifyProgress, notifyFailed, notifyCompleted, notifyCommented, notifyNewTask, notifySlowTool, notifyMode, memberRequestsEnabled, memberRequestsAutoDispatch, escalationMode, escalationActions, blockerEscalationEnabled, followupInterval, followupMaxReminders, workspaceScope, updateTeamSettings, onSaved]);
 
-  const userOptions = knownUsers.map((u) => ({ value: u, label: u }));
   const channelOptions = CHANNEL_TYPES.map((c) => ({ value: c.value, label: c.label }));
 
   return (
@@ -407,9 +402,8 @@ export function TeamSettingsTab({ teamId, team, onSaved }: TeamSettingsTabProps)
             <p className="text-xs text-muted-foreground">
               {t("settings.allowedUsersHint")}
             </p>
-            <MultiSelect
-              options={userOptions}
-              selected={allowUserIds}
+            <MultiUserPicker
+              value={allowUserIds}
               onChange={setAllowUserIds}
               placeholder={t("settings.searchUsers")}
             />
@@ -419,9 +413,8 @@ export function TeamSettingsTab({ teamId, team, onSaved }: TeamSettingsTabProps)
             <p className="text-xs text-muted-foreground">
               {t("settings.deniedUsersHint")}
             </p>
-            <MultiSelect
-              options={userOptions}
-              selected={denyUserIds}
+            <MultiUserPicker
+              value={denyUserIds}
               onChange={setDenyUserIds}
               placeholder={t("settings.searchUsers")}
             />

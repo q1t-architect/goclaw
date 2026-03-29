@@ -52,6 +52,11 @@ func (h *ChannelInstancesHandler) RegisterRoutes(mux *http.ServeMux) {
 		mux.HandleFunc("GET /v1/tenant-users", h.auth(h.handleListTenantUsers))
 	}
 
+	// Unified user search (contacts + tenant_users)
+	if h.contactStore != nil {
+		mux.HandleFunc("GET /v1/users/search", h.auth(h.handleSearchUsers))
+	}
+
 	// Group file writers (nested under channel instances)
 	if h.configPermStore != nil {
 		mux.HandleFunc("GET /v1/channels/instances/{id}/writers/groups", h.auth(h.handleWriterGroups))

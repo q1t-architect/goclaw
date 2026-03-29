@@ -271,7 +271,7 @@ func (c *Channel) handleIncomingMessage(msg map[string]any) {
 
 	// Collect contact for processed messages.
 	if cc := c.ContactCollector(); cc != nil {
-		cc.EnsureContact(ctx, c.Type(), c.Name(), senderID, senderID, metadata["user_name"], "", peerKind)
+		cc.EnsureContact(ctx, c.Type(), c.Name(), senderID, senderID, metadata["user_name"], "", peerKind, "user")
 	}
 
 	c.HandleMessage(senderID, chatID, content, media, metadata, peerKind)

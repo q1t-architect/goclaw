@@ -14,30 +14,32 @@ import (
 
 // PGContactStore implements store.ContactStore backed by Postgres.
 type PGContactStore struct {
-	db *sql.DB
+	db           *sql.DB
+	resolveCache *contactResolveCache // tenant-user resolution cache (60s TTL)
 }
 
 // NewPGContactStore creates a new PGContactStore.
 func NewPGContactStore(db *sql.DB) *PGContactStore {
-	return &PGContactStore{db: db}
+	return &PGContactStore{db: db, resolveCache: newContactResolveCache()}
 }
 
-func (s *PGContactStore) UpsertContact(ctx context.Context, channelType, channelInstance, senderID, userID, displayName, username, peerKind string) error {
+func (s *PGContactStore) UpsertContact(ctx context.Context, channelType, channelInstance, senderID, userID, displayName, username, peerKind, contactType string) error {
 	tenantID := store.TenantIDFromContext(ctx)
 	if tenantID == uuid.Nil {
 		tenantID = store.MasterTenantID
 	}
 	_, err := s.db.ExecContext(ctx, `
-		INSERT INTO channel_contacts (channel_type, channel_instance, sender_id, user_id, display_name, username, peer_kind, tenant_id)
-		VALUES ($1, NULLIF($2,''), $3, NULLIF($4,''), NULLIF($5,''), NULLIF($6,''), NULLIF($7,''), $8)
+		INSERT INTO channel_contacts (channel_type, channel_instance, sender_id, user_id, display_name, username, peer_kind, contact_type, tenant_id)
+		VALUES ($1, NULLIF($2,''), $3, NULLIF($4,''), NULLIF($5,''), NULLIF($6,''), NULLIF($7,''), $8, $9)
 		ON CONFLICT (tenant_id, channel_type, sender_id) DO UPDATE SET
 			display_name     = COALESCE(NULLIF($5,''), channel_contacts.display_name),
 			username         = COALESCE(NULLIF($6,''), channel_contacts.username),
 			user_id          = COALESCE(NULLIF($4,''), channel_contacts.user_id),
 			channel_instance = COALESCE(NULLIF($2,''), channel_contacts.channel_instance),
 			peer_kind        = COALESCE(NULLIF($7,''), channel_contacts.peer_kind),
+			contact_type     = $8,
 			last_seen_at     = NOW()`,
-		channelType, channelInstance, senderID, userID, displayName, username, peerKind, tenantID,
+		channelType, channelInstance, senderID, userID, displayName, username, peerKind, contactType, tenantID,
 	)
 	return err
 }
@@ -88,7 +90,7 @@ func (s *PGContactStore) ListContacts(ctx context.Context, opts store.ContactLis
 	where, args, argIdx := contactWhereClause(ctx, opts)
 
 	query := `SELECT id, channel_type, channel_instance, sender_id, user_id,
-		display_name, username, avatar_url, peer_kind, merged_id,
+		display_name, username, avatar_url, peer_kind, contact_type, merged_id,
 		first_seen_at, last_seen_at
 		FROM channel_contacts` + where + " ORDER BY last_seen_at DESC"
 
@@ -116,7 +118,7 @@ func (s *PGContactStore) ListContacts(ctx context.Context, opts store.ContactLis
 		var c store.ChannelContact
 		if err := rows.Scan(
 			&c.ID, &c.ChannelType, &c.ChannelInstance, &c.SenderID, &c.UserID,
-			&c.DisplayName, &c.Username, &c.AvatarURL, &c.PeerKind, &c.MergedID,
+			&c.DisplayName, &c.Username, &c.AvatarURL, &c.PeerKind, &c.ContactType, &c.MergedID,
 			&c.FirstSeenAt, &c.LastSeenAt,
 		); err != nil {
 			return nil, err
@@ -147,7 +149,7 @@ func (s *PGContactStore) GetContactsBySenderIDs(ctx context.Context, senderIDs [
 
 	query := fmt.Sprintf(`SELECT DISTINCT ON (sender_id)
 		id, channel_type, channel_instance, sender_id, user_id,
-		display_name, username, avatar_url, peer_kind, merged_id,
+		display_name, username, avatar_url, peer_kind, contact_type, merged_id,
 		first_seen_at, last_seen_at
 		FROM channel_contacts
 		WHERE sender_id IN (%s)
@@ -164,7 +166,7 @@ func (s *PGContactStore) GetContactsBySenderIDs(ctx context.Context, senderIDs [
 		var c store.ChannelContact
 		if err := rows.Scan(
 			&c.ID, &c.ChannelType, &c.ChannelInstance, &c.SenderID, &c.UserID,
-			&c.DisplayName, &c.Username, &c.AvatarURL, &c.PeerKind, &c.MergedID,
+			&c.DisplayName, &c.Username, &c.AvatarURL, &c.PeerKind, &c.ContactType, &c.MergedID,
 			&c.FirstSeenAt, &c.LastSeenAt,
 		); err != nil {
 			return nil, err
@@ -192,6 +194,36 @@ func (s *PGContactStore) GetContactByID(ctx context.Context, id uuid.UUID) (*sto
 	return &c, nil
 }
 
+func (s *PGContactStore) GetSenderIDsByContactIDs(ctx context.Context, contactIDs []uuid.UUID) ([]string, error) {
+	if len(contactIDs) == 0 {
+		return nil, nil
+	}
+	tid := store.TenantIDFromContext(ctx)
+	placeholders := make([]string, len(contactIDs))
+	args := make([]any, len(contactIDs)+1)
+	for i, id := range contactIDs {
+		placeholders[i] = fmt.Sprintf("$%d", i+1)
+		args[i] = id
+	}
+	args[len(contactIDs)] = tid
+	q := fmt.Sprintf("SELECT sender_id FROM channel_contacts WHERE id IN (%s) AND tenant_id = $%d",
+		strings.Join(placeholders, ","), len(contactIDs)+1)
+	rows, err := s.db.QueryContext(ctx, q, args...)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var result []string
+	for rows.Next() {
+		var sid string
+		if err := rows.Scan(&sid); err != nil {
+			return nil, err
+		}
+		result = append(result, sid)
+	}
+	return result, rows.Err()
+}
+
 func (s *PGContactStore) MergeContacts(ctx context.Context, contactIDs []uuid.UUID, tenantUserID uuid.UUID) error {
 	if len(contactIDs) == 0 {
 		return nil
@@ -213,6 +245,9 @@ func (s *PGContactStore) MergeContacts(ctx context.Context, contactIDs []uuid.UU
 		len(args)-1, inClause, len(args),
 	)
 	_, err := s.db.ExecContext(ctx, q, args...)
+	if err == nil {
+		s.InvalidateContactResolveCache()
+	}
 	return err
 }
 
@@ -236,6 +271,9 @@ func (s *PGContactStore) UnmergeContacts(ctx context.Context, contactIDs []uuid.
 		inClause, len(args),
 	)
 	_, err := s.db.ExecContext(ctx, q, args...)
+	if err == nil {
+		s.InvalidateContactResolveCache()
+	}
 	return err
 }
 
@@ -243,7 +281,7 @@ func (s *PGContactStore) GetContactsByMergedID(ctx context.Context, mergedID uui
 	tid := store.TenantIDFromContext(ctx)
 
 	q := `SELECT id, channel_type, channel_instance, sender_id, user_id,
-		display_name, username, avatar_url, peer_kind, merged_id,
+		display_name, username, avatar_url, peer_kind, contact_type, merged_id,
 		first_seen_at, last_seen_at
 		FROM channel_contacts WHERE merged_id = $1 AND tenant_id = $2
 		ORDER BY last_seen_at DESC`
@@ -259,7 +297,7 @@ func (s *PGContactStore) GetContactsByMergedID(ctx context.Context, mergedID uui
 		var c store.ChannelContact
 		if err := rows.Scan(
 			&c.ID, &c.ChannelType, &c.ChannelInstance, &c.SenderID, &c.UserID,
-			&c.DisplayName, &c.Username, &c.AvatarURL, &c.PeerKind, &c.MergedID,
+			&c.DisplayName, &c.Username, &c.AvatarURL, &c.PeerKind, &c.ContactType, &c.MergedID,
 			&c.FirstSeenAt, &c.LastSeenAt,
 		); err != nil {
 			return nil, err

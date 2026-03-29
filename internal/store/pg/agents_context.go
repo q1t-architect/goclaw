@@ -5,7 +5,10 @@ import (
 	"database/sql"
 	"encoding/json"
 	"errors"
+	"fmt"
+	"log/slog"
 	"path/filepath"
+	"strings"
 	"time"
 
 	"github.com/google/uuid"
@@ -121,6 +124,89 @@ func (s *PGAgentStore) DeleteUserContextFile(ctx context.Context, agentID uuid.U
 		"DELETE FROM user_context_files WHERE agent_id = $1 AND user_id = $2 AND file_name = $3"+tClause,
 		append([]any{agentID, userID, fileName}, tArgs...)...)
 	return err
+}
+
+func (s *PGAgentStore) MigrateUserDataOnMerge(ctx context.Context, oldUserIDs []string, newUserID string) error {
+	if len(oldUserIDs) == 0 {
+		return nil
+	}
+	tClause, tArgs, _, err := scopeClause(ctx, len(oldUserIDs)+2)
+	if err != nil {
+		return err
+	}
+
+	placeholders := make([]string, len(oldUserIDs))
+	baseArgs := make([]any, 0, len(oldUserIDs)+1+len(tArgs))
+	for i, id := range oldUserIDs {
+		placeholders[i] = fmt.Sprintf("$%d", i+1)
+		baseArgs = append(baseArgs, id)
+	}
+	inClause := strings.Join(placeholders, ",")
+	newP := fmt.Sprintf("$%d", len(oldUserIDs)+1)
+	baseArgs = append(baseArgs, newUserID)
+	baseArgs = append(baseArgs, tArgs...)
+
+	// Args for delete (no newUserID param needed).
+	delArgs := make([]any, len(oldUserIDs))
+	copy(delArgs, baseArgs[:len(oldUserIDs)])
+	delArgs = append(delArgs, tArgs...)
+
+	// Helper: migrate + delete for one table. DO NOTHING on conflict —
+	// existing tenant user data always wins (canonical identity).
+	migrate := func(insertQ, deleteQ string) {
+		if _, err := s.db.ExecContext(ctx, insertQ, baseArgs...); err != nil {
+			slog.Warn("merge.migrate", "error", err)
+		}
+		if _, err := s.db.ExecContext(ctx, deleteQ, delArgs...); err != nil {
+			slog.Warn("merge.cleanup", "error", err)
+		}
+	}
+
+	// 1. user_context_files: UNIQUE(agent_id, user_id, file_name)
+	migrate(
+		fmt.Sprintf(`INSERT INTO user_context_files (id, agent_id, user_id, file_name, content, updated_at, tenant_id)
+			SELECT gen_random_uuid(), agent_id, %s, file_name, content, updated_at, tenant_id
+			FROM user_context_files WHERE user_id IN (%s)%s
+			ON CONFLICT (agent_id, user_id, file_name) DO NOTHING`, newP, inClause, tClause),
+		fmt.Sprintf(`DELETE FROM user_context_files WHERE user_id IN (%s)%s`, inClause, tClause),
+	)
+
+	// 2. user_agent_overrides: UNIQUE(agent_id, user_id)
+	migrate(
+		fmt.Sprintf(`INSERT INTO user_agent_overrides (id, agent_id, user_id, provider, model, settings, created_at, updated_at, tenant_id)
+			SELECT gen_random_uuid(), agent_id, %s, provider, model, settings, created_at, updated_at, tenant_id
+			FROM user_agent_overrides WHERE user_id IN (%s)%s
+			ON CONFLICT (agent_id, user_id) DO NOTHING`, newP, inClause, tClause),
+		fmt.Sprintf(`DELETE FROM user_agent_overrides WHERE user_id IN (%s)%s`, inClause, tClause),
+	)
+
+	// 3. user_agent_profiles: PK(agent_id, user_id)
+	migrate(
+		fmt.Sprintf(`INSERT INTO user_agent_profiles (agent_id, user_id, workspace, first_seen_at, last_seen_at, metadata, tenant_id)
+			SELECT agent_id, %s, workspace, first_seen_at, last_seen_at, metadata, tenant_id
+			FROM user_agent_profiles WHERE user_id IN (%s)%s
+			ON CONFLICT (agent_id, user_id) DO NOTHING`, newP, inClause, tClause),
+		fmt.Sprintf(`DELETE FROM user_agent_profiles WHERE user_id IN (%s)%s`, inClause, tClause),
+	)
+
+	// 4. memory_documents: UNIQUE(agent_id, COALESCE(user_id,''), path)
+	migrate(
+		fmt.Sprintf(`INSERT INTO memory_documents (id, agent_id, user_id, path, content, hash, updated_at, created_at, tenant_id)
+			SELECT gen_random_uuid(), agent_id, %s, path, content, hash, updated_at, created_at, tenant_id
+			FROM memory_documents WHERE user_id IN (%s)%s
+			ON CONFLICT (agent_id, COALESCE(user_id,''), path) DO NOTHING`, newP, inClause, tClause),
+		fmt.Sprintf(`DELETE FROM memory_documents WHERE user_id IN (%s)%s`, inClause, tClause),
+	)
+
+	// 5. memory_chunks: FK on document_id — cascade from memory_documents delete handles this.
+	// But orphan chunks (where document was already migrated) need cleanup.
+	// Simply re-point remaining chunks whose document still has old user_id.
+	repoint := fmt.Sprintf(`UPDATE memory_chunks SET user_id = %s WHERE user_id IN (%s)%s`, newP, inClause, tClause)
+	if _, err := s.db.ExecContext(ctx, repoint, baseArgs...); err != nil {
+		slog.Warn("merge.migrate_chunks", "error", err)
+	}
+
+	return nil
 }
 
 // --- User-Agent Profiles ---

@@ -90,6 +90,9 @@ func (t *BridgeTool) ServerName() string { return t.serverName }
 // OriginalName returns the original MCP tool name (without prefix).
 func (t *BridgeTool) OriginalName() string { return t.toolName }
 
+// IsConnected returns whether the underlying MCP server connection is healthy.
+func (t *BridgeTool) IsConnected() bool { return t.connected.Load() }
+
 func (t *BridgeTool) Execute(ctx context.Context, args map[string]any) *tools.Result {
 	if !t.connected.Load() {
 		return tools.ErrorResult(fmt.Sprintf("MCP server %q is disconnected", t.serverName))

@@ -256,6 +256,7 @@ func NewManagedResolver(deps ResolverDeps) ResolverFunc {
 		// one agent pollute the shared deps. Tools and become visible to ALL agents
 		// (even those without MCP grants), because FilterTools reads from registry.List().
 		hasMCPTools := false
+		var mcpUserCredSrvs []store.MCPAccessInfo
 		if deps.MCPStore != nil {
 			if toolsReg == deps.Tools {
 				toolsReg = deps.Tools.Clone()
@@ -268,20 +269,23 @@ func NewManagedResolver(deps ResolverDeps) ResolverFunc {
 			mcpMgr := mcpbridge.NewManager(toolsReg, mcpOpts...)
 			if err := mcpMgr.LoadForAgent(ctx, ag.ID, ""); err != nil {
 				slog.Warn("failed to load MCP servers for agent", "agent", agentKey, "error", err)
-			} else if mcpMgr.IsSearchMode() {
-				// Search mode: too many tools — register mcp_tool_search meta-tool.
-				// Also wire lazy activator so deferred tools can be called by name directly.
-				toolsReg.SetDeferredActivator(mcpMgr.ActivateToolIfDeferred)
-				searchTool := mcpbridge.NewMCPToolSearchTool(mcpMgr)
-				toolsReg.Register(searchTool)
-				hasMCPTools = true
-				slog.Info("mcp.agent.search_mode", "agent", agentKey,
-					"deferred_tools", len(mcpMgr.DeferredToolInfos()))
 			} else {
-				toolNames := mcpMgr.ToolNames()
-				if len(toolNames) > 0 {
+				mcpUserCredSrvs = mcpMgr.UserCredServers()
+				if mcpMgr.IsSearchMode() {
+					// Search mode: too many tools — register mcp_tool_search meta-tool.
+					// Also wire lazy activator so deferred tools can be called by name directly.
+					toolsReg.SetDeferredActivator(mcpMgr.ActivateToolIfDeferred)
+					searchTool := mcpbridge.NewMCPToolSearchTool(mcpMgr)
+					toolsReg.Register(searchTool)
 					hasMCPTools = true
-					slog.Info("mcp.agent.tools_loaded", "agent", agentKey, "tools", len(toolNames))
+					slog.Info("mcp.agent.search_mode", "agent", agentKey,
+						"deferred_tools", len(mcpMgr.DeferredToolInfos()))
+				} else {
+					toolNames := mcpMgr.ToolNames()
+					if len(toolNames) > 0 {
+						hasMCPTools = true
+						slog.Info("mcp.agent.tools_loaded", "agent", agentKey, "tools", len(toolNames))
+					}
 				}
 			}
 		}
@@ -398,6 +402,9 @@ func NewManagedResolver(deps ResolverDeps) ResolverFunc {
 			BudgetMonthlyCents:     derefInt(ag.BudgetMonthlyCents),
 			TracingStore:           deps.TracingStore,
 			MemoryStore:            deps.MemoryStore,
+			MCPStore:               deps.MCPStore,
+			MCPPool:                deps.MCPPool,
+			MCPUserCredSrvs:        mcpUserCredSrvs,
 		})
 
 		slog.Info("resolved agent from DB", "agent", agentKey, "model", ag.Model, "provider", ag.Provider)

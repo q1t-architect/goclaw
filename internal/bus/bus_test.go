@@ -221,9 +221,7 @@ func TestBroadcast_ConcurrentSubscribeUnsubscribe(t *testing.T) {
 	done := make(chan struct{})
 
 	// Broadcast in a goroutine
-	wg.Add(1)
-	go func() {
-		defer wg.Done()
+	wg.Go(func() {
 		for {
 			select {
 			case <-done:
@@ -232,10 +230,10 @@ func TestBroadcast_ConcurrentSubscribeUnsubscribe(t *testing.T) {
 				mb.Broadcast(Event{Name: "concurrent"})
 			}
 		}
-	}()
+	})
 
 	// Subscribe/unsubscribe rapidly
-	for i := 0; i < 100; i++ {
+	for range 100 {
 		mb.Subscribe("rapid", func(e Event) {})
 		mb.Unsubscribe("rapid")
 	}
@@ -252,7 +250,7 @@ func TestPublishInbound_ConcurrentProducers(t *testing.T) {
 	const n = 100
 	var wg sync.WaitGroup
 	wg.Add(n)
-	for i := 0; i < n; i++ {
+	for range n {
 		go func() {
 			defer wg.Done()
 			mb.TryPublishInbound(InboundMessage{Content: "msg"})
