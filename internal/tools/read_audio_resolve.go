@@ -5,6 +5,8 @@ import (
 	"encoding/base64"
 	"fmt"
 	"log/slog"
+	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
 	"time"
@@ -164,4 +166,71 @@ func openaiAudioCall(ctx context.Context, apiKey, baseURL, model, prompt string,
 	}
 
 	return callOpenAICompatJSON(ctx, apiKey, baseURL, body, 120*time.Second)
+}
+
+// convertAudioToMP3 converts audio data to MP3 using ffmpeg.
+// Returns original data if already MP3/MPEG.
+func convertAudioToMP3(data []byte, sourceMime string) ([]byte, error) {
+	// Check if conversion is needed
+	if strings.Contains(sourceMime, "mp3") || strings.Contains(sourceMime, "mpeg") {
+		return data, nil
+	}
+	// Check if ffmpeg is available
+	if _, err := exec.LookPath("ffmpeg"); err != nil {
+		return nil, fmt.Errorf("ffmpeg not found: %w", err)
+	}
+	// Create temp files
+	tempDir := os.TempDir()
+	uuid := fmt.Sprintf("%d_%d", time.Now().UnixNano(), os.Getpid())
+
+	inputPath := filepath.Join(tempDir, fmt.Sprintf("goclaw_audio_in_%s.ogg", uuid))
+	outputPath := filepath.Join(tempDir, fmt.Sprintf("goclaw_audio_out_%s.mp3", uuid))
+
+	// Cleanup temp files
+	defer func() {
+		os.Remove(inputPath)
+		os.Remove(outputPath)
+	}()
+
+	// Write input data
+	if err := os.WriteFile(inputPath, data, 0600); err != nil {
+		return nil, fmt.Errorf("write temp input: %w", err)
+	}
+
+	// Run ffmpeg with timeout
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+
+	cmd := exec.CommandContext(ctx, "ffmpeg",
+		"-i", inputPath,
+		"-acodec", "libmp3lame",
+		"-q:a", "2",
+		"-y",
+		outputPath,
+	)
+
+	output, err := cmd.CombinedOutput()
+	if err != nil {
+		if ctx.Err() == context.DeadlineExceeded {
+			return nil, fmt.Errorf("ffmpeg timeout")
+		}
+		return nil, fmt.Errorf("ffmpeg failed: %w (output: %s)", err, string(output))
+	}
+
+	// Read converted file
+	mp3Data, err := os.ReadFile(outputPath)
+	if err != nil {
+		return nil, fmt.Errorf("read converted file: %w", err)
+	}
+
+	if len(mp3Data) == 0 {
+		return nil, fmt.Errorf("ffmpeg produced empty output")
+	}
+
+	slog.Info("read_audio: converted to MP3",
+		"original_size", len(data),
+		"mp3_size", len(mp3Data),
+		"original_mime", sourceMime)
+
+	return mp3Data, nil
 }

@@ -95,6 +95,14 @@ func (t *ReadAudioTool) Execute(ctx context.Context, args map[string]any) *Resul
 		return ErrorResult(fmt.Sprintf("Failed to read audio file: %v", err))
 	}
 	slog.Info("read_audio: file loaded", "size_bytes", len(data))
+	// Convert OGG/Opus to MP3 for OpenAI compatibility
+	convertedData, err := convertAudioToMP3(data, audioMime)
+	if err != nil {
+		return ErrorResult(fmt.Sprintf("Audio conversion failed: %v", err))
+	}
+	data = convertedData
+	audioMime = "audio/mpeg"
+	slog.Info("read_audio: converted audio", "new_size", len(data))
 	if len(data) > audioMaxBytes {
 		return ErrorResult(fmt.Sprintf("Audio too large: %d bytes (max %d)", len(data), audioMaxBytes))
 	}
