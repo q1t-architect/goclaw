@@ -162,6 +162,14 @@ func runGateway() {
 			slog.Info("system_configs applied to in-memory config", "keys", len(sysConfigs))
 		}
 	}
+
+	// Re-create TTS manager now that DB secrets and system_configs are applied.
+	// setupTTS runs before ApplyDBSecrets, so provider API keys are missing at first init.
+	if refreshedMgr := setupTTS(cfg); refreshedMgr != nil && refreshedMgr.HasProviders() {
+		ttsTool.UpdateManager(refreshedMgr)
+		slog.Info("tts re-initialized with DB secrets", "provider", refreshedMgr.PrimaryProvider(), "auto", string(refreshedMgr.AutoMode()))
+	}
+
 	setupMemoryEmbeddings(pgStores, providerRegistry)
 
 	loadBootstrapFiles(pgStores, workspace, agentCfg)
