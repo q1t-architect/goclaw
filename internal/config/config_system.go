@@ -62,6 +62,8 @@ func (c *Config) ApplySystemConfigs(configs map[string]string) {
 	str("tts.auto", &c.Tts.Auto)
 	str("tts.mode", &c.Tts.Mode)
 	integer("tts.max_length", &c.Tts.MaxLength)
+	str("tts.minimax.api_key", &c.Tts.MiniMax.APIKey)
+	str("tts.minimax.group_id", &c.Tts.MiniMax.GroupID)
 
 	// Cron
 	integer("cron.max_retries", &c.Cron.MaxRetries)
