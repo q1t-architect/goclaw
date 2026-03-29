@@ -22,7 +22,6 @@ export interface SubagentsConfig {
 export interface CompactionConfig {
   reserveTokensFloor?: number;
   maxHistoryShare?: number;
-  minMessages?: number;
   keepLastMessages?: number;
   memoryFlush?: {
     enabled?: boolean;

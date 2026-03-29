@@ -68,6 +68,16 @@ export function useMcpServers() {
     return getApiClient().post<MCPTestResult>('/v1/mcp/servers/test', data)
   }, [])
 
+  const reconnectServer = useCallback(async (id: string) => {
+    try {
+      await getApiClient().post(`/v1/mcp/servers/${id}/reconnect`, {})
+      toast.success('Connection reset')
+    } catch (err) {
+      toast.error('Failed to reconnect', (err as Error).message)
+      throw err
+    }
+  }, [])
+
   const listServerTools = useCallback(async (serverId: string) => {
     const res = await getApiClient().get<{ tools: MCPToolInfo[] | null }>(`/v1/mcp/servers/${serverId}/tools`)
     return res.tools ?? []
@@ -93,7 +103,7 @@ export function useMcpServers() {
   return {
     servers, loading, atLimit,
     fetchServers, createServer, updateServer, deleteServer,
-    testConnection, listServerTools,
+    testConnection, reconnectServer, listServerTools,
     listGrants, grantAgent, revokeAgent,
   }
 }

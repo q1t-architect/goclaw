@@ -71,7 +71,7 @@ func (r *MethodRouter) Handle(ctx context.Context, client *Client, req *protocol
 				client.SendResponse(protocol.NewErrorResponse(
 					req.ID,
 					protocol.ErrUnauthorized,
-					i18n.T(locale, i18n.MsgPermissionDenied, req.Method),
+					i18n.T(locale, i18n.MsgPermissionDenied, req.Method+" requires "+string(permissions.MethodRole(req.Method))+" role"),
 				))
 				return
 			}

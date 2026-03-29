@@ -110,7 +110,7 @@ export function AgentAdvancedDialog({ open, onOpenChange, agent, onUpdate }: Age
       }
       await onUpdate({
         compaction_config: comp,
-        context_pruning: pruneEnabled ? prune : null,
+        context_pruning: pruneEnabled ? (Object.keys(prune).length > 0 ? prune : null) : { mode: "off" },
         sandbox_config: sbEnabled ? sb : null,
         other_config: otherBase,
       });

@@ -590,9 +590,7 @@
       "title": "Compaction",
       "description": "Context window compaction and memory flush settings",
       "maxHistoryShare": "Max History Share (0-1)",
-      "maxHistoryShareTip": "Maximum fraction of context window for conversation history (e.g. 0.75 = 75%). Compaction triggers when exceeded.",
-      "minMessages": "Min Messages",
-      "minMessagesTip": "Minimum messages before compaction can trigger, regardless of token count.",
+      "maxHistoryShareTip": "Maximum fraction of context window for conversation history (e.g. 0.85 = 85%). Compaction triggers when exceeded.",
       "keepLastMessages": "Keep Last Messages",
       "keepLastMessagesTip": "Recent messages kept after compaction. Older messages are replaced by a summary.",
       "memoryFlush": "Memory Flush",
@@ -601,6 +599,7 @@
     "contextPruning": {
       "title": "Context Pruning",
       "description": "Trim old tool results to save context window",
+      "descriptionSimple": "Automatically trims old tool results to prevent context overflow. Enabled by default.",
       "mode": "Mode",
       "keepLastAssistants": "Keep Last Assistants",
       "softTrimRatio": "Soft Trim Ratio (0-1)",
@@ -612,7 +611,8 @@
       "tailChars": "Tail Chars",
       "hardClear": "Hard Clear",
       "enabled": "Enabled",
-      "placeholderText": "Placeholder Text"
+      "placeholderText": "Placeholder Text",
+      "advanced": "Advanced"
     },
     "sandbox": {
       "title": "Sandbox",

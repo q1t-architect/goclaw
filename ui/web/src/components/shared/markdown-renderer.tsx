@@ -33,7 +33,7 @@ function CodeBlock({
   const lang = className?.replace("language-", "") ?? "";
 
   return (
-    <div className="not-prose group relative my-6 overflow-hidden rounded-lg border border-border/60">
+    <div className="not-prose group relative my-3 overflow-hidden rounded-lg border border-border/60">
       <div className="flex items-center justify-between border-b border-border/40 bg-muted/70 px-3 py-1.5 text-[11px] font-medium tracking-wide text-muted-foreground uppercase">
         <span>{lang || "code"}</span>
         <button
@@ -45,7 +45,7 @@ function CodeBlock({
           {copied ? <Check className="h-3.5 w-3.5" /> : <Copy className="h-3.5 w-3.5" />}
         </button>
       </div>
-      <pre className="overflow-x-auto bg-muted/30 p-4 text-[13px] leading-relaxed text-foreground whitespace-pre">
+      <pre className="overflow-x-auto bg-muted/30 p-3 text-[13px] leading-normal text-foreground whitespace-pre">
         <code className={className} style={{ fontFamily: "'JetBrains Mono', 'Fira Code', ui-monospace, monospace", wordWrap: "normal", overflowWrap: "normal" }}>{children}</code>
       </pre>
     </div>

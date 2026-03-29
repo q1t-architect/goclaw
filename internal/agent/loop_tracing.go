@@ -373,12 +373,46 @@ func truncateStr(s string, maxLen int) string {
 	return "..." + s[start:]
 }
 
+// estimateMessageTokens returns a rough token estimate for a single message,
+// including content text and tool call arguments.
+func estimateMessageTokens(m providers.Message) int {
+	tokens := utf8.RuneCountInString(m.Content) / 3
+	for _, tc := range m.ToolCalls {
+		tokens += len(tc.ID)/3 + len(tc.Name)/3
+		for k, v := range tc.Arguments {
+			tokens += len(k) / 3
+			switch val := v.(type) {
+			case string:
+				tokens += len(val) / 3
+			default:
+				tokens += 10 // small fixed estimate for non-string args (numbers, booleans, etc.)
+			}
+		}
+	}
+	return tokens
+}
+
 // EstimateTokens returns a rough token estimate for a slice of messages.
+// Includes content text and tool call arguments (JSON overhead).
 // Used internally for summarization thresholds and externally for adaptive throttle.
 func EstimateTokens(messages []providers.Message) int {
 	total := 0
 	for _, m := range messages {
-		total += utf8.RuneCountInString(m.Content) / 3
+		total += estimateMessageTokens(m)
+	}
+	return total
+}
+
+// EstimateHistoryTokens estimates tokens for history messages only,
+// excluding system messages (which are overhead: system prompt, tool defs, context files).
+// Used for compaction threshold checks where we need history-only token count.
+func EstimateHistoryTokens(messages []providers.Message) int {
+	total := 0
+	for _, m := range messages {
+		if m.Role == "system" {
+			continue
+		}
+		total += estimateMessageTokens(m)
 	}
 	return total
 }
@@ -402,7 +436,7 @@ func EstimateTokensWithCalibration(messages []providers.Message, lastPromptToken
 	// Estimate only the new messages with the heuristic and add to base.
 	delta := 0
 	for _, m := range messages[lastMsgCount:] {
-		delta += utf8.RuneCountInString(m.Content) / 3
+		delta += estimateMessageTokens(m)
 	}
 	return lastPromptTokens + delta
 }

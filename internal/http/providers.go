@@ -176,6 +176,12 @@ func (h *ProvidersHandler) registerInMemory(p *store.LLMProviderData) {
 			base = "https://coding-intl.dashscope.aliyuncs.com/v1"
 		}
 		h.providerReg.RegisterForTenant(p.TenantID, providers.NewOpenAIProvider(p.Name, p.APIKey, base, "qwen3.5-plus"))
+	case store.ProviderNovita:
+		base := apiBase
+		if base == "" {
+			base = store.NovitaDefaultAPIBase
+		}
+		h.providerReg.RegisterForTenant(p.TenantID, providers.NewOpenAIProvider(p.Name, p.APIKey, base, store.NovitaDefaultModel))
 	default:
 		prov := providers.NewOpenAIProvider(p.Name, p.APIKey, apiBase, "")
 		if p.ProviderType == store.ProviderMiniMax {

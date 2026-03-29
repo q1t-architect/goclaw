@@ -11,6 +11,7 @@ import (
 
 	"github.com/nextlevelbuilder/goclaw/internal/bus"
 	"github.com/nextlevelbuilder/goclaw/internal/i18n"
+	"github.com/nextlevelbuilder/goclaw/internal/permissions"
 	"github.com/nextlevelbuilder/goclaw/internal/store"
 	"github.com/nextlevelbuilder/goclaw/pkg/protocol"
 )
@@ -32,18 +33,19 @@ func NewChannelInstancesHandler(s store.ChannelInstanceStore, agentStore store.A
 
 // RegisterRoutes registers all channel instance routes on the given mux.
 func (h *ChannelInstancesHandler) RegisterRoutes(mux *http.ServeMux) {
+	// Channel instance CRUD (reads: viewer+, writes: admin+)
 	mux.HandleFunc("GET /v1/channels/instances", h.auth(h.handleList))
-	mux.HandleFunc("POST /v1/channels/instances", h.auth(h.handleCreate))
+	mux.HandleFunc("POST /v1/channels/instances", h.adminAuth(h.handleCreate))
 	mux.HandleFunc("GET /v1/channels/instances/{id}", h.auth(h.handleGet))
-	mux.HandleFunc("PUT /v1/channels/instances/{id}", h.auth(h.handleUpdate))
-	mux.HandleFunc("DELETE /v1/channels/instances/{id}", h.auth(h.handleDelete))
+	mux.HandleFunc("PUT /v1/channels/instances/{id}", h.adminAuth(h.handleUpdate))
+	mux.HandleFunc("DELETE /v1/channels/instances/{id}", h.adminAuth(h.handleDelete))
 
 	// Channel contacts (global, not per-agent)
 	if h.contactStore != nil {
 		mux.HandleFunc("GET /v1/contacts", h.auth(h.handleListContacts))
 		mux.HandleFunc("GET /v1/contacts/resolve", h.auth(h.handleResolveContacts))
-		mux.HandleFunc("POST /v1/contacts/merge", h.auth(h.handleMergeContacts))
-		mux.HandleFunc("POST /v1/contacts/unmerge", h.auth(h.handleUnmergeContacts))
+		mux.HandleFunc("POST /v1/contacts/merge", h.adminAuth(h.handleMergeContacts))
+		mux.HandleFunc("POST /v1/contacts/unmerge", h.adminAuth(h.handleUnmergeContacts))
 		mux.HandleFunc("GET /v1/contacts/merged/{tenantUserId}", h.auth(h.handleListMergedContacts))
 	}
 	if h.tenantStore != nil {
@@ -54,13 +56,17 @@ func (h *ChannelInstancesHandler) RegisterRoutes(mux *http.ServeMux) {
 	if h.configPermStore != nil {
 		mux.HandleFunc("GET /v1/channels/instances/{id}/writers/groups", h.auth(h.handleWriterGroups))
 		mux.HandleFunc("GET /v1/channels/instances/{id}/writers", h.auth(h.handleListWriters))
-		mux.HandleFunc("POST /v1/channels/instances/{id}/writers", h.auth(h.handleAddWriter))
-		mux.HandleFunc("DELETE /v1/channels/instances/{id}/writers/{userId}", h.auth(h.handleRemoveWriter))
+		mux.HandleFunc("POST /v1/channels/instances/{id}/writers", h.adminAuth(h.handleAddWriter))
+		mux.HandleFunc("DELETE /v1/channels/instances/{id}/writers/{userId}", h.adminAuth(h.handleRemoveWriter))
 	}
 }
 
 func (h *ChannelInstancesHandler) auth(next http.HandlerFunc) http.HandlerFunc {
 	return requireAuth("", next)
+}
+
+func (h *ChannelInstancesHandler) adminAuth(next http.HandlerFunc) http.HandlerFunc {
+	return requireAuth(permissions.RoleAdmin, next)
 }
 
 func (h *ChannelInstancesHandler) emitCacheInvalidate() {

@@ -367,7 +367,7 @@ func requireAuth(minRole permissions.Role, next http.HandlerFunc) http.HandlerFu
 
 		if !permissions.HasMinRole(auth.Role, required) {
 			writeJSON(w, http.StatusForbidden, map[string]string{
-				"error": i18n.T(locale, i18n.MsgPermissionDenied, r.URL.Path),
+				"error": i18n.T(locale, i18n.MsgPermissionDenied, r.URL.Path+" requires "+string(required)+" role"),
 			})
 			return
 		}
@@ -398,7 +398,7 @@ func requireAuthBearer(minRole permissions.Role, bearer string, w http.ResponseW
 
 	if !permissions.HasMinRole(auth.Role, required) {
 		writeJSON(w, http.StatusForbidden, map[string]string{
-			"error": i18n.T(locale, i18n.MsgPermissionDenied, r.URL.Path),
+			"error": i18n.T(locale, i18n.MsgPermissionDenied, r.URL.Path+" requires "+string(required)+" role"),
 		})
 		return r, false
 	}

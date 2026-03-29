@@ -14,7 +14,7 @@ export function McpServerList() {
   const {
     servers, loading, atLimit,
     fetchServers, createServer, updateServer, deleteServer,
-    testConnection, listServerTools,
+    testConnection, reconnectServer, listServerTools,
     listGrants, grantAgent, revokeAgent,
   } = useMcpServers()
   const { agents } = useAgentCrud()
@@ -24,6 +24,7 @@ export function McpServerList() {
   const [deleteTarget, setDeleteTarget] = useState<MCPServerData | null>(null)
   const [grantsServer, setGrantsServer] = useState<MCPServerData | null>(null)
   const [toolsServer, setToolsServer] = useState<MCPServerData | null>(null)
+  const [reconnectingId, setReconnectingId] = useState<string | null>(null)
 
   function openCreate() {
     setEditServer(null)
@@ -163,6 +164,19 @@ export function McpServerList() {
                   {/* Actions */}
                   <td className="px-4 py-3 text-right">
                     <div className="flex items-center justify-end gap-1">
+                      <button
+                        disabled={reconnectingId === s.id}
+                        onClick={async () => {
+                          setReconnectingId(s.id)
+                          try { await reconnectServer(s.id) } finally { setReconnectingId(null) }
+                        }}
+                        className="p-1 text-text-muted hover:text-text-primary transition-colors disabled:opacity-50"
+                        title={t('reconnect')}
+                      >
+                        <svg className={`h-3.5 w-3.5${reconnectingId === s.id ? ' animate-spin' : ''}`} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
+                          <path d="M21 12a9 9 0 1 1-9-9c2.52 0 4.93 1 6.74 2.74L21 8" /><path d="M21 3v5h-5" />
+                        </svg>
+                      </button>
                       <button onClick={() => openEdit(s)} className="p-1 text-text-muted hover:text-text-primary transition-colors" title="Edit">
                         <svg className="h-3.5 w-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
                           <path d="M21.174 6.812a1 1 0 0 0-3.986-3.987L3.842 16.174a2 2 0 0 0-.5.83l-1.321 4.352a.5.5 0 0 0 .623.622l4.353-1.32a2 2 0 0 0 .83-.497z" />

@@ -271,7 +271,7 @@ func (l *Loop) runLoop(ctx context.Context, req RunRequest) (*RunResult, error) 
 				}
 			})
 		} else {
-			resp, err = l.provider.Chat(callCtx, chatReq)
+			resp, err = provider.Chat(callCtx, chatReq)
 		}
 
 		if err != nil {
@@ -308,24 +308,51 @@ func (l *Loop) runLoop(ctx context.Context, req RunRequest) (*RunResult, error) 
 			rs.totalUsage.ThinkingTokens += resp.Usage.ThinkingTokens
 		}
 
-		// Mid-loop compaction: same threshold as maybeSummarize (contextWindow * historyShare)
-		// but applied to in-memory messages during the run. Prevents context overflow for
-		// long-running agents (e.g. delegated research tasks that accumulate many tool results).
+		// Mid-loop context management: uses history-only token count (excludes overhead
+		// from system prompt, tool definitions, context files) for threshold comparison.
+		// Two-phase approach: prune old tool results first, then compact only if still over budget.
 		if !rs.midLoopCompacted && l.contextWindow > 0 {
 			historyShare := config.DefaultHistoryShare
 			if l.compactionCfg != nil && l.compactionCfg.MaxHistoryShare > 0 {
 				historyShare = l.compactionCfg.MaxHistoryShare
 			}
-			threshold := int(float64(l.contextWindow) * historyShare)
+			historyBudget := int(float64(l.contextWindow) * historyShare)
 
-			promptTokens := 0
-			if resp.Usage != nil && resp.Usage.PromptTokens > 0 {
-				promptTokens = resp.Usage.PromptTokens
-			} else {
-				promptTokens = EstimateTokens(messages)
+			// Calibrate overhead on first LLM response with usage data.
+			if !rs.overheadCalibrated && resp.Usage != nil && resp.Usage.PromptTokens > 0 {
+				historyEst := EstimateHistoryTokens(messages)
+				rs.overheadTokens = resp.Usage.PromptTokens - historyEst
+				if rs.overheadTokens < 0 {
+					rs.overheadTokens = 0
+				}
+				rs.overheadCalibrated = true
 			}
 
-			if promptTokens >= threshold {
+			// Compute history-only token count (excludes system prompt/tools overhead).
+			historyTokens := 0
+			if resp.Usage != nil && resp.Usage.PromptTokens > 0 && rs.overheadCalibrated {
+				historyTokens = resp.Usage.PromptTokens - rs.overheadTokens
+			} else {
+				historyTokens = EstimateHistoryTokens(messages)
+			}
+
+			// Phase 1: Prune old tool results before resorting to full compaction (at 70% of budget).
+			if historyTokens >= int(float64(historyBudget)*0.7) && !rs.midLoopPruned {
+				rs.midLoopPruned = true
+				pruned := pruneContextMessages(messages, l.contextWindow, l.contextPruningCfg)
+				if len(pruned) > 0 {
+					messages = pruned
+					historyTokens = EstimateHistoryTokens(messages)
+				}
+				slog.Info("mid_loop_pruning",
+					"agent", l.id,
+					"history_tokens", historyTokens,
+					"budget", historyBudget,
+					"overhead", rs.overheadTokens)
+			}
+
+			// Phase 2: Full compaction only if still over budget after pruning.
+			if historyTokens >= historyBudget {
 				rs.midLoopCompacted = true
 				emitRun(AgentEvent{
 					Type:    protocol.AgentEventActivity,
@@ -338,8 +365,9 @@ func (l *Loop) runLoop(ctx context.Context, req RunRequest) (*RunResult, error) 
 				}
 				slog.Info("mid_loop_compaction",
 					"agent", l.id,
-					"prompt_tokens", promptTokens,
-					"threshold", threshold,
+					"history_tokens", historyTokens,
+					"budget", historyBudget,
+					"overhead", rs.overheadTokens,
 					"context_window", l.contextWindow)
 			}
 		}

@@ -109,6 +109,19 @@ export function useMCP() {
     [http],
   );
 
+  const reconnectServer = useCallback(
+    async (id: string) => {
+      try {
+        await http.post(`/v1/mcp/servers/${id}/reconnect`, {});
+        toast.success(i18next.t("mcp:toast.reconnected"));
+      } catch (err) {
+        toast.error(i18next.t("mcp:toast.failedReconnect"), err instanceof Error ? err.message : "");
+        throw err;
+      }
+    },
+    [http],
+  );
+
   const listServerTools = useCallback(
     async (serverId: string) => {
       const res = await http.get<{ tools: MCPToolInfo[] }>(`/v1/mcp/servers/${serverId}/tools`);
@@ -153,6 +166,7 @@ export function useMCP() {
     revokeAgent,
     listGrantsByAgent,
     testConnection,
+    reconnectServer,
     listServerTools,
     getUserCredentials,
     setUserCredentials,

@@ -2,7 +2,7 @@ import { useState, useEffect, useCallback } from "react";
 import { useTranslation } from "react-i18next";
 import {
   Settings2, Loader2, Save, AlertTriangle, Info, ExternalLink,
-  Brain, Eye, MessageSquareText, Archive, Clock, Hash, CheckCircle2, XCircle,
+  Brain, Eye, MessageSquareText, Archive, Clock, Hash, CheckCircle2, XCircle, Network,
 } from "lucide-react";
 import { Link } from "react-router";
 import {
@@ -74,6 +74,9 @@ interface InitState {
   compThreshold: string;
   compKeepRecent: string;
   compMaxTokens: string;
+  kgProvider: string;
+  kgModel: string;
+  kgMinConfidence: string;
 }
 
 const DEFAULTS: InitState = {
@@ -82,6 +85,7 @@ const DEFAULTS: InitState = {
   toolStatus: true, blockReply: false, intentClassify: true,
   compProvider: "", compModel: "",
   compThreshold: "", compKeepRecent: "", compMaxTokens: "",
+  kgProvider: "", kgModel: "", kgMinConfidence: "0.75",
 };
 
 function parseBool(v: string | undefined, fallback: boolean): boolean {
@@ -117,7 +121,15 @@ export function SystemSettingsModal({ open, onOpenChange }: SystemSettingsModalP
   const [compKeepRecent, setCompKeepRecent] = useState("");
   const [compMaxTokens, setCompMaxTokens] = useState("");
 
-  const applyConfigs = useCallback((configs: Record<string, string>) => {
+  // Knowledge Graph
+  const [kgProvider, setKgProvider] = useState("");
+  const [kgModel, setKgModel] = useState("");
+  const [kgMinConfidence, setKgMinConfidence] = useState("0.75");
+
+  const applyConfigs = useCallback((
+    configs: Record<string, string>,
+    kgSettings?: { extraction_provider?: string; extraction_model?: string; min_confidence?: number },
+  ) => {
     const s: InitState = {
       embProvider: configs["embedding.provider"] ?? "",
       embModel: configs["embedding.model"] ?? "",
@@ -131,6 +143,9 @@ export function SystemSettingsModal({ open, onOpenChange }: SystemSettingsModalP
       compThreshold: configs["compaction.threshold"] ?? "",
       compKeepRecent: configs["compaction.keep_recent"] ?? "",
       compMaxTokens: configs["compaction.max_tokens"] ?? "",
+      kgProvider: kgSettings?.extraction_provider ?? "",
+      kgModel: kgSettings?.extraction_model ?? "",
+      kgMinConfidence: String(kgSettings?.min_confidence ?? 0.75),
     };
     setInit(s);
     setEmbProvider(s.embProvider);
@@ -145,15 +160,22 @@ export function SystemSettingsModal({ open, onOpenChange }: SystemSettingsModalP
     setCompThreshold(s.compThreshold);
     setCompKeepRecent(s.compKeepRecent);
     setCompMaxTokens(s.compMaxTokens);
+    setKgProvider(s.kgProvider);
+    setKgModel(s.kgModel);
+    setKgMinConfidence(s.kgMinConfidence);
     resetEmb();
   }, [resetEmb]);
 
   useEffect(() => {
     if (!open) return;
     setLoading(true);
-    http
-      .get<Record<string, string>>("/v1/system-configs")
-      .then(applyConfigs)
+    Promise.all([
+      http.get<Record<string, string>>("/v1/system-configs"),
+      http.get<{ settings?: Record<string, unknown> }>("/v1/tools/builtin/knowledge_graph_search")
+        .then((r) => r.settings as { extraction_provider?: string; extraction_model?: string; min_confidence?: number } | undefined)
+        .catch(() => undefined),
+    ])
+      .then(([configs, kgSettings]) => applyConfigs(configs, kgSettings))
       .catch((err) => toast.error(err instanceof Error ? err.message : t("loadFailed")))
       .finally(() => setLoading(false));
   }, [open, http, applyConfigs, t]);
@@ -194,6 +216,19 @@ export function SystemSettingsModal({ open, onOpenChange }: SystemSettingsModalP
 
       for (const [key, value] of Object.entries(updates)) {
         await http.put(`/v1/system-configs/${key}`, { value });
+      }
+
+      // KG extraction — save via builtin tools API
+      const kgChanged = kgProvider !== init.kgProvider || kgModel !== init.kgModel || kgMinConfidence !== init.kgMinConfidence;
+      if (kgChanged) {
+        await http.put("/v1/tools/builtin/knowledge_graph_search", {
+          settings: {
+            extraction_provider: kgProvider,
+            extraction_model: kgModel,
+            min_confidence: Number(kgMinConfidence) || 0.75,
+            extract_on_memory_write: !!(kgProvider && kgModel),
+          },
+        });
       }
       toast.success(t("saved"));
       onOpenChange(false);
@@ -340,6 +375,51 @@ export function SystemSettingsModal({ open, onOpenChange }: SystemSettingsModalP
                     <Input id="embChunkOverlap" type="number" placeholder="200" value={embChunkOverlap} onChange={(e) => setEmbChunkOverlap(e.target.value)} className="text-base md:text-sm" />
                     <p className="text-xs text-muted-foreground">{t("embedding.chunkOverlapHint")}</p>
                   </div>
+                </div>
+              </CardContent>
+            </Card>
+
+            {/* ── Knowledge Graph Extraction ── */}
+            <Card className="border-violet-200 dark:border-violet-800">
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2 text-base">
+                  <Network className="h-4 w-4 text-violet-500" />
+                  {t("kg.title")}
+                </CardTitle>
+                <CardDescription>{t("kg.description")}</CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-4 pt-0">
+                <ProviderModelSelect
+                  provider={kgProvider}
+                  onProviderChange={(v) => { setKgProvider(v); setKgModel(""); }}
+                  model={kgModel}
+                  onModelChange={setKgModel}
+                  allowEmpty
+                  providerLabel={t("kg.provider")}
+                  modelLabel={t("kg.model")}
+                  providerTip={t("kg.providerTip")}
+                  modelTip={t("kg.modelTip")}
+                  providerPlaceholder={t("kg.providerPlaceholder")}
+                  modelPlaceholder={t("kg.modelPlaceholder")}
+                />
+
+                <div className="space-y-1.5">
+                  <Label htmlFor="kgMinConf" className="text-xs">{t("kg.minConfidence")}</Label>
+                  <Input
+                    id="kgMinConf"
+                    type="number"
+                    min={0} max={1} step={0.05}
+                    placeholder="0.75"
+                    value={kgMinConfidence}
+                    onChange={(e) => setKgMinConfidence(e.target.value)}
+                    className="max-w-[120px] text-base md:text-sm"
+                  />
+                  <p className="text-xs text-muted-foreground">{t("kg.minConfidenceHint")}</p>
+                </div>
+
+                <div className="flex items-start gap-2 rounded-md border border-violet-200 bg-violet-50 px-3 py-2 text-xs text-violet-700 dark:border-violet-800 dark:bg-violet-950/30 dark:text-violet-300">
+                  <Info className="mt-0.5 h-3.5 w-3.5 shrink-0" />
+                  <span>{t("kg.info")}</span>
                 </div>
               </CardContent>
             </Card>

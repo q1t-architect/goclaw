@@ -58,19 +58,22 @@ func (h *SkillsHandler) emitCacheInvalidate(kind, key string) {
 
 // RegisterRoutes registers all skill management routes on the given mux.
 func (h *SkillsHandler) RegisterRoutes(mux *http.ServeMux) {
+	// Skill reads (viewer+)
 	mux.HandleFunc("GET /v1/skills", h.authMiddleware(h.handleList))
-	mux.HandleFunc("POST /v1/skills/upload", h.authMiddleware(h.handleUpload))
 	mux.HandleFunc("GET /v1/skills/{id}", h.authMiddleware(h.handleGet))
-	mux.HandleFunc("PUT /v1/skills/{id}", h.authMiddleware(h.handleUpdate))
-	mux.HandleFunc("DELETE /v1/skills/{id}", h.authMiddleware(h.handleDelete))
-	mux.HandleFunc("POST /v1/skills/{id}/grants/agent", h.authMiddleware(h.handleGrantAgent))
-	mux.HandleFunc("DELETE /v1/skills/{id}/grants/agent/{agentID}", h.authMiddleware(h.handleRevokeAgent))
-	mux.HandleFunc("POST /v1/skills/{id}/grants/user", h.authMiddleware(h.handleGrantUser))
-	mux.HandleFunc("DELETE /v1/skills/{id}/grants/user/{userID}", h.authMiddleware(h.handleRevokeUser))
 	mux.HandleFunc("GET /v1/agents/{agentID}/skills", h.authMiddleware(h.handleListAgentSkills))
 	mux.HandleFunc("GET /v1/skills/{id}/versions", h.authMiddleware(h.handleListVersions))
 	mux.HandleFunc("GET /v1/skills/{id}/files/{path...}", h.authMiddleware(h.handleReadFile))
 	mux.HandleFunc("GET /v1/skills/{id}/files", h.authMiddleware(h.handleListFiles))
+	// Skill writes (admin+)
+	mux.HandleFunc("POST /v1/skills/upload", h.adminMiddleware(h.handleUpload))
+	mux.HandleFunc("PUT /v1/skills/{id}", h.adminMiddleware(h.handleUpdate))
+	mux.HandleFunc("DELETE /v1/skills/{id}", h.adminMiddleware(h.handleDelete))
+	// Skill grants (admin+)
+	mux.HandleFunc("POST /v1/skills/{id}/grants/agent", h.adminMiddleware(h.handleGrantAgent))
+	mux.HandleFunc("DELETE /v1/skills/{id}/grants/agent/{agentID}", h.adminMiddleware(h.handleRevokeAgent))
+	mux.HandleFunc("POST /v1/skills/{id}/grants/user", h.adminMiddleware(h.handleGrantUser))
+	mux.HandleFunc("DELETE /v1/skills/{id}/grants/user/{userID}", h.adminMiddleware(h.handleRevokeUser))
 	// System-level operations: admin + master tenant only.
 	// These execute shell commands (pip/npm install) and affect the entire server.
 	mux.HandleFunc("POST /v1/skills/rescan-deps", h.adminMiddleware(h.handleRescanDeps))
@@ -78,9 +81,9 @@ func (h *SkillsHandler) RegisterRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("POST /v1/skills/install-dep", h.adminMiddleware(h.handleInstallDep))
 	mux.HandleFunc("GET /v1/skills/runtimes", h.adminMiddleware(h.handleRuntimes))
 	mux.HandleFunc("POST /v1/skills/{id}/toggle", h.adminMiddleware(h.handleToggle))
-	// Per-tenant overrides: tenant-level admin check inside handler (not system admin).
-	mux.HandleFunc("PUT /v1/skills/{id}/tenant-config", h.authMiddleware(h.handleSetTenantConfig))
-	mux.HandleFunc("DELETE /v1/skills/{id}/tenant-config", h.authMiddleware(h.handleDeleteTenantConfig))
+	// Per-tenant overrides (admin+)
+	mux.HandleFunc("PUT /v1/skills/{id}/tenant-config", h.adminMiddleware(h.handleSetTenantConfig))
+	mux.HandleFunc("DELETE /v1/skills/{id}/tenant-config", h.adminMiddleware(h.handleDeleteTenantConfig))
 }
 
 func (h *SkillsHandler) authMiddleware(next http.HandlerFunc) http.HandlerFunc {
