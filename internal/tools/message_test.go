@@ -168,7 +168,7 @@ func TestExtractEmbeddedMedia(t *testing.T) {
 
 	t.Run("no MEDIA: in message", func(t *testing.T) {
 		msg := "Hello, here is your report!"
-		cleaned, media := tool.extractEmbeddedMedia(ctx, msg)
+		cleaned, media, _ := tool.extractEmbeddedMedia(ctx, msg)
 		if cleaned != msg {
 			t.Errorf("expected unchanged message, got %q", cleaned)
 		}
@@ -179,7 +179,7 @@ func TestExtractEmbeddedMedia(t *testing.T) {
 
 	t.Run("embedded MEDIA: in multi-line message", func(t *testing.T) {
 		msg := "Here is the file:\nMEDIA:" + reportCanonical + "\nPlease download!"
-		cleaned, media := tool.extractEmbeddedMedia(ctx, msg)
+		cleaned, media, _ := tool.extractEmbeddedMedia(ctx, msg)
 
 		if cleaned != "Here is the file:\nPlease download!" {
 			t.Errorf("unexpected cleaned text: %q", cleaned)
@@ -198,7 +198,7 @@ func TestExtractEmbeddedMedia(t *testing.T) {
 
 	t.Run("MEDIA: mid-sentence keeps surrounding text", func(t *testing.T) {
 		msg := "Here is your report MEDIA:" + reportCanonical + " please review"
-		cleaned, media := tool.extractEmbeddedMedia(ctx, msg)
+		cleaned, media, _ := tool.extractEmbeddedMedia(ctx, msg)
 
 		if cleaned != "Here is your report  please review" {
 			t.Errorf("surrounding text lost: %q", cleaned)
@@ -211,7 +211,7 @@ func TestExtractEmbeddedMedia(t *testing.T) {
 	t.Run("multiple MEDIA: on same line", func(t *testing.T) {
 		img := filepath.Join(tmpDir, "photo.png")
 		msg := "MEDIA:" + reportCanonical + " MEDIA:" + img
-		cleaned, media := tool.extractEmbeddedMedia(ctx, msg)
+		cleaned, media, _ := tool.extractEmbeddedMedia(ctx, msg)
 
 		if cleaned != "" {
 			t.Errorf("expected empty cleaned text, got %q", cleaned)
@@ -223,7 +223,7 @@ func TestExtractEmbeddedMedia(t *testing.T) {
 
 	t.Run("MEDIA: path outside workspace is stripped but no attachment", func(t *testing.T) {
 		msg := "File:\nMEDIA:" + outsidePath(workspaceCanonical, "etc/passwd") + "\nDone"
-		cleaned, media := tool.extractEmbeddedMedia(ctx, msg)
+		cleaned, media, _ := tool.extractEmbeddedMedia(ctx, msg)
 
 		if cleaned != "File:\nDone" {
 			t.Errorf("MEDIA: line not stripped: %q", cleaned)
@@ -235,7 +235,7 @@ func TestExtractEmbeddedMedia(t *testing.T) {
 
 	t.Run("message with only MEDIA: lines", func(t *testing.T) {
 		msg := "MEDIA:" + reportCanonical
-		cleaned, media := tool.extractEmbeddedMedia(ctx, msg)
+		cleaned, media, _ := tool.extractEmbeddedMedia(ctx, msg)
 
 		if cleaned != "" {
 			t.Errorf("expected empty cleaned text, got %q", cleaned)
@@ -247,7 +247,7 @@ func TestExtractEmbeddedMedia(t *testing.T) {
 
 	t.Run("audio_as_voice tag stripped", func(t *testing.T) {
 		msg := "[[audio_as_voice]]\nMEDIA:" + filepath.Join(tmpDir, "voice.ogg") + "\nExtra text"
-		cleaned, media := tool.extractEmbeddedMedia(ctx, msg)
+		cleaned, media, _ := tool.extractEmbeddedMedia(ctx, msg)
 
 		if cleaned != "Extra text" {
 			t.Errorf("unexpected cleaned text: %q", cleaned)
@@ -260,7 +260,7 @@ func TestExtractEmbeddedMedia(t *testing.T) {
 	t.Run("multiple MEDIA: paths", func(t *testing.T) {
 		img := filepath.Join(tmpDir, "photo.png")
 		msg := "Files:\nMEDIA:" + reportCanonical + "\nMEDIA:" + img + "\nEnjoy!"
-		cleaned, media := tool.extractEmbeddedMedia(ctx, msg)
+		cleaned, media, _ := tool.extractEmbeddedMedia(ctx, msg)
 
 		if cleaned != "Files:\nEnjoy!" {
 			t.Errorf("unexpected cleaned text: %q", cleaned)
