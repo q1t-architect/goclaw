@@ -81,6 +81,9 @@ func (p *MiniMaxProvider) Synthesize(ctx context.Context, text string, opts Opti
 	if opts.Format == "opus" || opts.Format == "pcm" || opts.Format == "flac" || opts.Format == "wav" {
 		audioFormat = opts.Format
 		switch opts.Format {
+		case "opus":
+			ext = "ogg"
+			mime = "audio/ogg"
 		case "pcm":
 			ext = "pcm"
 			mime = "audio/pcm"
