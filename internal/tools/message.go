@@ -116,7 +116,7 @@ func (t *MessageTool) Execute(ctx context.Context, args map[string]any) *Result 
 
 	// Extract embedded MEDIA: paths from multi-line messages.
 	// LLMs may include MEDIA: in conversational text rather than as a standalone prefix.
-	message, embeddedMedia := t.extractEmbeddedMedia(ctx, message)
+	message, embeddedMedia, asVoice := t.extractEmbeddedMedia(ctx, message)
 
 	// If we found embedded media and bus is available, prefer bus path (supports media attachments).
 	if len(embeddedMedia) > 0 && t.msgBus != nil {
@@ -126,8 +126,14 @@ func (t *MessageTool) Execute(ctx context.Context, args map[string]any) *Result 
 			Content: message,
 			Media:   embeddedMedia,
 		}
-		if isGroupContext(ctx) {
-			outMsg.Metadata = map[string]string{"group_id": target}
+		if isGroupContext(ctx) || asVoice {
+			outMsg.Metadata = map[string]string{}
+			if isGroupContext(ctx) {
+				outMsg.Metadata["group_id"] = target
+			}
+			if asVoice {
+				outMsg.Metadata["audio_as_voice"] = "true"
+			}
 		}
 		t.msgBus.PublishOutbound(outMsg)
 		return SilentResult(fmt.Sprintf(`{"status":"sent","channel":"%s","target":"%s"}`, channel, target))
@@ -227,12 +233,15 @@ func (t *MessageTool) sendMedia(ctx context.Context, channel, target, filePath s
 }
 
 // extractEmbeddedMedia scans a multi-line message for embedded MEDIA: path references.
-// Returns cleaned text (MEDIA: lines removed) and resolved media attachments.
+// Returns cleaned text (MEDIA: lines removed), resolved media attachments,
+// and whether [[audio_as_voice]] tag was present (for Telegram voice messages).
 // Prevents raw MEDIA: paths from leaking to channels when LLMs embed them
 // in conversational text instead of using a standalone MEDIA: prefix.
-func (t *MessageTool) extractEmbeddedMedia(ctx context.Context, message string) (string, []bus.MediaAttachment) {
+func (t *MessageTool) extractEmbeddedMedia(ctx context.Context, message string) (string, []bus.MediaAttachment, bool) {
+	asVoice := strings.Contains(message, "[[audio_as_voice]]")
+
 	if !strings.Contains(message, "MEDIA:") {
-		return message, nil
+		return message, nil, asVoice
 	}
 
 	lines := strings.Split(message, "\n")
@@ -267,7 +276,7 @@ func (t *MessageTool) extractEmbeddedMedia(ctx context.Context, message string) 
 		}
 	}
 
-	return strings.TrimSpace(strings.Join(cleaned, "\n")), media
+	return strings.TrimSpace(strings.Join(cleaned, "\n")), media, asVoice
 }
 
 // mimeFromPath returns a MIME type based on file extension.
