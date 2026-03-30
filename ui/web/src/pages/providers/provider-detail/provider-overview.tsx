@@ -171,6 +171,19 @@ export function ProviderOverview({ provider, onUpdate }: ProviderOverviewProps) 
     strategy: initialRouting?.strategy ?? "primary_first",
     extra_provider_names: initialRouting?.extraProviderNames ?? [],
   });
+  const selectedPoolProviderNames = useMemo(
+    () =>
+      canEditPoolRouting
+        ? Array.from(
+            new Set(
+              [provider.name, ...(poolRouting.extra_provider_names ?? [])]
+                .filter(Boolean)
+                .filter((name) => name === provider.name || providerByName.has(name)),
+            ),
+          )
+        : [provider.name],
+    [canEditPoolRouting, poolRouting.extra_provider_names, provider.name, providerByName],
+  );
 
   const initEmb = getEmbeddingSettings(provider.settings);
   const [embEnabled, setEmbEnabled] = useState(initEmb?.enabled ?? false);
@@ -253,13 +266,9 @@ export function ProviderOverview({ provider, onUpdate }: ProviderOverviewProps) 
   const quotaProviderNames = useMemo(
     () => {
       if (!isOAuth) return [];
-      const candidateNames = [
-        provider.name,
-        ...(canEditPoolRouting ? poolRouting.extra_provider_names ?? [] : []),
-      ];
       return Array.from(
         new Set(
-          candidateNames.filter((providerName) => {
+          selectedPoolProviderNames.filter((providerName) => {
             if (!providerName) return false;
             const item = providerByName.get(providerName);
             return (
@@ -270,11 +279,9 @@ export function ProviderOverview({ provider, onUpdate }: ProviderOverviewProps) 
       );
     },
     [
-      canEditPoolRouting,
       isOAuth,
-      poolRouting.extra_provider_names,
-      provider.name,
       providerByName,
+      selectedPoolProviderNames,
       statusByName,
     ],
   );
@@ -285,7 +292,7 @@ export function ProviderOverview({ provider, onUpdate }: ProviderOverviewProps) 
   } = useChatGPTOAuthProviderQuotas(quotaProviderNames, isOAuth);
   const poolEntries = useMemo<CodexPoolEntry[]>(() => {
     if (!canEditPoolRouting) return [];
-    return quotaProviderNames.map((providerName) => {
+    return selectedPoolProviderNames.map((providerName) => {
       const item = providerByName.get(providerName);
       return {
         name: providerName,
@@ -305,10 +312,10 @@ export function ProviderOverview({ provider, onUpdate }: ProviderOverviewProps) 
         quota: quotaByName.get(providerName),
       };
     });
-  }, [canEditPoolRouting, provider.name, providerByName, quotaByName, quotaProviderNames, statusByName]);
+  }, [canEditPoolRouting, provider.name, providerByName, quotaByName, selectedPoolProviderNames, statusByName]);
 
   // Provider-scoped pool activity (only for pool owners)
-  const isPoolOwner = canEditPoolRouting && poolEntries.length > 0;
+  const isPoolOwner = canEditPoolRouting && selectedPoolProviderNames.length > 1;
   const {
     data: poolActivity,
     isFetching: poolActivityFetching,
