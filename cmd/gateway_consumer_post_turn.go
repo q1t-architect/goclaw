@@ -51,6 +51,7 @@ type teammateTaskMeta struct {
 	ToAgent    string
 	Channel    string
 	ChatID     string
+	PeerKind   string // "group" or "direct" — for correct notification routing (#266)
 	Subject    string
 	TaskNumber int
 }
@@ -96,6 +97,7 @@ func resolveTeamTaskOutcome(
 	taskNumber := meta.TaskNumber
 	taskChannel := meta.Channel
 	taskChatID := meta.ChatID
+	taskPeerKind := meta.PeerKind
 
 	// Enrich with live task data if available.
 	if currentTask != nil {
@@ -110,6 +112,11 @@ func resolveTeamTaskOutcome(
 		}
 		if currentTask.ChatID != "" {
 			taskChatID = currentTask.ChatID
+		}
+		if taskPeerKind == "" && currentTask.Metadata != nil {
+			if pk, ok := currentTask.Metadata[tools.TaskMetaPeerKind].(string); ok && pk != "" {
+				taskPeerKind = pk
+			}
 		}
 	}
 
@@ -129,6 +136,7 @@ func resolveTeamTaskOutcome(
 				tools.WithReason(outcome.Err.Error()),
 				tools.WithChannel(taskChannel),
 				tools.WithChatID(taskChatID),
+				tools.WithPeerKind(taskPeerKind),
 				tools.WithTimestamp(now),
 			))
 		}
@@ -162,6 +170,7 @@ func resolveTeamTaskOutcome(
 				tools.WithReason("loop_detector_kill"),
 				tools.WithChannel(taskChannel),
 				tools.WithChatID(taskChatID),
+				tools.WithPeerKind(taskPeerKind),
 				tools.WithTimestamp(now),
 			))
 		}
@@ -195,6 +204,7 @@ func resolveTeamTaskOutcome(
 				tools.WithOwnerAgentKey(toAgent),
 				tools.WithChannel(taskChannel),
 				tools.WithChatID(taskChatID),
+				tools.WithPeerKind(taskPeerKind),
 				tools.WithTimestamp(now),
 			))
 		}
