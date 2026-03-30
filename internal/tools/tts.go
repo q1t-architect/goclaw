@@ -77,11 +77,8 @@ func (t *TtsTool) Execute(ctx context.Context, args map[string]any) *Result {
 	t.mu.RUnlock()
 
 	// Determine format based on channel (read from ctx — thread-safe)
-	channel := ToolChannelFromCtx(ctx)
+	channelType := ToolChannelTypeFromCtx(ctx)
 	opts := tts.Options{Voice: voice}
-	if channel == "telegram" {
-		opts.Format = "opus"
-	}
 
 	var result *tts.SynthResult
 	var err error
@@ -117,7 +114,7 @@ func (t *TtsTool) Execute(ctx context.Context, args map[string]any) *Result {
 
 	// Return MEDIA: path (matching TS pattern)
 	voiceTag := ""
-	if channel == "telegram" && result.Extension == "ogg" {
+	if channelType == "telegram" {
 		voiceTag = "[[audio_as_voice]]\n"
 	}
 
