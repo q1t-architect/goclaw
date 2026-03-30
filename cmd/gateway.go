@@ -10,6 +10,7 @@ import (
 	"path/filepath"
 	"strings"
 	"syscall"
+	"time"
 
 	"github.com/google/uuid"
 
@@ -1057,12 +1058,32 @@ func runGateway() {
 		if !ok {
 			return
 		}
+		if pgStores.ConfigSecrets != nil {
+			if secrets, err := pgStores.ConfigSecrets.GetAll(context.Background()); err == nil && len(secrets) > 0 {
+				updatedCfg.ApplyDBSecrets(secrets)
+			}
+		}
 		newMgr := setupTTS(updatedCfg)
 		if newMgr == nil {
 			return
 		}
 		ttsTool.UpdateManager(newMgr)
 		slog.Info("tts config reloaded", "provider", newMgr.PrimaryProvider(), "auto", string(newMgr.AutoMode()))
+	})
+
+	// Log orphaned providers on agent deletion. Auto-delete is unsafe because
+	// providers can be referenced by heartbeats (FK), OAuth tokens, media chains.
+	// Users should clean up orphaned providers manually via UI/API.
+	msgBus.Subscribe("agent-deleted-provider-log", func(evt bus.Event) {
+		if evt.Name != bus.TopicAgentDeleted {
+			return
+		}
+		payload, ok := evt.Payload.(bus.AgentDeletedPayload)
+		if !ok || payload.Provider == "" {
+			return
+		}
+		slog.Info("agent deleted, provider may be orphaned — verify via UI",
+			"agent", payload.AgentKey, "provider", payload.Provider)
 	})
 
 	// Contact collector: auto-collect user info from channels with in-memory dedup cache.
@@ -1109,6 +1130,12 @@ func runGateway() {
 			sandboxMgr.Stop()
 			slog.Info("releasing sandbox containers...")
 			sandboxMgr.ReleaseAll(context.Background())
+		}
+
+		if sched != nil {
+			slog.Info("gateway: draining active runs", "timeout", "5s")
+			sched.Stop() // MarkDraining + StopAll
+			time.Sleep(5 * time.Second)
 		}
 
 		cancel()
