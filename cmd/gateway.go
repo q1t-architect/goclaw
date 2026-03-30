@@ -1148,8 +1148,10 @@ func runGateway() {
 	if strings.Contains(cfg.Database.PostgresDSN, ":goclaw@") {
 		slog.Warn("security.default_db_password: using default Postgres password — run ./prepare-env.sh to generate a strong one")
 	}
-	if len(cfg.Gateway.AllowedOrigins) == 0 && !edition.Current().IsLimited() {
-		slog.Warn("security.cors_open: no allowed_origins configured — all WebSocket origins accepted. Set gateway.allowed_origins for production")
+	if len(cfg.Gateway.AllowedOrigins) > 0 {
+		slog.Info("cors: allowed_origins configured", "origins", cfg.Gateway.AllowedOrigins)
+	} else if !edition.Current().IsLimited() {
+		slog.Warn("security.cors_open: no allowed_origins configured — all WebSocket origins accepted. Set gateway.allowed_origins or GOCLAW_ALLOWED_ORIGINS for production")
 	}
 
 	if err := server.Start(ctx); err != nil {

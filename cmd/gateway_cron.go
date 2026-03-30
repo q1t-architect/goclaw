@@ -27,7 +27,15 @@ var cronHeartbeatWakeFn func(agentID string)
 func makeCronJobHandler(sched *scheduler.Scheduler, msgBus *bus.MessageBus, cfg *config.Config, channelMgr *channels.Manager, sessionMgr store.SessionStore, agentStore store.AgentStore) func(job *store.CronJob) (*store.CronJobResult, error) {
 	return func(job *store.CronJob) (*store.CronJobResult, error) {
 		agentID := job.AgentID
-		if agentID == "" {
+		if agentID == "" && agentStore != nil {
+			// Resolve real default agent from DB instead of using literal "default" string.
+			tenantCtx := store.WithTenantID(context.Background(), job.TenantID)
+			if defaultAgent, err := agentStore.GetDefault(tenantCtx); err == nil {
+				agentID = defaultAgent.AgentKey
+			} else {
+				agentID = cfg.ResolveDefaultAgentID()
+			}
+		} else if agentID == "" {
 			agentID = cfg.ResolveDefaultAgentID()
 		} else if id, err := uuid.Parse(agentID); err == nil && agentStore != nil {
 			// Resolve agentKey from UUID so session key uses agentKey
