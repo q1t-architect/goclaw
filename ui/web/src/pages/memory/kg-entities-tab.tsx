@@ -13,6 +13,8 @@ import { KGEntityDetailDialog } from "./kg-entity-detail-dialog";
 import { KGExtractDialog } from "./kg-extract-dialog";
 import { KGDedupDialog } from "./kg-dedup-dialog";
 import { KGGraphView } from "./kg-graph-view";
+import { KGTypesTab } from "./kg-types-tab";
+import { useKgEntityTypes } from "./hooks/use-kg-types";
 import type { KGEntity } from "@/types/knowledge-graph";
 
 interface KGEntitiesTabProps {
@@ -20,7 +22,7 @@ interface KGEntitiesTabProps {
   userId?: string;
 }
 
-type ViewMode = "table" | "graph";
+type ViewMode = "table" | "graph" | "types";
 
 export function KGEntitiesTab({ agentId, userId }: KGEntitiesTabProps) {
   const { t } = useTranslation("memory");
@@ -40,6 +42,7 @@ export function KGEntitiesTab({ agentId, userId }: KGEntitiesTabProps) {
   });
   const { stats } = useKGStats(agentId, userId);
   const graphData = useKGGraph(agentId, userId);
+  const { entityTypes: kgEntityTypes } = useKgEntityTypes(agentId);
   const showSkeleton = useDeferredLoading(loading && entities.length === 0);
 
   const handleSearch = () => setAppliedQuery(searchQuery.trim());
@@ -108,9 +111,17 @@ export function KGEntitiesTab({ agentId, userId }: KGEntitiesTabProps) {
             variant={viewMode === "graph" ? "secondary" : "ghost"}
             size="sm"
             onClick={() => setViewMode("graph")}
-            className="h-8 rounded-l-none px-2"
+            className="h-8 rounded-none px-2"
           >
             <Share2 className="h-3.5 w-3.5" />
+          </Button>
+          <Button
+            variant={viewMode === "types" ? "secondary" : "ghost"}
+            size="sm"
+            onClick={() => setViewMode("types")}
+            className="h-8 rounded-l-none px-2"
+          >
+            <Network className="h-3.5 w-3.5" />
           </Button>
         </div>
 
@@ -127,10 +138,13 @@ export function KGEntitiesTab({ agentId, userId }: KGEntitiesTabProps) {
 
       {/* Content area */}
       <div className="min-h-0 flex-1">
-      {viewMode === "graph" ? (
+      {viewMode === "types" ? (
+        <KGTypesTab agentId={agentId} />
+      ) : viewMode === "graph" ? (
         <KGGraphView
           entities={graphData.entities}
           relations={graphData.relations}
+          entityTypes={kgEntityTypes}
           onEntityClick={setViewEntity}
         />
       ) : showSkeleton ? (
