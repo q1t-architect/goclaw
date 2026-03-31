@@ -9,6 +9,7 @@ export interface TreeNode {
   hasChildren?: boolean
   loading?: boolean
   protected?: boolean
+  selected?: boolean
   children: TreeNode[]
 }
 
@@ -150,4 +151,35 @@ export function setNodeLoading(tree: TreeNode[], path: string, loading: boolean)
     if (node.children.length > 0) return { ...node, children: setNodeLoading(node.children, path, loading) }
     return node
   })
+}
+
+
+// Multi-select helpers
+
+export function setNodeSelected(tree: TreeNode[], path: string, selected: boolean): TreeNode[] {
+  return tree.map((node) => {
+    if (node.path === path) return { ...node, selected }
+    if (node.children.length > 0) return { ...node, children: setNodeSelected(node.children, path, selected) }
+    return node
+  })
+}
+
+export function clearAllSelections(tree: TreeNode[]): TreeNode[] {
+  return tree.map((node) => {
+    const n = { ...node, selected: false }
+    if (node.children.length > 0) n.children = clearAllSelections(node.children)
+    return n
+  })
+}
+
+export function getSelectedPaths(tree: TreeNode[]): string[] {
+  const paths: string[] = []
+  const walk = (nodes: TreeNode[]) => {
+    for (const n of nodes) {
+      if (n.selected) paths.push(n.path)
+      if (n.children.length > 0) walk(n.children)
+    }
+  }
+  walk(tree)
+  return paths
 }

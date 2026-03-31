@@ -28,6 +28,10 @@ interface StorageFileBrowserProps {
   renamingPath: string | null
   onRename: (path: string, newName: string) => void
   onRenamingPathChange: (path: string | null) => void
+  selectedPaths: Set<string>
+  onSelectNode: (path: string, selected: boolean) => void
+  onDeleteSelected?: () => void
+  onClearSelection?: () => void
   isEditing: boolean
   editContent: string
   saving: boolean
@@ -41,7 +45,7 @@ interface StorageFileBrowserProps {
 export function StorageFileBrowser({
   tree, filesLoading, activePath, onSelect,
   contentLoading, fileContent,
-  onDelete, onLoadMore, onMove, onDownload, fetchBlob, expandedPaths, onToggleExpand, newFolderParent, onNewFolder, onCreateFolder, renamingPath, onRename, onRenamingPathChange, isEditing, editContent, saving, onStartEdit, onCancelEdit, onSaveEdit, onEditContentChange, showSize,
+  onDelete, onLoadMore, onMove, onDownload, fetchBlob, expandedPaths, onToggleExpand, newFolderParent, onNewFolder, onCreateFolder, renamingPath, onRename, onRenamingPathChange, selectedPaths, onSelectNode, onDeleteSelected, onClearSelection, isEditing, editContent, saving, onStartEdit, onCancelEdit, onSaveEdit, onEditContentChange, showSize,
 }: StorageFileBrowserProps) {
   const { t } = useTranslation('common')
   const containerRef = useRef<HTMLDivElement>(null)
@@ -91,6 +95,10 @@ export function StorageFileBrowser({
           renamingPath={renamingPath}
           onRename={onRename}
           onRenamingPathChange={onRenamingPathChange}
+          selectedPaths={selectedPaths}
+          onSelectNode={onSelectNode}
+          onDeleteSelected={onDeleteSelected}
+          onClearSelection={onClearSelection}
           showSize={showSize}
         />
       </div>

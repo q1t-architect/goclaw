@@ -36,5 +36,12 @@
   "saving": "Saving...",
   "fileSaved": "File saved",
   "saveFailed": "Failed to save file",
-  "fileTooLargeToEdit": "File is too large to edit (max 1MB)"
+  "fileTooLargeToEdit": "File is too large to edit (max 1MB)",
+  "batch": {
+    "selectedCount": "{{count}} selected",
+    "deleteSelected": "Delete selected",
+    "deleteConfirmTitle": "Delete {{count}} items",
+    "deleteConfirmDesc": "Are you sure you want to delete {{count}} items?",
+    "clearSelection": "Clear"
+  }
 }

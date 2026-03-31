@@ -111,11 +111,14 @@ function RootDropZone({ children }: { children: React.ReactNode }) {
 
 // --- DragPreview ---
 
-function DragPreview({ name, isDir }: { name: string; isDir: boolean }) {
+function DragPreview({ name, isDir, count }: { name: string; isDir: boolean; count?: number }) {
   return (
     <div className="flex items-center gap-1.5 rounded-md bg-surface-secondary border border-border px-2.5 py-1.5 text-xs shadow-lg">
       {isDir ? <FolderIcon /> : <FileIcon name={name} />}
       <span className="truncate max-w-[180px]">{name}</span>
+      {count != null && count > 1 && (
+        <span className="ml-1 px-1.5 py-0.5 rounded-full bg-accent text-white text-[10px] font-medium">{count}</span>
+      )}
     </div>
   )
 }
@@ -198,7 +201,7 @@ function RenameInput({ currentName, onRename, onCancel }: { currentName: string;
 // --- TreeItem ---
 
 function TreeItem({
-  node, depth, activePath, onSelect, onDelete, onLoadMore, dndEnabled, autoExpandPath, expandedPaths, onToggleExpand, newFolderParent, onNewFolder, onCreateFolder, renamingPath, onRename, onRenamingPathChange, showSize,
+  node, depth, activePath, onSelect, onDelete, onLoadMore, dndEnabled, autoExpandPath, expandedPaths, onToggleExpand, newFolderParent, onNewFolder, onCreateFolder, renamingPath, onRename, onRenamingPathChange, selectedPaths, onSelectNode, showSize,
 }: {
   node: TreeNode; depth: number; activePath: string | null
   onSelect: (path: string) => void; onDelete?: (path: string, isDir: boolean) => void
@@ -206,11 +209,23 @@ function TreeItem({
   expandedPaths: Set<string>; onToggleExpand: (path: string, expanded: boolean) => void
   newFolderParent: string | null; onNewFolder: (parent: string | null) => void; onCreateFolder: (name: string) => void
   renamingPath: string | null; onRename: (path: string, newName: string) => void; onRenamingPathChange: (path: string | null) => void
+  selectedPaths: Set<string>; onSelectNode: (path: string, selected: boolean) => void
   showSize?: boolean
 }) {
   const { t } = useTranslation('common')
   const expanded = expandedPaths.has(node.path)
   const isActive = activePath === node.path
+  const isSelected = selectedPaths.has(node.path)
+
+  const checkbox = !node.protected && (
+    <input
+      type="checkbox"
+      className="h-3 w-3 shrink-0 accent-accent cursor-pointer"
+      checked={isSelected}
+      onChange={(e) => { e.stopPropagation(); onSelectNode(node.path, e.target.checked) }}
+      onClick={(e) => e.stopPropagation()}
+    />
+  )
 
   // Auto-expand folder when hovered during drag
   useEffect(() => {
@@ -255,8 +270,15 @@ function TreeItem({
             isDropTargetActive ? 'bg-accent/10 ring-1 ring-accent' : 'hover:bg-surface-tertiary'
           }`}
           style={{ paddingLeft: `${depth * 16 + 8}px` }}
-          onClick={handleToggle}
+          onClick={(e) => {
+            if (e.ctrlKey || e.metaKey) {
+              onSelectNode(node.path, !isSelected)
+            } else {
+              handleToggle()
+            }
+          }}
         >
+          {checkbox}
           <ChevronRightIcon className={`h-3 w-3 shrink-0 transition-transform ${expanded ? 'rotate-90' : ''}`} />
           <FolderIcon open={expanded} />
           {renamingPath === node.path ? (
@@ -281,7 +303,7 @@ function TreeItem({
             onSelect={onSelect} onDelete={onDelete} onLoadMore={onLoadMore}
             dndEnabled={dndEnabled} autoExpandPath={autoExpandPath} expandedPaths={expandedPaths} onToggleExpand={onToggleExpand}
             newFolderParent={newFolderParent} onNewFolder={onNewFolder} onCreateFolder={onCreateFolder}
-            renamingPath={renamingPath} onRename={onRename} onRenamingPathChange={onRenamingPathChange} showSize={showSize}
+            renamingPath={renamingPath} onRename={onRename} onRenamingPathChange={onRenamingPathChange} selectedPaths={selectedPaths} onSelectNode={onSelectNode} showSize={showSize}
           />
         ))}
         {expanded && node.hasChildren && node.children.length === 0 && !node.loading && (
@@ -319,8 +341,15 @@ function TreeItem({
         isActive ? 'bg-accent/10 text-accent' : 'hover:bg-surface-tertiary text-text-primary'
       }`}
       style={{ paddingLeft: `${depth * 16 + 20}px` }}
-      onClick={() => onSelect(node.path)}
+      onClick={(e) => {
+        if (e.ctrlKey || e.metaKey) {
+          onSelectNode(node.path, !isSelected)
+        } else {
+          onSelect(node.path)
+        }
+      }}
     >
+      {checkbox}
       <FileIcon name={node.name} />
       {renamingPath === node.path ? (
         <RenameInput
@@ -376,11 +405,15 @@ interface FileTreePanelProps {
   renamingPath: string | null
   onRename: (path: string, newName: string) => void
   onRenamingPathChange: (path: string | null) => void
+  selectedPaths: Set<string>
+  onSelectNode: (path: string, selected: boolean) => void
+  onDeleteSelected?: () => void
+  onClearSelection?: () => void
   showSize?: boolean
 }
 
 export function FileTreePanel({
-  tree, filesLoading, activePath, onSelect, onDelete, onLoadMore, onMove, expandedPaths, onToggleExpand, newFolderParent, onNewFolder, onCreateFolder, renamingPath, onRename, onRenamingPathChange, showSize,
+  tree, filesLoading, activePath, onSelect, onDelete, onLoadMore, onMove, expandedPaths, onToggleExpand, newFolderParent, onNewFolder, onCreateFolder, renamingPath, onRename, onRenamingPathChange, selectedPaths, onSelectNode, onDeleteSelected, onClearSelection, showSize,
 }: FileTreePanelProps) {
   const { t } = useTranslation('common')
   const dndEnabled = !!onMove
@@ -416,8 +449,15 @@ export function FileTreePanel({
     if (!overId || !onMove) return
 
     const toFolder = overId === '__root__' ? '' : overId
-    if (fromId !== toFolder) onMove(fromId, toFolder)
-  }, [onMove])
+    // Batch DnD: if dragged item is selected, move all selected items
+    if (selectedPaths.has(fromId)) {
+      for (const path of selectedPaths) {
+        if (path !== toFolder) onMove(path, toFolder)
+      }
+    } else {
+      if (fromId !== toFolder) onMove(fromId, toFolder)
+    }
+  }, [onMove, selectedPaths])
 
   const handleDragCancel = useCallback(() => {
     if (autoExpandTimerRef.current) clearTimeout(autoExpandTimerRef.current)
@@ -442,6 +482,31 @@ export function FileTreePanel({
     return <p className="px-3 py-4 text-xs text-text-muted">{t('noFiles')}</p>
   }
 
+  // Batch selection action bar
+  const selectedCount = selectedPaths.size
+  const batchBar = selectedCount > 0 && (
+    <div className="flex items-center gap-2 px-2 py-1.5 border-b border-border text-xs text-text-secondary">
+      <span className="text-text-muted">{selectedCount} selected</span>
+      {onDeleteSelected && (
+        <button
+          type="button"
+          className="flex items-center gap-1 px-1.5 py-0.5 text-[11px] text-error hover:bg-error/10 rounded transition-colors cursor-pointer"
+          onClick={onDeleteSelected}
+        >
+          <TrashIcon />
+          <span>Delete</span>
+        </button>
+      )}
+      <button
+        type="button"
+        className="px-1.5 py-0.5 text-[11px] hover:bg-surface-tertiary rounded transition-colors cursor-pointer"
+        onClick={onClearSelection}
+      >
+        Clear
+      </button>
+    </div>
+  )
+
   // New folder button in tree header
   const newFolderBtn = (
     <button
@@ -462,6 +527,7 @@ export function FileTreePanel({
     <div className="flex-1 min-h-0">
       {dndEnabled ? (
         <RootDropZone>
+          {batchBar}
           {newFolderBtn}
           {newFolderParent === '' && (
             <NewFolderInput onCreate={onCreateFolder} onCancel={() => onNewFolder(null)} />
@@ -472,12 +538,13 @@ export function FileTreePanel({
               onSelect={onSelect} onDelete={onDelete} onLoadMore={onLoadMore}
               dndEnabled showSize={showSize} autoExpandPath={autoExpandPath} expandedPaths={expandedPaths} onToggleExpand={onToggleExpand}
               newFolderParent={newFolderParent} onNewFolder={onNewFolder} onCreateFolder={onCreateFolder}
-              renamingPath={renamingPath} onRename={onRename} onRenamingPathChange={onRenamingPathChange}
+              renamingPath={renamingPath} onRename={onRename} onRenamingPathChange={onRenamingPathChange} selectedPaths={selectedPaths} onSelectNode={onSelectNode}
             />
           ))}
         </RootDropZone>
       ) : (
         <>
+          {batchBar}
           {newFolderBtn}
           {newFolderParent === '' && (
             <NewFolderInput onCreate={onCreateFolder} onCancel={() => onNewFolder(null)} />
@@ -488,7 +555,7 @@ export function FileTreePanel({
               onSelect={onSelect} onDelete={onDelete} onLoadMore={onLoadMore}
               dndEnabled={false} showSize={showSize} autoExpandPath={null} expandedPaths={expandedPaths} onToggleExpand={onToggleExpand}
               newFolderParent={newFolderParent} onNewFolder={onNewFolder} onCreateFolder={onCreateFolder}
-              renamingPath={renamingPath} onRename={onRename} onRenamingPathChange={onRenamingPathChange}
+              renamingPath={renamingPath} onRename={onRename} onRenamingPathChange={onRenamingPathChange} selectedPaths={selectedPaths} onSelectNode={onSelectNode}
             />
           ))}
         </>
@@ -509,7 +576,9 @@ export function FileTreePanel({
       {treeContent}
       {createPortal(
         <DragOverlay dropAnimation={null}>
-          {activeNode ? <DragPreview name={activeNode.name} isDir={activeNode.isDir} /> : null}
+          {activeNode ? (
+            <DragPreview name={activeNode.name} isDir={activeNode.isDir} count={activeId && selectedPaths.has(activeId) && selectedPaths.size > 1 ? selectedPaths.size : undefined} />
+          ) : null}
         </DragOverlay>,
         document.body,
       )}

@@ -4,7 +4,7 @@
 import { useState, useEffect, useCallback, useMemo, useRef } from 'react'
 import { useTranslation } from 'react-i18next'
 import { useStorage, useStorageSize } from '../../../hooks/use-storage'
-import { buildTree, mergeSubtree, setNodeLoading, formatSize, isTextFile } from '../../../lib/file-helpers'
+import { buildTree, mergeSubtree, setNodeLoading, formatSize, isTextFile, getSelectedPaths, clearAllSelections } from '../../../lib/file-helpers'
 import { getApiClient } from '../../../lib/api'
 import { wails } from '../../../lib/wails'
 import { ConfirmDialog } from '../../common/ConfirmDialog'
@@ -36,6 +36,7 @@ export function StorageTab() {
   const [isEditing, setIsEditing] = useState(false)
   const [editContent, setEditContent] = useState('')
   const [saving, setSaving] = useState(false)
+  const [selectedPaths, setSelectedPaths] = useState<Set<string>>(new Set())
 
   // Rebuild tree when files change — expanded state persists via expandedPaths
   useEffect(() => {
@@ -168,6 +169,7 @@ export function StorageTab() {
         })
       }
       listFiles({ silent: true })
+      setSelectedPaths(new Set())
     } catch { /* toast handled in hook */ }
   }, [moveFile, listFiles, activePath])
 
@@ -179,6 +181,48 @@ export function StorageTab() {
       return next
     })
   }, [])
+
+  // Multi-select: toggle node selection
+  const handleSelectNode = useCallback((path: string, selected: boolean) => {
+    setSelectedPaths(prev => {
+      const next = new Set(prev)
+      if (selected) next.add(path) else next.delete(path)
+      return next
+    })
+  }, [])
+
+  // Multi-select: clear all selections
+  const handleClearSelection = useCallback(() => {
+    setSelectedPaths(new Set())
+  }, [])
+
+  // Multi-select: batch delete all selected items
+  const handleBatchDelete = useCallback(() => {
+    setDeleteTarget({ path: `__batch__${selectedPaths.size}`, isDir: false })
+  }, [selectedPaths])
+
+  const handleBatchDeleteConfirm = useCallback(async () => {
+    setDeleting(true)
+    const paths = Array.from(selectedPaths)
+    for (const path of paths) {
+      try { await deleteFile(path) } catch { /* individual errors handled by API */ }
+    }
+    setSelectedPaths(new Set())
+    setDeleting(false)
+    setDeleteTarget(null)
+    // Clear active if it was deleted
+    if (activePath && paths.some(p => activePath === p || activePath.startsWith(p + '/'))) {
+      setActivePath(null)
+      setFileContent(null)
+    }
+    await listFiles()
+  }, [selectedPaths, deleteFile, listFiles, activePath])
+
+  // When selecting a file normally, clear multi-selection
+  const handleSelectWithClear = useCallback(async (path: string) => {
+    if (selectedPaths.size > 0) setSelectedPaths(new Set())
+    handleSelect(path)
+  }, [selectedPaths, handleSelect])
 
   // Create a new folder in the storage tree
   const handleCreateFolder = useCallback(async (name: string) => {
@@ -266,6 +310,7 @@ export function StorageTab() {
       listFiles({ silent: true })
     } catch { /* error handled by API */ }
     setRenamingPath(null)
+    setSelectedPaths(new Set())
   }, [renamingPath, moveFile, listFiles, activePath, fileContent])
 
   // Active folder for scoped uploads
@@ -320,7 +365,7 @@ export function StorageTab() {
           tree={tree}
           filesLoading={loading}
           activePath={activePath}
-          onSelect={handleSelect}
+          onSelect={handleSelectWithClear}
           contentLoading={contentLoading}
           fileContent={fileContent}
           onDelete={handleDeleteRequest}
@@ -336,6 +381,10 @@ export function StorageTab() {
           renamingPath={renamingPath}
           onRename={handleRename}
           onRenamingPathChange={setRenamingPath}
+          selectedPaths={selectedPaths}
+          onSelectNode={handleSelectNode}
+          onDeleteSelected={handleBatchDelete}
+          onClearSelection={handleClearSelection}
           isEditing={isEditing}
           editContent={editContent}
           saving={saving}
@@ -360,15 +409,21 @@ export function StorageTab() {
       <ConfirmDialog
         open={!!deleteTarget}
         onOpenChange={(open) => { if (!open) setDeleteTarget(null) }}
-        title={deleteTarget?.isDir ? t('delete.folderTitle') : t('delete.fileTitle')}
+        title={
+          deleteTarget?.path.startsWith('__batch__')
+            ? t('batch.deleteConfirmTitle', { count: Number(deleteTarget.path.split('__')[2]) })
+            : deleteTarget?.isDir ? t('delete.folderTitle') : t('delete.fileTitle')
+        }
         description={
-          t('delete.description', { name: deleteName })
-          + (deleteTarget?.isDir ? t('delete.folderWarning') : '')
-          + t('delete.undone')
+          deleteTarget?.path.startsWith('__batch__')
+            ? t('batch.deleteConfirmDesc', { count: Number(deleteTarget.path.split('__')[2]) }) + t('delete.undone')
+            : t('delete.description', { name: deleteName })
+              + (deleteTarget?.isDir ? t('delete.folderWarning') : '')
+              + t('delete.undone')
         }
         variant="destructive"
         confirmLabel={deleting ? t('delete.deleting') : t('delete.confirmLabel')}
-        onConfirm={handleDeleteConfirm}
+        onConfirm={deleteTarget?.path.startsWith('__batch__') ? handleBatchDeleteConfirm : handleDeleteConfirm}
         loading={deleting}
       />
     </div>
