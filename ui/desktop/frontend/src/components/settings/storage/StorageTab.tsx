@@ -17,7 +17,7 @@ export function StorageTab() {
   const { t: tc } = useTranslation('common')
   const {
     files, baseDir, loading,
-    listFiles, loadSubtree, readFile, deleteFile, uploadFile, moveFile, createFolder, fetchRawBlob,
+    listFiles, loadSubtree, readFile, deleteFile, uploadFile, moveFile, createFolder, saveFile, fetchRawBlob,
   } = useStorage()
   const { totalSize, loading: sizeLoading, refreshSize } = useStorageSize()
 
@@ -33,6 +33,9 @@ export function StorageTab() {
   const initialExpandDone = useRef(false)
   const [newFolderParent, setNewFolderParent] = useState<string | null>(null)
   const [renamingPath, setRenamingPath] = useState<string | null>(null)
+  const [isEditing, setIsEditing] = useState(false)
+  const [editContent, setEditContent] = useState('')
+  const [saving, setSaving] = useState(false)
 
   // Rebuild tree when files change — expanded state persists via expandedPaths
   useEffect(() => {
@@ -73,6 +76,7 @@ export function StorageTab() {
 
   const handleSelect = useCallback(async (path: string) => {
     setActivePath(path)
+    setIsEditing(false)
     if (isTextFile(path)) {
       setContentLoading(true)
       try {
@@ -190,6 +194,41 @@ export function StorageTab() {
     setNewFolderParent(null)
   }, [createFolder, newFolderParent, listFiles])
 
+
+  // Start editing the active file
+  const handleStartEdit = useCallback(() => {
+    if (!fileContent) return
+    setEditContent(fileContent.content)
+    setIsEditing(true)
+  }, [fileContent])
+
+  // Cancel editing — discard changes
+  const handleCancelEdit = useCallback(() => {
+    setIsEditing(false)
+    setEditContent('')
+  }, [])
+
+  // Save edited content
+  const handleSaveEdit = useCallback(async () => {
+    if (!activePath) return
+    setSaving(true)
+    try {
+      await saveFile(activePath, editContent)
+      // Refresh file content to reflect saved state
+      if (isTextFile(activePath)) {
+        const res = await readFile(activePath)
+        setFileContent(res)
+      }
+      setIsEditing(false)
+      setEditContent('')
+      listFiles({ silent: true })
+    } catch {
+      // error handled by API
+    } finally {
+      setSaving(false)
+    }
+  }, [activePath, editContent, saveFile, readFile, listFiles])
+
   // Rename a file or folder
   const handleRename = useCallback(async (path: string, newName: string) => {
     if (!newName.trim() || !renamingPath) { setRenamingPath(null); return }
@@ -297,6 +336,13 @@ export function StorageTab() {
           renamingPath={renamingPath}
           onRename={handleRename}
           onRenamingPathChange={setRenamingPath}
+          isEditing={isEditing}
+          editContent={editContent}
+          saving={saving}
+          onStartEdit={handleStartEdit}
+          onCancelEdit={handleCancelEdit}
+          onSaveEdit={handleSaveEdit}
+          onEditContentChange={setEditContent}
           showSize
         />
       </div>

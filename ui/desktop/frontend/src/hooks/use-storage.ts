@@ -82,6 +82,14 @@ export function useStorage() {
     await api.post(`/v1/storage/mkdir?path=${encodeURIComponent(path)}`)
   }, [])
 
+  const saveFile = useCallback(async (path: string, content: string) => {
+    const api = getApiClient()
+    return api.put<{ path: string; size: number }>(
+      `/v1/storage/files/${encodeURIComponent(path)}`,
+      content,
+    )
+  }, [])
+
   const fetchRawBlob = useCallback((path: string, download?: boolean): Promise<Blob> => {
     const api = getApiClient()
     const params: Record<string, string> = { raw: 'true' }
@@ -89,7 +97,7 @@ export function useStorage() {
     return api.fetchBlob(`/v1/storage/files/${encodeURIComponent(path)}`, params)
   }, [])
 
-  return { files, baseDir, loading, listFiles, loadSubtree, readFile, deleteFile, uploadFile, moveFile, createFolder, fetchRawBlob }
+  return { files, baseDir, loading, listFiles, loadSubtree, readFile, deleteFile, uploadFile, moveFile, createFolder, saveFile, fetchRawBlob }
 }
 
 interface SizeState {

@@ -29,5 +29,12 @@
   "folderAlreadyExists": "A folder with that name already exists",
   "rename": "Rename",
   "renamed": "Renamed successfully",
-  "renameFailed": "Failed to rename"
+  "renameFailed": "Failed to rename",
+  "edit": "Edit",
+  "save": "Save",
+  "cancelEdit": "Cancel",
+  "saving": "Saving...",
+  "fileSaved": "File saved",
+  "saveFailed": "Failed to save file",
+  "fileTooLargeToEdit": "File is too large to edit (max 1MB)"
 }

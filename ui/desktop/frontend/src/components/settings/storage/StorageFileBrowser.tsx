@@ -28,13 +28,20 @@ interface StorageFileBrowserProps {
   renamingPath: string | null
   onRename: (path: string, newName: string) => void
   onRenamingPathChange: (path: string | null) => void
+  isEditing: boolean
+  editContent: string
+  saving: boolean
+  onStartEdit: () => void
+  onCancelEdit: () => void
+  onSaveEdit: () => void
+  onEditContentChange: (content: string) => void
   showSize?: boolean
 }
 
 export function StorageFileBrowser({
   tree, filesLoading, activePath, onSelect,
   contentLoading, fileContent,
-  onDelete, onLoadMore, onMove, onDownload, fetchBlob, expandedPaths, onToggleExpand, newFolderParent, onNewFolder, onCreateFolder, renamingPath, onRename, onRenamingPathChange, showSize,
+  onDelete, onLoadMore, onMove, onDownload, fetchBlob, expandedPaths, onToggleExpand, newFolderParent, onNewFolder, onCreateFolder, renamingPath, onRename, onRenamingPathChange, isEditing, editContent, saving, onStartEdit, onCancelEdit, onSaveEdit, onEditContentChange, showSize,
 }: StorageFileBrowserProps) {
   const { t } = useTranslation('common')
   const containerRef = useRef<HTMLDivElement>(null)
@@ -101,18 +108,60 @@ export function StorageFileBrowser({
             <span className="font-mono truncate">{fileContent.path}</span>
             <div className="flex items-center gap-1.5 shrink-0 ml-auto">
               <span className="text-[10px] tabular-nums">{formatSize(fileContent.size)}</span>
-              {onDownload && (
-                <button
-                  onClick={() => onDownload(fileContent.path)}
-                  className="p-0.5 text-text-muted hover:text-text-primary transition-colors cursor-pointer"
-                  title={t('download')}
-                >
-                  <svg className="h-3.5 w-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
-                    <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
-                    <polyline points="7 10 12 15 17 10" />
-                    <line x1="12" y1="15" x2="12" y2="3" />
-                  </svg>
-                </button>
+              {isEditing ? (
+                <>
+                  <button
+                    onClick={onSaveEdit}
+                    disabled={saving}
+                    className="flex items-center gap-1 px-2 py-0.5 text-[11px] bg-accent text-white rounded hover:bg-accent/90 disabled:opacity-50 transition-colors cursor-pointer"
+                    title={t('save', 'Save')}
+                  >
+                    {saving ? t('saving', 'Saving...') : t('save', 'Save')}
+                  </button>
+                  <button
+                    onClick={onCancelEdit}
+                    disabled={saving}
+                    className="flex items-center gap-1 px-2 py-0.5 text-[11px] border border-border rounded text-text-secondary hover:bg-surface-tertiary disabled:opacity-50 transition-colors cursor-pointer"
+                    title={t('cancelEdit', 'Cancel')}
+                  >
+                    {t('cancelEdit', 'Cancel')}
+                  </button>
+                </>
+              ) : (
+                <>
+                  {(() => {
+                    // Import guard: isTextFile check
+                    const name = fileContent.path.split('/').pop() ?? ''
+                    const ext = name.includes('.') ? name.slice(name.lastIndexOf('.') + 1).toLowerCase() : ''
+                    const textExts = new Set(['txt','md','mdx','json','json5','yaml','yml','toml','csv','tsv','xml','html','htm','css','scss','less','js','jsx','ts','tsx','mjs','cjs','go','rs','py','rb','php','java','c','cpp','h','hpp','sh','bash','zsh','fish','ps1','bat','cmd','sql','graphql','gql','vue','svelte','astro','lua','pl','r','swift','kt','dart','makefile','dockerfile','gitignore','env','ini','cfg','conf','log','properties','gradle','cmake'])
+                    const isText = textExts.has(ext) || (!name.includes('.') && name.toLowerCase() !== 'readme')
+                    return isText && fileContent.size <= 1048576 ? (
+                      <button
+                        onClick={onStartEdit}
+                        className="p-0.5 text-text-muted hover:text-text-primary transition-colors cursor-pointer"
+                        title={t('edit', 'Edit')}
+                      >
+                        <svg className="h-3.5 w-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
+                          <path d="M17 3a2.85 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z" />
+                          <path d="m15 5 4 4" />
+                        </svg>
+                      </button>
+                    ) : null
+                  })()}
+                  {onDownload && (
+                    <button
+                      onClick={() => onDownload(fileContent.path)}
+                      className="p-0.5 text-text-muted hover:text-text-primary transition-colors cursor-pointer"
+                      title={t('download')}
+                    >
+                      <svg className="h-3.5 w-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
+                        <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+                        <polyline points="7 10 12 15 17 10" />
+                        <line x1="12" y1="15" x2="12" y2="3" />
+                      </svg>
+                    </button>
+                  )}
+                </>
               )}
             </div>
           </div>
@@ -123,6 +172,9 @@ export function StorageFileBrowser({
             contentLoading={contentLoading}
             fetchBlob={fetchBlob}
             onDownload={onDownload}
+            isEditing={isEditing}
+            editContent={editContent}
+            onEditContentChange={onEditContentChange}
           />
         </div>
       </div>
