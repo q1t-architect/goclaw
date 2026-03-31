@@ -60,7 +60,7 @@ func (s *PGKnowledgeGraphStore) CountEntitiesByType(ctx context.Context, agentID
 	tid := mustParseUUID(typeID)
 	var count int64
 	err := s.db.QueryRowContext(ctx,
-		`SELECT COUNT(*) FROM knowledge_graph_entities WHERE agent_id = $1 AND entity_type_id = $2`,
+		`SELECT COUNT(*) FROM kg_entities WHERE agent_id = $1 AND entity_type = (SELECT name FROM kg_entity_types WHERE id = $2)`,
 		aid, tid,
 	).Scan(&count)
 	if err != nil {
@@ -188,7 +188,7 @@ func (s *PGKnowledgeGraphStore) CountRelationsByType(ctx context.Context, agentI
 	tid := mustParseUUID(typeID)
 	var count int64
 	err := s.db.QueryRowContext(ctx,
-		`SELECT COUNT(*) FROM knowledge_graph_relations WHERE agent_id = $1 AND relation_type_id = $2`,
+		`SELECT COUNT(*) FROM kg_relations WHERE agent_id = $1 AND relation_type = (SELECT name FROM kg_relation_types WHERE id = $2)`,
 		aid, tid,
 	).Scan(&count)
 	if err != nil {

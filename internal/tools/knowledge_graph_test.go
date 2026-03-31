@@ -147,17 +147,7 @@ func (m *mockKGStore) DeleteRelationType(context.Context, string, string) error 
 }
 
 func (m *mockKGStore) SeedKGTypes(context.Context, string, string) error {
-}
-
-func (m *mockKGStore) CountEntitiesByType(context.Context, string, string) (int64, error) {
-	return 0, nil
-}
-
-func (m *mockKGStore) CountRelationsByType(context.Context, string, string) (int64, error) {
-	return 0, nil
-}
 	return nil
-}
 }
 
 func (m *mockKGStore) CountEntitiesByType(context.Context, string, string) (int64, error) {
