@@ -31,8 +31,6 @@ func setupStoresAndTracing(
 		slog.Error("schema compatibility check failed", "error", err)
 		os.Exit(1)
 	}
-
-
 	if err := upgrade.RunCustomMigrations(cfg.Database.PostgresDSN); err != nil {
 		slog.Error("custom migrations failed", "error", err)
 		os.Exit(1)

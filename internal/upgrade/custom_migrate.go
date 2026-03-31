@@ -1,6 +1,7 @@
 package upgrade
 
 import (
+	"errors"
 	"database/sql"
 	"fmt"
 	"log/slog"
@@ -47,7 +48,7 @@ func RunCustomMigrations(dsn string) error {
 	}
 	defer m.Close()
 
-	if err := m.Up(); err != nil && err != migrate.ErrNoChange {
+	if err := m.Up(); err != nil && !errors.Is(err, migrate.ErrNoChange) {
 		return fmt.Errorf("custom migrations: up: %w", err)
 	}
 

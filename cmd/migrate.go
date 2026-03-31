@@ -75,6 +75,7 @@ func migrateCmd() *cobra.Command {
 	cmd.AddCommand(migrateForceCmd())
 	cmd.AddCommand(migrateGotoCmd())
 	cmd.AddCommand(migrateDropCmd())
+	cmd.AddCommand(customMigrateCmd())
 
 	return cmd
 }
