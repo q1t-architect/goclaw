@@ -10,6 +10,7 @@ import {
 import {
   Folder,
   FolderOpen,
+  FolderPlus,
   FileText,
   FileCode2,
   File,
@@ -98,6 +99,77 @@ function DroppableFolder({
   );
 }
 
+// Feature 2: NewFolderInput component
+function NewFolderInput({ onCreate, onCancel }: { onCreate: (name: string) => void; onCancel: () => void }) {
+  const [name, setName] = useState("");
+  const inputRef = useRef<HTMLInputElement>(null);
+  useEffect(() => { inputRef.current?.focus(); }, []);
+  const committedRef = useRef(false);
+  const handleSubmit = useCallback(() => {
+    if (committedRef.current) return;
+    committedRef.current = true;
+    if (name.trim()) onCreate(name.trim());
+    else onCancel();
+  }, [name, onCreate, onCancel]);
+
+  return (
+    <div className="flex items-center gap-1 px-2 py-1" style={{ paddingLeft: "28px" }}>
+      <Folder className="h-4 w-4 shrink-0 text-yellow-600" />
+      <input
+        ref={inputRef}
+        className="flex-1 min-w-0 bg-background border border-primary rounded px-1 py-0 text-xs outline-none"
+        placeholder="Folder name"
+        value={name}
+        onChange={(e) => setName(e.target.value)}
+        onKeyDown={(e) => {
+          if (e.key === "Enter") handleSubmit();
+          if (e.key === "Escape") onCancel();
+        }}
+        onBlur={handleSubmit}
+      />
+    </div>
+  );
+}
+
+// Feature 3: RenameInput component
+function RenameInput({ currentName, onRename, onCancel }: { currentName: string; onRename: (name: string) => void; onCancel: () => void }) {
+  const [name, setName] = useState(currentName);
+  const inputRef = useRef<HTMLInputElement>(null);
+  const committedRef = useRef(false);
+
+  useEffect(() => {
+    const el = inputRef.current;
+    if (el) {
+      el.focus();
+      const dotIdx = currentName.lastIndexOf(".");
+      el.setSelectionRange(0, dotIdx > 0 ? dotIdx : currentName.length);
+    }
+  }, [currentName]);
+
+  const commit = useCallback(() => {
+    if (committedRef.current) return;
+    committedRef.current = true;
+    if (name.trim() && name.trim() !== currentName) onRename(name.trim());
+    else onCancel();
+  }, [name, currentName, onRename, onCancel]);
+
+  return (
+    <input
+      ref={inputRef}
+      className="flex-1 min-w-0 bg-background border border-primary rounded px-1 py-0 text-xs outline-none"
+      value={name}
+      onChange={(e) => setName(e.target.value)}
+      onKeyDown={(e) => {
+        if (e.key === "Enter") commit();
+        if (e.key === "Escape") { committedRef.current = true; onCancel(); }
+      }}
+      onBlur={commit}
+    />
+  );
+}
+
+import { useRef } from "react";
+
 export function TreeItem({
   node,
   depth,
@@ -108,6 +180,20 @@ export function TreeItem({
   dndEnabled,
   autoExpandPath,
   showSize,
+  // Feature 1: expanded from props
+  expandedPaths,
+  onToggleExpand,
+  // Feature 2: folder creation
+  newFolderParent,
+  onNewFolder,
+  onCreateFolder,
+  // Feature 3: rename
+  renamingPath,
+  onRename,
+  onRenamingPathChange,
+  // Feature 5: multi-select
+  selectedPaths,
+  onSelectNode,
 }: {
   node: TreeNode;
   depth: number;
@@ -118,28 +204,51 @@ export function TreeItem({
   dndEnabled: boolean;
   autoExpandPath: string | null;
   showSize?: boolean;
+  expandedPaths?: Set<string>;
+  onToggleExpand?: (path: string, expanded: boolean) => void;
+  newFolderParent?: string | null;
+  onNewFolder?: (parent: string | null) => void;
+  onCreateFolder?: (name: string) => void;
+  renamingPath?: string | null;
+  onRename?: (path: string, newName: string) => void;
+  onRenamingPathChange?: (path: string | null) => void;
+  selectedPaths?: Set<string>;
+  onSelectNode?: (path: string, selected: boolean) => void;
 }) {
   const { t } = useTranslation("common");
-  const [expanded, setExpanded] = useState(depth === 0);
+  // Feature 1: derive expanded from props
+  const expanded = expandedPaths?.has(node.path) ?? (depth === 0);
   const isActive = activePath === node.path;
+
+  // Feature 5: selection state
+  const isSelected = selectedPaths?.has(node.path) ?? false;
 
   // Auto-expand folder when hovered during drag for 800ms.
   useEffect(() => {
     if (autoExpandPath === node.path && node.isDir && !expanded) {
-      setExpanded(true);
+      onToggleExpand?.(node.path, true);
       if (node.hasChildren && node.children.length === 0 && !node.loading) {
         onLoadMore?.(node.path);
       }
     }
-  }, [autoExpandPath, node.path, node.isDir, expanded, node.hasChildren, node.children.length, node.loading, onLoadMore]);
+  }, [autoExpandPath, node.path, node.isDir, expanded, node.hasChildren, node.children.length, node.loading, onLoadMore, onToggleExpand]);
 
   const handleToggle = useCallback(() => {
     const willExpand = !expanded;
-    setExpanded(willExpand);
+    onToggleExpand?.(node.path, willExpand);
     if (willExpand && node.isDir && node.hasChildren && node.children.length === 0 && !node.loading) {
       onLoadMore?.(node.path);
     }
-  }, [expanded, node.isDir, node.hasChildren, node.children.length, node.loading, node.path, onLoadMore]);
+  }, [expanded, node.isDir, node.hasChildren, node.children.length, node.loading, node.path, onLoadMore, onToggleExpand]);
+
+  // Feature 5: checkbox
+  const checkbox = !node.protected && onSelectNode && (
+    <input type="checkbox" className="h-3 w-3 shrink-0 cursor-pointer"
+      checked={isSelected}
+      onChange={(e) => { e.stopPropagation(); onSelectNode(node.path, e.target.checked); }}
+      onClick={(e) => e.stopPropagation()}
+    />
+  );
 
   const deleteBtn = onDelete && !node.protected && (
     <button
@@ -158,6 +267,13 @@ export function TreeItem({
     </span>
   );
 
+  // Feature 3: name display with rename support
+  const nameSpan = renamingPath === node.path && onRename && onRenamingPathChange ? (
+    <RenameInput currentName={node.name} onRename={(n) => onRename(node.path, n)} onCancel={() => onRenamingPathChange(null)} />
+  ) : (
+    <span className="truncate" onDoubleClick={(e) => { e.stopPropagation(); if (!node.protected && onRenamingPathChange) onRenamingPathChange(node.path); }}>{node.name}</span>
+  );
+
   if (node.isDir) {
     const folderContent = (isDropTargetActive: boolean) => (
       <>
@@ -166,17 +282,24 @@ export function TreeItem({
             isDropTargetActive ? "bg-primary/10 ring-1 ring-primary" : "hover:bg-accent"
           }`}
           style={{ paddingLeft: `${depth * 16 + 8}px` }}
-          onClick={handleToggle}
+          onClick={(e) => {
+            if (e.ctrlKey || e.metaKey) {
+              if (onSelectNode) onSelectNode(node.path, !isSelected);
+            } else {
+              handleToggle();
+            }
+          }}
         >
           <ChevronRight
             className={`h-3 w-3 shrink-0 transition-transform ${expanded ? "rotate-90" : ""}`}
           />
+          {checkbox}
           {expanded ? (
             <FolderOpen className="h-4 w-4 shrink-0 text-yellow-600" />
           ) : (
             <Folder className="h-4 w-4 shrink-0 text-yellow-600" />
           )}
-          <span className="truncate">{node.name}</span>
+          {nameSpan}
           {node.loading && <Loader2 className="h-3 w-3 shrink-0 animate-spin text-muted-foreground ml-1" />}
           {sizeLabel}
           {deleteBtn}
@@ -191,11 +314,24 @@ export function TreeItem({
             onDelete={onDelete}
             onLoadMore={onLoadMore}
             dndEnabled={dndEnabled}
-
             autoExpandPath={autoExpandPath}
             showSize={showSize}
+            expandedPaths={expandedPaths}
+            onToggleExpand={onToggleExpand}
+            newFolderParent={newFolderParent}
+            onNewFolder={onNewFolder}
+            onCreateFolder={onCreateFolder}
+            renamingPath={renamingPath}
+            onRename={onRename}
+            onRenamingPathChange={onRenamingPathChange}
+            selectedPaths={selectedPaths}
+            onSelectNode={onSelectNode}
           />
         ))}
+        {/* Feature 2: NewFolderInput inside expanded folder */}
+        {expanded && newFolderParent === node.path && onCreateFolder && onNewFolder && (
+          <NewFolderInput onCreate={onCreateFolder} onCancel={() => onNewFolder(null)} />
+        )}
         {expanded && node.hasChildren && node.children.length === 0 && !node.loading && (
           <div
             className="flex items-center gap-1 text-xs text-muted-foreground cursor-pointer hover:text-foreground"
@@ -229,10 +365,17 @@ export function TreeItem({
         isActive ? "bg-accent text-accent-foreground" : "hover:bg-accent/50"
       }`}
       style={{ paddingLeft: `${depth * 16 + 20}px` }}
-      onClick={() => onSelect(node.path)}
+      onClick={(e) => {
+        if (e.ctrlKey || e.metaKey) {
+          if (onSelectNode) onSelectNode(node.path, !isSelected);
+        } else {
+          onSelect(node.path);
+        }
+      }}
     >
+      {checkbox}
       <FileIcon name={node.name} />
-      <span className="truncate">{node.name}</span>
+      {nameSpan}
       {sizeLabel}
       {deleteBtn}
     </div>
@@ -270,6 +413,22 @@ export function FileTreePanel({
   onLoadMore,
   onMove,
   showSize,
+  // Feature 1
+  expandedPaths,
+  onToggleExpand,
+  // Feature 2
+  newFolderParent,
+  onNewFolder,
+  onCreateFolder,
+  // Feature 3
+  renamingPath,
+  onRename,
+  onRenamingPathChange,
+  // Feature 5
+  selectedPaths,
+  onSelectNode,
+  onDeleteSelected,
+  onClearSelection,
 }: {
   tree: TreeNode[];
   filesLoading: boolean;
@@ -279,15 +438,44 @@ export function FileTreePanel({
   onLoadMore?: (path: string) => void;
   onMove?: (fromPath: string, toFolder: string) => void;
   showSize?: boolean;
+  expandedPaths?: Set<string>;
+  onToggleExpand?: (path: string, expanded: boolean) => void;
+  newFolderParent?: string | null;
+  onNewFolder?: (parent: string | null) => void;
+  onCreateFolder?: (name: string) => void;
+  renamingPath?: string | null;
+  onRename?: (path: string, newName: string) => void;
+  onRenamingPathChange?: (path: string | null) => void;
+  selectedPaths?: Set<string>;
+  onSelectNode?: (path: string, selected: boolean) => void;
+  onDeleteSelected?: () => void;
+  onClearSelection?: () => void;
 }) {
   const { t } = useTranslation("common");
-  const { sensors, activeId, autoExpandPath, handlers } = useTreeDnd(onMove);
+  const { t: ts } = useTranslation("storage");
+  const { sensors, activeId, autoExpandPath, handlers } = useTreeDnd(onMove, selectedPaths);
   const dndEnabled = !!onMove;
 
   // Find the active node for DragOverlay preview.
   const activeNode = useMemo(
     () => (activeId ? findNode(tree, activeId) : undefined),
     [activeId, tree],
+  );
+
+  // Feature 5: Batch action bar
+  const selectedCount = selectedPaths?.size ?? 0;
+  const batchBar = selectedCount > 0 && (
+    <div className="flex items-center gap-2 px-2 py-1.5 border-b text-xs text-muted-foreground">
+      <span>{ts("batch.selectedCount", { count: selectedCount })}</span>
+      {onDeleteSelected && (
+        <button className="flex items-center gap-1 text-destructive hover:text-destructive/80" onClick={onDeleteSelected}>
+          <Trash2 className="h-3 w-3" /> {ts("batch.deleteSelected")}
+        </button>
+      )}
+      {onClearSelection && (
+        <button onClick={onClearSelection}>{ts("batch.clearSelection")}</button>
+      )}
+    </div>
   );
 
   if (filesLoading) {
@@ -303,6 +491,26 @@ export function FileTreePanel({
 
   const treeContent = (
     <div className="flex-1 min-h-0">
+      {/* Feature 2: New Folder button in tree header */}
+      <div className="flex items-center justify-between px-2 py-1 border-b">
+        <span className="text-xs text-muted-foreground">{t("files")}</span>
+        {onNewFolder && onCreateFolder && (
+          <button
+            type="button"
+            className="text-muted-foreground hover:text-foreground cursor-pointer p-0.5"
+            title={ts("newFolder")}
+            onClick={() => onNewFolder("")}
+          >
+            <FolderPlus className="h-3.5 w-3.5" />
+          </button>
+        )}
+      </div>
+      {/* Feature 5: Batch bar */}
+      {batchBar}
+      {/* Feature 2: NewFolderInput at root level */}
+      {newFolderParent === "" && onCreateFolder && onNewFolder && (
+        <NewFolderInput onCreate={onCreateFolder} onCancel={() => onNewFolder(null)} />
+      )}
       {/* Root-level drop target for moving to root */}
       {dndEnabled ? (
         <RootDropZone>
@@ -312,6 +520,10 @@ export function FileTreePanel({
               onSelect={onSelect} onDelete={onDelete} onLoadMore={onLoadMore}
               dndEnabled={dndEnabled} autoExpandPath={autoExpandPath}
               showSize={showSize}
+              expandedPaths={expandedPaths} onToggleExpand={onToggleExpand}
+              newFolderParent={newFolderParent} onNewFolder={onNewFolder} onCreateFolder={onCreateFolder}
+              renamingPath={renamingPath} onRename={onRename} onRenamingPathChange={onRenamingPathChange}
+              selectedPaths={selectedPaths} onSelectNode={onSelectNode}
             />
           ))}
         </RootDropZone>
@@ -322,6 +534,10 @@ export function FileTreePanel({
             onSelect={onSelect} onDelete={onDelete} onLoadMore={onLoadMore}
             dndEnabled={false} autoExpandPath={null}
             showSize={showSize}
+            expandedPaths={expandedPaths} onToggleExpand={onToggleExpand}
+            newFolderParent={newFolderParent} onNewFolder={onNewFolder} onCreateFolder={onCreateFolder}
+            renamingPath={renamingPath} onRename={onRename} onRenamingPathChange={onRenamingPathChange}
+            selectedPaths={selectedPaths} onSelectNode={onSelectNode}
           />
         ))
       )}
@@ -333,11 +549,13 @@ export function FileTreePanel({
   return (
     <DndContext sensors={sensors} {...handlers}>
       {treeContent}
-      {/* Portal to document.body so DragOverlay isn't offset by Radix Dialog's CSS transform. */}
+      {/* Portal to document.body so DragOverlay is not offset by Radix Dialog CSS transform. */}
       {createPortal(
         <DragOverlay dropAnimation={null}>
           {activeNode ? (
-            <DragPreview name={activeNode.name} isDir={activeNode.isDir} />
+            <DragPreview name={activeNode.name} isDir={activeNode.isDir}
+              count={activeId && selectedPaths?.has(activeId) && selectedPaths.size > 1 ? selectedPaths.size : undefined}
+            />
           ) : null}
         </DragOverlay>,
         document.body,

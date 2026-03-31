@@ -10,7 +10,7 @@ import {
 } from "@dnd-kit/core";
 
 /** Encapsulates @dnd-kit sensor setup and drag state for file tree DnD. */
-export function useTreeDnd(onMove?: (fromPath: string, toFolder: string) => void) {
+export function useTreeDnd(onMove?: (fromPath: string, toFolder: string) => void, selectedPaths?: Set<string>) {
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 8 } }),
     useSensor(KeyboardSensor),
@@ -64,8 +64,17 @@ export function useTreeDnd(onMove?: (fromPath: string, toFolder: string) => void
     // Prevent dropping onto self or own descendant.
     if (fromPath === dest || dest.startsWith(fromPath + "/")) return;
 
-    onMove(fromPath, dest);
-  }, [onMove, clearHoverTimer]);
+    // Batch DnD: if dragged item is selected, move all selected items
+    if (selectedPaths && selectedPaths.has(fromPath)) {
+      for (const path of selectedPaths) {
+        if (path !== dest && !dest.startsWith(path + "/")) {
+          onMove(path, dest);
+        }
+      }
+    } else {
+      onMove(fromPath, dest);
+    }
+  }, [onMove, selectedPaths, clearHoverTimer]);
 
   const handleDragCancel = useCallback(() => {
     clearHoverTimer();
