@@ -1,7 +1,7 @@
 // Main Storage tab for Settings — composes file browser, upload dialog, delete confirm.
 // Calls /v1/storage/* REST endpoints via useStorage + useStorageSize hooks.
 
-import { useState, useEffect, useCallback, useMemo } from 'react'
+import { useState, useEffect, useCallback, useMemo, useRef } from 'react'
 import { useTranslation } from 'react-i18next'
 import { useStorage, useStorageSize } from '../../../hooks/use-storage'
 import { buildTree, mergeSubtree, setNodeLoading, formatSize, isTextFile } from '../../../lib/file-helpers'
@@ -29,9 +29,25 @@ export function StorageTab() {
   const [deleting, setDeleting] = useState(false)
   const [uploadOpen, setUploadOpen] = useState(false)
   const [uploadFolder, setUploadFolder] = useState('')
+  const [expandedPaths, setExpandedPaths] = useState<Set<string>>(new Set())
+  const initialExpandDone = useRef(false)
 
-  // Rebuild tree when files change
-  useEffect(() => { setTree(buildTree(files)) }, [files])
+  // Rebuild tree when files change — expanded state persists via expandedPaths
+  useEffect(() => {
+    const newTree = buildTree(files)
+    setTree(newTree)
+    // Auto-expand root nodes on first load
+    if (!initialExpandDone.current && newTree.length > 0) {
+      initialExpandDone.current = true
+      setExpandedPaths(prev => {
+        const next = new Set(prev)
+        for (const node of newTree) {
+          if (node.isDir) next.add(node.path)
+        }
+        return next
+      })
+    }
+  }, [files])
 
   // Load on mount
   useEffect(() => { listFiles(); refreshSize() }, [listFiles, refreshSize])
@@ -84,6 +100,18 @@ export function StorageTab() {
         setActivePath(null)
         setFileContent(null)
       }
+      // Remove deleted path (and children) from expandedPaths
+      if (deleteTarget.isDir) {
+        setExpandedPaths(prev => {
+          const next = new Set<string>()
+          for (const p of prev) {
+            if (p !== deleteTarget.path && !p.startsWith(deleteTarget.path + '/')) next.add(p)
+          }
+          return next
+        })
+      } else {
+        setExpandedPaths(prev => { const n = new Set(prev); n.delete(deleteTarget.path); return n })
+      }
       await listFiles()
     } finally {
       setDeleting(false)
@@ -115,9 +143,36 @@ export function StorageTab() {
         setActivePath(null)
         setFileContent(null)
       }
+      // Update expandedPaths: replace old prefix with new
+      const fileName = fromPath.split('/').pop() ?? fromPath
+      const newPath = toFolder ? `${toFolder}/${fileName}` : fileName
+      if (newPath !== fromPath) {
+        setExpandedPaths(prev => {
+          const next = new Set<string>()
+          for (const p of prev) {
+            if (p === fromPath) {
+              next.add(newPath)
+            } else if (p.startsWith(fromPath + '/')) {
+              next.add(newPath + p.slice(fromPath.length))
+            } else {
+              next.add(p)
+            }
+          }
+          return next
+        })
+      }
       listFiles({ silent: true })
     } catch { /* toast handled in hook */ }
   }, [moveFile, listFiles, activePath])
+
+  // Toggle folder expansion — persisted across tree rebuilds
+  const handleToggleExpand = useCallback((path: string, expanded: boolean) => {
+    setExpandedPaths(prev => {
+      const next = new Set(prev)
+      if (expanded) next.add(path) else next.delete(path)
+      return next
+    })
+  }, [])
 
   // Active folder for scoped uploads
   const activeFolder = useMemo(() => {
@@ -179,6 +234,8 @@ export function StorageTab() {
           onMove={handleMove}
           onDownload={handleDownload}
           fetchBlob={handleFetchBlob}
+          expandedPaths={expandedPaths}
+          onToggleExpand={handleToggleExpand}
           showSize
         />
       </div>

@@ -123,33 +123,34 @@ function DragPreview({ name, isDir }: { name: string; isDir: boolean }) {
 // --- TreeItem ---
 
 function TreeItem({
-  node, depth, activePath, onSelect, onDelete, onLoadMore, dndEnabled, autoExpandPath, showSize,
+  node, depth, activePath, onSelect, onDelete, onLoadMore, dndEnabled, autoExpandPath, expandedPaths, onToggleExpand, showSize,
 }: {
   node: TreeNode; depth: number; activePath: string | null
   onSelect: (path: string) => void; onDelete?: (path: string, isDir: boolean) => void
-  onLoadMore?: (path: string) => void; dndEnabled: boolean; autoExpandPath: string | null; showSize?: boolean
+  onLoadMore?: (path: string) => void; dndEnabled: boolean; autoExpandPath: string | null
+  expandedPaths: Set<string>; onToggleExpand: (path: string, expanded: boolean) => void; showSize?: boolean
 }) {
   const { t } = useTranslation('common')
-  const [expanded, setExpanded] = useState(depth === 0)
+  const expanded = expandedPaths.has(node.path)
   const isActive = activePath === node.path
 
   // Auto-expand folder when hovered during drag
   useEffect(() => {
     if (autoExpandPath === node.path && node.isDir && !expanded) {
-      setExpanded(true)
+      onToggleExpand(node.path, true)
       if (node.hasChildren && node.children.length === 0 && !node.loading) {
         onLoadMore?.(node.path)
       }
     }
-  }, [autoExpandPath, node.path, node.isDir, expanded, node.hasChildren, node.children.length, node.loading, onLoadMore])
+  }, [autoExpandPath, node.path, node.isDir, expanded, node.hasChildren, node.children.length, node.loading, onLoadMore, onToggleExpand])
 
   const handleToggle = useCallback(() => {
     const willExpand = !expanded
-    setExpanded(willExpand)
+    onToggleExpand(node.path, willExpand)
     if (willExpand && node.isDir && node.hasChildren && node.children.length === 0 && !node.loading) {
       onLoadMore?.(node.path)
     }
-  }, [expanded, node.isDir, node.hasChildren, node.children.length, node.loading, node.path, onLoadMore])
+  }, [expanded, node.isDir, node.hasChildren, node.children.length, node.loading, node.path, onLoadMore, onToggleExpand])
 
   const deleteBtn = onDelete && !node.protected && (
     <button
@@ -189,7 +190,7 @@ function TreeItem({
           <TreeItem
             key={child.path} node={child} depth={depth + 1} activePath={activePath}
             onSelect={onSelect} onDelete={onDelete} onLoadMore={onLoadMore}
-            dndEnabled={dndEnabled} autoExpandPath={autoExpandPath} showSize={showSize}
+            dndEnabled={dndEnabled} autoExpandPath={autoExpandPath} expandedPaths={expandedPaths} onToggleExpand={onToggleExpand} showSize={showSize}
           />
         ))}
         {expanded && node.hasChildren && node.children.length === 0 && !node.loading && (
@@ -262,11 +263,13 @@ interface FileTreePanelProps {
   onDelete?: (path: string, isDir: boolean) => void
   onLoadMore?: (path: string) => void
   onMove?: (fromPath: string, toFolder: string) => void
+  expandedPaths: Set<string>
+  onToggleExpand: (path: string, expanded: boolean) => void
   showSize?: boolean
 }
 
 export function FileTreePanel({
-  tree, filesLoading, activePath, onSelect, onDelete, onLoadMore, onMove, showSize,
+  tree, filesLoading, activePath, onSelect, onDelete, onLoadMore, onMove, expandedPaths, onToggleExpand, showSize,
 }: FileTreePanelProps) {
   const { t } = useTranslation('common')
   const dndEnabled = !!onMove
@@ -336,7 +339,7 @@ export function FileTreePanel({
             <TreeItem
               key={node.path} node={node} depth={0} activePath={activePath}
               onSelect={onSelect} onDelete={onDelete} onLoadMore={onLoadMore}
-              dndEnabled showSize={showSize} autoExpandPath={autoExpandPath}
+              dndEnabled showSize={showSize} autoExpandPath={autoExpandPath} expandedPaths={expandedPaths} onToggleExpand={onToggleExpand}
             />
           ))}
         </RootDropZone>
@@ -345,7 +348,7 @@ export function FileTreePanel({
           <TreeItem
             key={node.path} node={node} depth={0} activePath={activePath}
             onSelect={onSelect} onDelete={onDelete} onLoadMore={onLoadMore}
-            dndEnabled={false} showSize={showSize} autoExpandPath={null}
+            dndEnabled={false} showSize={showSize} autoExpandPath={null} expandedPaths={expandedPaths} onToggleExpand={onToggleExpand}
           />
         ))
       )}

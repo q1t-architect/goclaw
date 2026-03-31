@@ -20,13 +20,15 @@ interface StorageFileBrowserProps {
   onMove?: (fromPath: string, toFolder: string) => void
   onDownload?: (path: string) => void
   fetchBlob?: (path: string) => Promise<Blob>
+  expandedPaths: Set<string>
+  onToggleExpand: (path: string, expanded: boolean) => void
   showSize?: boolean
 }
 
 export function StorageFileBrowser({
   tree, filesLoading, activePath, onSelect,
   contentLoading, fileContent,
-  onDelete, onLoadMore, onMove, onDownload, fetchBlob, showSize,
+  onDelete, onLoadMore, onMove, onDownload, fetchBlob, expandedPaths, onToggleExpand, showSize,
 }: StorageFileBrowserProps) {
   const { t } = useTranslation('common')
   const containerRef = useRef<HTMLDivElement>(null)
@@ -68,6 +70,8 @@ export function StorageFileBrowser({
           onDelete={onDelete}
           onLoadMore={onLoadMore}
           onMove={onMove}
+          expandedPaths={expandedPaths}
+          onToggleExpand={onToggleExpand}
           showSize={showSize}
         />
       </div>
