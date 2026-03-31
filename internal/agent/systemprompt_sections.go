@@ -374,10 +374,17 @@ func buildPersonaReminder(files []bootstrap.ContextFile, agentType, providerType
 
 // needsSOULEcho returns true for providers that benefit from recency-zone personality echo.
 // GPT models have strong recency bias and tend to lose persona in long prompts.
+// Matches first-party OpenAI (chatgpt_oauth) and Codex only — not compat proxies.
 func needsSOULEcho(providerType string) bool {
-	switch strings.ToLower(providerType) {
-	case "openai", "codex":
+	lower := strings.ToLower(providerType)
+	if strings.Contains(lower, "compat") {
+		return false // openai_compat routes to non-OpenAI models
+	}
+	switch {
+	case lower == "openai" || lower == "codex":
 		return true
+	case strings.Contains(lower, "chatgpt"):
+		return true // chatgpt_oauth, chatgpt_plus, etc.
 	}
 	return false
 }

@@ -6,9 +6,24 @@ import (
 	"strings"
 
 	"github.com/nextlevelbuilder/goclaw/internal/bootstrap"
+	"github.com/nextlevelbuilder/goclaw/internal/providers"
 	"github.com/nextlevelbuilder/goclaw/internal/store"
 	"github.com/nextlevelbuilder/goclaw/internal/tools"
 )
+
+// providerTypeOf extracts the DB provider_type (e.g. "chatgpt_oauth", "codex")
+// from a Provider. Falls back to Name() if the provider doesn't expose ProviderType().
+func providerTypeOf(p providers.Provider) string {
+	type providerTyper interface {
+		ProviderType() string
+	}
+	if pt, ok := p.(providerTyper); ok {
+		if t := pt.ProviderType(); t != "" {
+			return t
+		}
+	}
+	return p.Name()
+}
 
 // PromptMode controls which system prompt sections are included.
 // Matches TS PromptMode type in system-prompt.ts.

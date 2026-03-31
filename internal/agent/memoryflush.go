@@ -108,7 +108,7 @@ func (l *Loop) runMemoryFlush(ctx context.Context, sessionKey string, settings *
 		Mode:         PromptMinimal,
 		ToolNames:    l.filteredToolNames(),
 		HasMemory:    l.hasMemory,
-		ProviderType: l.provider.Name(),
+		ProviderType: providerTypeOf(l.provider),
 	})
 	systemPrompt += "\n\n" + settings.SystemPrompt
 

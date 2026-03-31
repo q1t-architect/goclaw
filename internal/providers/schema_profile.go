@@ -79,11 +79,21 @@ func profileForProvider(name string) SchemaProfile {
 }
 
 // isOpenAIStrict returns true for providers known to support strict tool mode.
-// Only first-party OpenAI and Codex are safe — third-party proxies (OpenRouter,
-// DeepSeek, Groq, DashScope, etc.) may reject nullable unions or the strict flag.
+// Matches first-party OpenAI (including chatgpt_oauth) and Codex.
+// Explicitly excludes openai_compat (proxy for OpenRouter, DeepSeek, Groq, etc.).
 func isOpenAIStrict(name string) bool {
 	lower := strings.ToLower(name)
-	return lower == "openai" || lower == "codex"
+	// Exclude compat/proxy providers first — they route to non-OpenAI models.
+	if strings.Contains(lower, "compat") {
+		return false
+	}
+	switch {
+	case lower == "openai" || lower == "codex":
+		return true
+	case strings.Contains(lower, "chatgpt"):
+		return true // chatgpt_oauth, chatgpt_plus, etc.
+	}
+	return false
 }
 
 // isGeminiName matches config names ("gemini", "gemini-flash") and
