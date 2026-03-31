@@ -46,16 +46,6 @@ func (h *KnowledgeGraphHandler) RegisterRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("GET /v1/agents/{agentID}/kg/dedup", h.auth(h.handleListDedupCandidates))
 	mux.HandleFunc("POST /v1/agents/{agentID}/kg/merge", h.auth(h.handleMergeEntities))
 	mux.HandleFunc("POST /v1/agents/{agentID}/kg/dedup/dismiss", h.auth(h.handleDismissCandidate))
-
-	// KG type management
-	mux.HandleFunc("GET /v1/agents/{agentID}/kg/entity-types", h.auth(h.handleListEntityTypes))
-	mux.HandleFunc("POST /v1/agents/{agentID}/kg/entity-types", h.auth(h.handleCreateEntityType))
-	mux.HandleFunc("PATCH /v1/agents/{agentID}/kg/entity-types/{typeID}", h.auth(h.handleUpdateEntityType))
-	mux.HandleFunc("DELETE /v1/agents/{agentID}/kg/entity-types/{typeID}", h.auth(h.handleDeleteEntityType))
-	mux.HandleFunc("GET /v1/agents/{agentID}/kg/relation-types", h.auth(h.handleListRelationTypes))
-	mux.HandleFunc("POST /v1/agents/{agentID}/kg/relation-types", h.auth(h.handleCreateRelationType))
-	mux.HandleFunc("PATCH /v1/agents/{agentID}/kg/relation-types/{typeID}", h.auth(h.handleUpdateRelationType))
-	mux.HandleFunc("DELETE /v1/agents/{agentID}/kg/relation-types/{typeID}", h.auth(h.handleDeleteRelationType))
 }
 
 func (h *KnowledgeGraphHandler) auth(next http.HandlerFunc) http.HandlerFunc {
