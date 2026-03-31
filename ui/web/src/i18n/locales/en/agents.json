@@ -533,7 +533,12 @@
     "retrying": "Retrying...",
     "done": "done",
     "fileLabelSOUL": "Soul & Personality",
-    "fileLabelIDENTITY": "Identity Card"
+    "fileLabelIDENTITY": "Identity Card",
+    "regenerateTitle": "Editing with AI...",
+    "regenerateCompleted": "Edit Complete!",
+    "regenerateFailed": "Edit Failed",
+    "regenerateWeavingSoul": "Updating files for",
+    "regenerateWait": "AI is rewriting the files. Please wait..."
   },
   "configGroups": {
     "core": "Core",

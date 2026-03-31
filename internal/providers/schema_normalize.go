@@ -39,6 +39,9 @@ func NormalizeSchema(providerName string, schema map[string]any) map[string]any 
 	if len(profile.StripKeys) > 0 {
 		result = stripKeys(result, profile.StripKeys, 0)
 	}
+	if profile.StrictToolMode {
+		result = applyStrictMode(result, 0)
+	}
 	return result
 }
 

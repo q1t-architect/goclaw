@@ -84,7 +84,7 @@ export function KGEntityDetailDialog({ open, onOpenChange, agentId, entity, getE
 
   return (
     <Dialog open={open} onOpenChange={(v) => !traversing && onOpenChange(v)}>
-      <DialogContent aria-describedby={undefined} className="max-w-5xl max-h-[90vh] flex flex-col">
+      <DialogContent aria-describedby={undefined} className="max-h-[90vh] w-[95vw] flex flex-col sm:max-w-5xl">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             <span>{entity?.name}</span>

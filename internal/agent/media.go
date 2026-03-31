@@ -151,7 +151,6 @@ func (l *Loop) enrichDocumentPaths(messages []providers.Message, refs []provider
 	if len(messages) == 0 {
 		return
 	}
-	// Find last user message
 	lastIdx := -1
 	for i := len(messages) - 1; i >= 0; i-- {
 		if messages[i].Role == "user" {
@@ -168,7 +167,6 @@ func (l *Loop) enrichDocumentPaths(messages []providers.Message, refs []provider
 		if ref.Kind != "document" {
 			continue
 		}
-		// Use persisted workspace path; fall back to legacy .media/ lookup.
 		p := ref.Path
 		if p == "" && l.mediaStore != nil {
 			var err error
@@ -180,41 +178,20 @@ func (l *Loop) enrichDocumentPaths(messages []providers.Message, refs []provider
 		if p == "" {
 			continue
 		}
-		// Replace <media:document> or <media:document name="X"> with version that includes path.
-		// The hint tells the agent the file is directly accessible (no copy needed).
 		pathAttr := fmt.Sprintf(" path=%q", p)
-		old1 := "<media:document>"
-		new1 := "<media:document" + pathAttr + ">"
-		// Replace the LAST bare tag (current message, not group history).
-		if idx := strings.LastIndex(content, old1); idx >= 0 {
-			content = content[:idx] + new1 + content[idx+len(old1):]
-			continue
-		}
-		// For named variant, inject path attribute (last occurrence)
-		if idx := strings.LastIndex(content, "<media:document name="); idx >= 0 {
-			closeIdx := strings.Index(content[idx:], ">")
-			if closeIdx >= 0 {
-				tag := content[idx : idx+closeIdx]
-				content = content[:idx] + tag + pathAttr + ">" + content[idx+closeIdx+1:]
-			}
-		}
-		// For Slack variant with file= attribute (last occurrence)
-		if idx := strings.LastIndex(content, "<media:document file="); idx >= 0 {
-			closeIdx := strings.Index(content[idx:], ">")
-			if closeIdx >= 0 {
-				tag := content[idx : idx+closeIdx]
-				content = content[:idx] + tag + pathAttr + ">" + content[idx+closeIdx+1:]
-			}
-		}
+
+		// Match first <media:document> without a path — covers bare, named, and file= variants.
+		content, _ = replaceFirstMediaTag(content, "<media:document", func(tag string) bool {
+			return !tagHasAttr(tag, "path")
+		}, func(tag string) string {
+			return appendTagAttrs(tag, pathAttr)
+		})
 	}
 	messages[lastIdx].Content = content
 }
 
 // enrichAudioIDs updates the last user message to embed persisted media IDs
 // in <media:audio> and <media:voice> tags so the LLM can reference them.
-// Without this, the LLM sees plain <media:audio> and cannot pass a valid media_id.
-// Replaces the LAST bare tag (current message) rather than the first (which may be
-// in group history context), so the current turn's media gets the correct ID.
 func (l *Loop) enrichAudioIDs(messages []providers.Message, refs []providers.MediaRef) {
 	if len(messages) == 0 {
 		return
@@ -237,27 +214,27 @@ func (l *Loop) enrichAudioIDs(messages []providers.Message, refs []providers.Med
 		}
 		idAttr := fmt.Sprintf(" id=%q", ref.ID)
 
-		// Replace the LAST bare <media:audio> with <media:audio id="uuid">
-		bare := "<media:audio>"
-		if idx := strings.LastIndex(content, bare); idx >= 0 {
-			content = content[:idx] + "<media:audio" + idAttr + ">" + content[idx+len(bare):]
+		var replaced bool
+		content, replaced = replaceFirstMediaTag(content, "<media:audio", func(tag string) bool {
+			return !tagHasAttr(tag, "id")
+		}, func(tag string) string {
+			return appendTagAttrs(tag, idAttr)
+		})
+		if replaced {
 			continue
 		}
-		// Replace the LAST bare <media:voice> with <media:voice id="uuid">
-		bareVoice := "<media:voice>"
-		if idx := strings.LastIndex(content, bareVoice); idx >= 0 {
-			content = content[:idx] + "<media:voice" + idAttr + ">" + content[idx+len(bareVoice):]
-			continue
-		}
+
+		content, _ = replaceFirstMediaTag(content, "<media:voice", func(tag string) bool {
+			return !tagHasAttr(tag, "id")
+		}, func(tag string) string {
+			return appendTagAttrs(tag, idAttr)
+		})
 	}
 	messages[lastIdx].Content = content
 }
 
 // enrichVideoIDs updates the last user message to embed persisted media IDs
 // in <media:video> tags so the LLM can reference them via read_video tool.
-// Without this, the LLM sees plain <media:video> and hallucinates a media_id.
-// Replaces the LAST bare tag (current message) rather than the first (which may be
-// in group history context), so the current turn's media gets the correct ID.
 func (l *Loop) enrichVideoIDs(messages []providers.Message, refs []providers.MediaRef) {
 	if len(messages) == 0 {
 		return
@@ -280,12 +257,11 @@ func (l *Loop) enrichVideoIDs(messages []providers.Message, refs []providers.Med
 		}
 		idAttr := fmt.Sprintf(" id=%q", ref.ID)
 
-		// Replace the LAST bare <media:video> with <media:video id="uuid">
-		bare := "<media:video>"
-		if idx := strings.LastIndex(content, bare); idx >= 0 {
-			content = content[:idx] + "<media:video" + idAttr + ">" + content[idx+len(bare):]
-			continue
-		}
+		content, _ = replaceFirstMediaTag(content, "<media:video", func(tag string) bool {
+			return !tagHasAttr(tag, "id")
+		}, func(tag string) string {
+			return appendTagAttrs(tag, idAttr)
+		})
 	}
 	messages[lastIdx].Content = content
 }
@@ -295,8 +271,6 @@ func (l *Loop) enrichVideoIDs(messages []providers.Message, refs []providers.Med
 // and stored. The path attribute allows tools called via MCP bridge (e.g.
 // claude-cli) to access images via read_image(path=...) even though the
 // bridge context does not carry WithMediaImages.
-// Iterates refs in reverse order so that when multiple images are present,
-// each ref maps to the correct positional tag (last ref → last tag, etc.).
 func (l *Loop) enrichImageIDs(messages []providers.Message, refs []providers.MediaRef) {
 	if len(messages) == 0 {
 		return
@@ -313,9 +287,7 @@ func (l *Loop) enrichImageIDs(messages []providers.Message, refs []providers.Med
 	}
 
 	content := messages[lastIdx].Content
-	// Iterate in reverse so first ref matches first tag when using LastIndex replacements.
-	for i := len(refs) - 1; i >= 0; i-- {
-		ref := refs[i]
+	for _, ref := range refs {
 		if ref.Kind != "image" {
 			continue
 		}
@@ -325,8 +297,7 @@ func (l *Loop) enrichImageIDs(messages []providers.Message, refs []providers.Med
 			pathAttr = fmt.Sprintf(" path=%q", ref.Path)
 		}
 
-		var replaced bool
-		content, replaced = replaceLastMediaTag(content, "<media:image", func(tag string) bool {
+		content, _ = replaceFirstMediaTag(content, "<media:image", func(tag string) bool {
 			return !tagHasAttr(tag, "id")
 		}, func(tag string) string {
 			attrs := []string{idAttr}
@@ -335,9 +306,6 @@ func (l *Loop) enrichImageIDs(messages []providers.Message, refs []providers.Med
 			}
 			return appendTagAttrs(tag, attrs...)
 		})
-		if replaced {
-			continue
-		}
 	}
 	messages[lastIdx].Content = content
 }
@@ -374,9 +342,9 @@ func (l *Loop) enrichImagePaths(messages []providers.Message) {
 			}
 			pathAttr := fmt.Sprintf(" path=%q", p)
 
-			// Prefer tags that already carry the matching media ID, regardless of attribute order.
+			// Prefer tags that already carry the matching media ID.
 			var replaced bool
-			content, replaced = replaceLastMediaTag(content, "<media:image", func(tag string) bool {
+			content, replaced = replaceFirstMediaTag(content, "<media:image", func(tag string) bool {
 				return tagHasAttrValue(tag, "id", ref.ID) && !tagHasAttr(tag, "path")
 			}, func(tag string) string {
 				return appendTagAttrs(tag, pathAttr)
@@ -386,8 +354,8 @@ func (l *Loop) enrichImagePaths(messages []providers.Message) {
 				continue
 			}
 
-			// Fallback to the last image tag without an ID and attach both id and path.
-			content, replaced = replaceLastMediaTag(content, "<media:image", func(tag string) bool {
+			// Fallback: first image tag without an ID — attach both id and path.
+			content, replaced = replaceFirstMediaTag(content, "<media:image", func(tag string) bool {
 				return !tagHasAttr(tag, "id")
 			}, func(tag string) string {
 				return appendTagAttrs(tag, fmt.Sprintf(` id=%q`, ref.ID), pathAttr)
@@ -417,13 +385,17 @@ func mediaKindFromMime(mime string) string {
 	}
 }
 
-func replaceLastMediaTag(content, prefix string, match func(tag string) bool, replace func(tag string) string) (string, bool) {
-	searchFrom := len(content)
-	for searchFrom > 0 {
-		idx := strings.LastIndex(content[:searchFrom], prefix)
+// replaceFirstMediaTag finds the first tag in content starting with prefix
+// whose full text satisfies match, and replaces it using replace.
+// Forward scanning ensures natural positional pairing when iterating refs in order.
+func replaceFirstMediaTag(content, prefix string, match func(tag string) bool, replace func(tag string) string) (string, bool) {
+	pos := 0
+	for pos < len(content) {
+		idx := strings.Index(content[pos:], prefix)
 		if idx < 0 {
 			return content, false
 		}
+		idx += pos
 		endRel := strings.IndexByte(content[idx:], '>')
 		if endRel < 0 {
 			return content, false
@@ -433,7 +405,7 @@ func replaceLastMediaTag(content, prefix string, match func(tag string) bool, re
 		if match(tag) {
 			return content[:idx] + replace(tag) + content[end:], true
 		}
-		searchFrom = idx
+		pos = end
 	}
 	return content, false
 }

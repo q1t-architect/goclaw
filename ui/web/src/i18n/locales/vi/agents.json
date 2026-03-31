@@ -533,7 +533,12 @@
     "retrying": "Đang thử lại...",
     "done": "xong",
     "fileLabelSOUL": "Linh hồn & Tính cách",
-    "fileLabelIDENTITY": "Thẻ danh tính"
+    "fileLabelIDENTITY": "Thẻ danh tính",
+    "regenerateTitle": "Đang chỉnh sửa bằng AI...",
+    "regenerateCompleted": "Chỉnh sửa hoàn tất!",
+    "regenerateFailed": "Chỉnh sửa thất bại",
+    "regenerateWeavingSoul": "Đang cập nhật tệp cho",
+    "regenerateWait": "AI đang viết lại các tệp. Vui lòng chờ..."
   },
   "configGroups": {
     "core": "Cốt lõi",

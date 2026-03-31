@@ -6,6 +6,12 @@ func CleanToolSchemas(providerName string, tools []ToolDefinition) []ToolDefinit
 	if len(tools) == 0 {
 		return tools
 	}
+	profile := profileForProvider(providerName)
+	var strictPtr *bool
+	if profile.StrictToolMode {
+		t := true
+		strictPtr = &t
+	}
 	cleaned := make([]ToolDefinition, len(tools))
 	for i, t := range tools {
 		cleaned[i] = ToolDefinition{
@@ -14,6 +20,7 @@ func CleanToolSchemas(providerName string, tools []ToolDefinition) []ToolDefinit
 				Name:        t.Function.Name,
 				Description: t.Function.Description,
 				Parameters:  NormalizeSchema(providerName, t.Function.Parameters),
+				Strict:      strictPtr,
 			},
 		}
 	}

@@ -13,6 +13,7 @@ type SchemaProfile struct {
 	StripNullType     bool     // anyOf:[T, null] → T
 	RemoveTypeOnUnion bool     // strip "type" when anyOf/oneOf present (Gemini conflict)
 	StripKeys         []string // keys to recursively remove
+	StrictToolMode    bool     // OpenAI strict mode: optional→nullable, all props required, additionalProperties:false
 }
 
 // Provider-specific strip key lists.
@@ -59,7 +60,15 @@ func profileForProvider(name string) SchemaProfile {
 			InjectObjectType: true,
 			StripKeys:        xaiStripKeys,
 		}
-	default: // openai, codex, openrouter, deepseek, groq, dashscope, etc.
+	case isOpenAIStrict(name):
+		return SchemaProfile{
+			ResolveRefs:      true,
+			FlattenUnions:    true,
+			InjectObjectType: true,
+			StrictToolMode:   true,
+			StripKeys:        refOnlyStripKeys,
+		}
+	default: // openrouter, deepseek, groq, dashscope, bailian, minimax, etc.
 		return SchemaProfile{
 			ResolveRefs:      true,
 			FlattenUnions:    true,
@@ -67,6 +76,14 @@ func profileForProvider(name string) SchemaProfile {
 			StripKeys:        refOnlyStripKeys,
 		}
 	}
+}
+
+// isOpenAIStrict returns true for providers known to support strict tool mode.
+// Only first-party OpenAI and Codex are safe — third-party proxies (OpenRouter,
+// DeepSeek, Groq, DashScope, etc.) may reject nullable unions or the strict flag.
+func isOpenAIStrict(name string) bool {
+	lower := strings.ToLower(name)
+	return lower == "openai" || lower == "codex"
 }
 
 // isGeminiName matches config names ("gemini", "gemini-flash") and

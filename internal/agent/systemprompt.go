@@ -54,6 +54,10 @@ type SystemPromptConfig struct {
 	SandboxContainerDir  string // container-side workdir (e.g. "/workspace")
 	SandboxWorkspaceAccess string // "none", "ro", "rw"
 
+	// ProviderType identifies the LLM provider (e.g. "openai", "anthropic", "codex").
+	// Used for provider-specific prompt adjustments (e.g. SOUL echo for GPT models).
+	ProviderType string
+
 	// Self-evolution: predefined agents can update SOUL.md (style/tone)
 	SelfEvolve bool
 
@@ -235,10 +239,11 @@ func BuildSystemPrompt(cfg SystemPromptConfig) string {
 
 	// 4.5. ## MCP Tools (full only) — skip during bootstrap
 	if !isMinimal && !cfg.IsBootstrap {
+		if len(cfg.MCPToolDescs) > 0 {
+			lines = append(lines, buildMCPToolsInlineSection(cfg.MCPToolDescs)...)
+		}
 		if cfg.HasMCPToolSearch {
 			lines = append(lines, buildMCPToolsSearchSection()...)
-		} else if len(cfg.MCPToolDescs) > 0 {
-			lines = append(lines, buildMCPToolsInlineSection(cfg.MCPToolDescs)...)
 		}
 	}
 
@@ -303,7 +308,7 @@ func BuildSystemPrompt(cfg SystemPromptConfig) string {
 	// 16. Recency reinforcements — skip during bootstrap (short prompt, no drift risk)
 	if !cfg.IsBootstrap {
 		if len(personaFiles) > 0 {
-			lines = append(lines, buildPersonaReminder(personaFiles, cfg.AgentType)...)
+			lines = append(lines, buildPersonaReminder(personaFiles, cfg.AgentType, cfg.ProviderType)...)
 		}
 		if !isMinimal {
 			lines = append(lines, "Reminder: Follow AGENTS.md rules — memory recall before answering, NO_REPLY when silent, match the user's language.", "")

@@ -533,7 +533,12 @@
     "retrying": "重试中...",
     "done": "完成",
     "fileLabelSOUL": "灵魂与个性",
-    "fileLabelIDENTITY": "身份卡"
+    "fileLabelIDENTITY": "身份卡",
+    "regenerateTitle": "AI 编辑中...",
+    "regenerateCompleted": "编辑完成！",
+    "regenerateFailed": "编辑失败",
+    "regenerateWeavingSoul": "正在更新文件：",
+    "regenerateWait": "AI 正在重写文件，请稍候..."
   },
   "configGroups": {
     "core": "核心",

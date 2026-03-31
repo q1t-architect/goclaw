@@ -62,27 +62,14 @@ func (s *PGKnowledgeGraphStore) Traverse(ctx context.Context, agentID, userID, s
 				e.created_at, e.updated_at,
 				p.depth + 1,
 				p.path || e.id::text,
-				r.relation_type
+				CASE WHEN r.source_entity_id = p.id
+					THEN r.relation_type
+					ELSE '~' || r.relation_type
+				END
 			FROM paths p
-			JOIN kg_relations r ON p.id = r.source_entity_id AND r.agent_id = $2
-			JOIN kg_entities  e ON r.target_entity_id = e.id AND e.agent_id = $2
+			JOIN kg_relations r ON (r.source_entity_id = p.id OR r.target_entity_id = p.id) AND r.agent_id = $2
+			JOIN kg_entities  e ON e.id = (CASE WHEN r.source_entity_id = p.id THEN r.target_entity_id ELSE r.source_entity_id END) AND e.agent_id = $2
 			WHERE p.depth < $%d
-			  AND NOT e.id::text = ANY(p.path)
-
-			UNION ALL
-
-			SELECT
-				e.id, e.agent_id, e.user_id, e.external_id,
-				e.name, e.entity_type, e.description,
-				e.properties, e.source_id, e.confidence,
-				e.created_at, e.updated_at,
-				p.depth + 1,
-				p.path || e.id::text,
-				'~' || r.relation_type
-			FROM paths p
-			JOIN kg_relations r ON p.id = r.target_entity_id AND r.agent_id = $2
-			JOIN kg_entities  e ON r.source_entity_id = e.id AND e.agent_id = $2
-			WHERE p.depth < $%[2]d
 			  AND NOT e.id::text = ANY(p.path)
 		)
 		SELECT
@@ -123,27 +110,14 @@ func (s *PGKnowledgeGraphStore) Traverse(ctx context.Context, agentID, userID, s
 				e.created_at, e.updated_at,
 				p.depth + 1,
 				p.path || e.id::text,
-				r.relation_type
+				CASE WHEN r.source_entity_id = p.id
+					THEN r.relation_type
+					ELSE '~' || r.relation_type
+				END
 			FROM paths p
-			JOIN kg_relations r ON p.id = r.source_entity_id AND r.user_id = $3
-			JOIN kg_entities  e ON r.target_entity_id = e.id AND e.user_id = $3
+			JOIN kg_relations r ON (r.source_entity_id = p.id OR r.target_entity_id = p.id) AND r.user_id = $3
+			JOIN kg_entities  e ON e.id = (CASE WHEN r.source_entity_id = p.id THEN r.target_entity_id ELSE r.source_entity_id END) AND e.user_id = $3
 			WHERE p.depth < $%d
-			  AND NOT e.id::text = ANY(p.path)
-
-			UNION ALL
-
-			SELECT
-				e.id, e.agent_id, e.user_id, e.external_id,
-				e.name, e.entity_type, e.description,
-				e.properties, e.source_id, e.confidence,
-				e.created_at, e.updated_at,
-				p.depth + 1,
-				p.path || e.id::text,
-				'~' || r.relation_type
-			FROM paths p
-			JOIN kg_relations r ON p.id = r.target_entity_id AND r.user_id = $3
-			JOIN kg_entities  e ON r.source_entity_id = e.id AND e.user_id = $3
-			WHERE p.depth < $%[2]d
 			  AND NOT e.id::text = ANY(p.path)
 		)
 		SELECT

@@ -30,6 +30,7 @@ export function AgentDetailPage({ agentId, onBack }: AgentDetailPageProps) {
   const { deleteAgent: deleteAgentById } = useAgents();
   const hb = useAgentHeartbeat(agentId);
   const [summoningOpen, setSummoningOpen] = useState(false);
+  const [summoningMode, setSummoningMode] = useState<"summon" | "regenerate">("summon");
   const [activeTab, setActiveTab] = useState("agent");
   const [deleteOpen, setDeleteOpen] = useState(false);
   const [advancedOpen, setAdvancedOpen] = useState(false);
@@ -37,11 +38,13 @@ export function AgentDetailPage({ agentId, onBack }: AgentDetailPageProps) {
 
   const handleRegenerate = async (prompt: string) => {
     await regenerateAgent(prompt);
+    setSummoningMode("regenerate");
     setSummoningOpen(true);
   };
 
   const handleResummon = async () => {
     await resummonAgent();
+    setSummoningMode("summon");
     setSummoningOpen(true);
   };
 
@@ -130,6 +133,7 @@ export function AgentDetailPage({ agentId, onBack }: AgentDetailPageProps) {
         agentName={title}
         onCompleted={() => {}}
         onResummon={async () => { await resummonAgent(); }}
+        mode={summoningMode}
       />
 
       {heartbeatOpen && (

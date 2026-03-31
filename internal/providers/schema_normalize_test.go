@@ -52,7 +52,8 @@ func TestResolveRefs_Circular(t *testing.T) {
 			},
 		},
 	}
-	result := NormalizeSchema("openai", schema)
+	// Use "anthropic" to test ref resolution in isolation (no strict mode transform).
+	result := NormalizeSchema("anthropic", schema)
 	node := prop(result, "node")
 	if node == nil {
 		t.Fatal("expected node property")
@@ -77,7 +78,8 @@ func TestResolveRefs_LegacyDefinitions(t *testing.T) {
 			"Item": map[string]any{"type": "string"},
 		},
 	}
-	result := NormalizeSchema("openai", schema)
+	// Use "anthropic" to test ref resolution in isolation (no strict mode transform).
+	result := NormalizeSchema("anthropic", schema)
 	item := prop(result, "item")
 	if item == nil || item["type"] != "string" {
 		t.Error("expected definitions/ ref resolved to string type")
@@ -407,6 +409,123 @@ func TestNormalizeSchema_DoesNotMutateOriginal(t *testing.T) {
 	after, _ := json.Marshal(schema)
 	if string(original) != string(after) {
 		t.Error("NormalizeSchema should not mutate the original schema")
+	}
+}
+
+// ---------------------------------------------------------------------------
+// Strict tool mode
+// ---------------------------------------------------------------------------
+
+func TestApplyStrictMode_Basic(t *testing.T) {
+	schema := map[string]any{
+		"type": "object",
+		"properties": map[string]any{
+			"url":     map[string]any{"type": "string", "description": "The URL"},
+			"api_key": map[string]any{"type": "string", "description": "API key"},
+			"timeout": map[string]any{"type": "number", "description": "Timeout"},
+		},
+		"required": []any{"url"},
+	}
+	result := NormalizeSchema("openai", schema)
+
+	// All properties should be required.
+	reqArr, _ := result["required"].([]any)
+	reqSet := make(map[string]bool, len(reqArr))
+	for _, r := range reqArr {
+		reqSet[r.(string)] = true
+	}
+	for _, name := range []string{"url", "api_key", "timeout"} {
+		if !reqSet[name] {
+			t.Errorf("expected %q in required array", name)
+		}
+	}
+
+	// additionalProperties should be false.
+	if result["additionalProperties"] != false {
+		t.Error("expected additionalProperties:false")
+	}
+
+	// Required param 'url' should keep original type.
+	urlProp := prop(result, "url")
+	if urlProp["type"] != "string" {
+		t.Errorf("expected url type:string, got %v", urlProp["type"])
+	}
+
+	// Optional params should be nullable.
+	apiKeyProp := prop(result, "api_key")
+	apiKeyType, ok := apiKeyProp["type"].([]any)
+	if !ok {
+		t.Fatalf("expected api_key type to be array, got %T: %v", apiKeyProp["type"], apiKeyProp["type"])
+	}
+	hasNull := false
+	for _, v := range apiKeyType {
+		if v == "null" {
+			hasNull = true
+		}
+	}
+	if !hasNull {
+		t.Error("expected api_key type to include 'null'")
+	}
+
+	timeoutProp := prop(result, "timeout")
+	timeoutType, ok := timeoutProp["type"].([]any)
+	if !ok {
+		t.Fatalf("expected timeout type to be array, got %T", timeoutProp["type"])
+	}
+	hasNull = false
+	for _, v := range timeoutType {
+		if v == "null" {
+			hasNull = true
+		}
+	}
+	if !hasNull {
+		t.Error("expected timeout type to include 'null'")
+	}
+}
+
+func TestApplyStrictMode_NestedObject(t *testing.T) {
+	schema := map[string]any{
+		"type": "object",
+		"properties": map[string]any{
+			"config": map[string]any{
+				"type": "object",
+				"properties": map[string]any{
+					"key": map[string]any{"type": "string"},
+				},
+			},
+		},
+		"required": []any{},
+	}
+	result := NormalizeSchema("openai", schema)
+
+	// Nested object should also have additionalProperties:false.
+	config := prop(result, "config")
+	if config == nil {
+		t.Fatal("expected config property")
+	}
+	if config["additionalProperties"] != false {
+		t.Error("expected nested object to have additionalProperties:false")
+	}
+}
+
+func TestApplyStrictMode_SkipsAnthropic(t *testing.T) {
+	schema := map[string]any{
+		"type": "object",
+		"properties": map[string]any{
+			"url":    map[string]any{"type": "string"},
+			"debug":  map[string]any{"type": "boolean"},
+		},
+		"required": []any{"url"},
+	}
+	result := NormalizeSchema("anthropic", schema)
+
+	// Anthropic should NOT get strict mode transforms.
+	if result["additionalProperties"] == false {
+		t.Error("Anthropic should not have additionalProperties:false")
+	}
+	debugProp := prop(result, "debug")
+	if debugProp["type"] != "boolean" {
+		t.Error("Anthropic should keep original type (no nullable transform)")
 	}
 }
 

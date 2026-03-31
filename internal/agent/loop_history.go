@@ -202,10 +202,9 @@ func (l *Loop) buildMessages(ctx context.Context, history []providers.Message, s
 		}
 		toolNames = filtered
 	}
-	var mcpToolDescs map[string]string
-	if !hasMCPToolSearch {
-		mcpToolDescs = l.buildMCPToolDescs(toolNames)
-	}
+	// Always build MCP tool descriptions for inline tools — in hybrid search
+	// mode the kept inline tools still need descriptions in the system prompt.
+	mcpToolDescs := l.buildMCPToolDescs(toolNames)
 
 	// Bootstrap DM mode: only restrict tools for open agents (identity being created).
 	// Predefined agents keep full capabilities — BOOTSTRAP.md guides behavior.
@@ -253,6 +252,7 @@ func (l *Loop) buildMessages(ctx context.Context, history []providers.Message, s
 		SandboxWorkspaceAccess: l.sandboxWorkspaceAccess,
 		ShellDenyGroups:        l.shellDenyGroups,
 		SelfEvolve:             l.selfEvolve,
+		ProviderType:           l.provider.Name(),
 		CredentialCLIContext:   l.buildCredentialCLIContext(ctx),
 		IsBootstrap:            hadBootstrap && l.agentType != store.AgentTypePredefined,
 	})
@@ -366,7 +366,7 @@ func filterBootstrapTools(toolNames []string) []string {
 // these limits, inline all skills as XML in the system prompt (like TS).
 // Above these limits, only include skill_search instructions.
 const (
-	skillInlineMaxCount  = 40   // max skills to inline
+	skillInlineMaxCount  = 60   // max skills to inline
 	skillInlineMaxTokens = 5000 // max estimated tokens for skill descriptions
 )
 
