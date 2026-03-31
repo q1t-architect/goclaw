@@ -11,7 +11,7 @@ import (
 	"strconv"
 
 	"github.com/golang-migrate/migrate/v4"
-	_ "github.com/golang-migrate/migrate/v4/database/postgres"
+	"github.com/golang-migrate/migrate/v4/database/postgres"
 	_ "github.com/golang-migrate/migrate/v4/source/file"
 	_ "github.com/jackc/pgx/v5/stdlib"
 	"github.com/spf13/cobra"
@@ -75,6 +75,7 @@ func migrateCmd() *cobra.Command {
 	cmd.AddCommand(migrateForceCmd())
 	cmd.AddCommand(migrateGotoCmd())
 	cmd.AddCommand(migrateDropCmd())
+	cmd.AddCommand(customMigrateCmd())
 
 	return cmd
 }
@@ -255,6 +256,134 @@ func migrateDropCmd() *cobra.Command {
 				return fmt.Errorf("drop: %w", err)
 			}
 			slog.Info("all tables dropped")
+			return nil
+		},
+	}
+}
+
+// --- Custom migration commands (parallel system) ---
+
+var customMigrationsDir string
+
+func resolveCustomMigrationsDirFlag() string {
+	if customMigrationsDir != "" {
+		return customMigrationsDir
+	}
+	return upgrade.ResolveCustomMigrationsDir()
+}
+
+func newCustomMigrator(dsn string) (*migrate.Migrate, error) {
+	dir := resolveCustomMigrationsDirFlag()
+	db, err := sql.Open("pgx", dsn)
+	if err != nil {
+		return nil, fmt.Errorf("custom migrations: connect: %w", err)
+	}
+	driver, err := postgres.WithInstance(db, &postgres.Config{
+		MigrationsTable: "custom_schema_migrations",
+	})
+	if err != nil {
+		return nil, fmt.Errorf("custom migrations: driver: %w", err)
+	}
+	m, err := migrate.NewWithDatabaseInstance("file://"+dir, "postgres", driver)
+	if err != nil {
+		return nil, fmt.Errorf("custom migrations: create: %w", err)
+	}
+	return m, nil
+}
+
+func customMigrateCmd() *cobra.Command {
+	cmd := &cobra.Command{
+		Use:   "custom-migrate",
+		Short: "Custom migration management (parallel to upstream)",
+	}
+
+	cmd.PersistentFlags().StringVar(&customMigrationsDir, "custom-migrations-dir", "", "path to custom migrations directory (default: ./custom-migrations)")
+
+	cmd.AddCommand(customMigrateUpCmd())
+	cmd.AddCommand(customMigrateDownCmd())
+	cmd.AddCommand(customMigrateVersionCmd())
+
+	return cmd
+}
+
+func customMigrateUpCmd() *cobra.Command {
+	return &cobra.Command{
+		Use:   "up",
+		Short: "Apply all pending custom migrations",
+		RunE: func(cmd *cobra.Command, args []string) error {
+			dsn, err := resolveDSN()
+			if err != nil {
+				return err
+			}
+			m, err := newCustomMigrator(dsn)
+			if err != nil {
+				return err
+			}
+			defer m.Close()
+
+			if err := m.Up(); err != nil && !errors.Is(err, migrate.ErrNoChange) {
+				return fmt.Errorf("custom migrate up: %w", err)
+			}
+
+			v, dirty, _ := m.Version()
+			slog.Info("custom migration complete", "version", v, "dirty", dirty)
+			return nil
+		},
+	}
+}
+
+func customMigrateDownCmd() *cobra.Command {
+	var steps int
+	cmd := &cobra.Command{
+		Use:   "down",
+		Short: "Roll back custom migrations (default: 1 step)",
+		RunE: func(cmd *cobra.Command, args []string) error {
+			dsn, err := resolveDSN()
+			if err != nil {
+				return err
+			}
+			m, err := newCustomMigrator(dsn)
+			if err != nil {
+				return err
+			}
+			defer m.Close()
+
+			if steps <= 0 {
+				steps = 1
+			}
+			if err := m.Steps(-steps); err != nil && !errors.Is(err, migrate.ErrNoChange) {
+				return fmt.Errorf("custom migrate down: %w", err)
+			}
+
+			v, dirty, _ := m.Version()
+			slog.Info("custom rollback complete", "version", v, "dirty", dirty)
+			return nil
+		},
+	}
+	cmd.Flags().IntVarP(&steps, "steps", "n", 1, "number of steps to roll back")
+	return cmd
+}
+
+func customMigrateVersionCmd() *cobra.Command {
+	return &cobra.Command{
+		Use:   "version",
+		Short: "Show current custom migration version",
+		RunE: func(cmd *cobra.Command, args []string) error {
+			dsn, err := resolveDSN()
+			if err != nil {
+				return err
+			}
+			m, err := newCustomMigrator(dsn)
+			if err != nil {
+				return err
+			}
+			defer m.Close()
+
+			v, dirty, err := m.Version()
+			if err != nil {
+				return fmt.Errorf("get custom version: %w", err)
+			}
+			fmt.Printf("custom version: %d, dirty: %v\n", v, dirty)
 			return nil
 		},
 	}

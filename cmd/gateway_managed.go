@@ -567,7 +567,15 @@ func buildKGExtractFunc(kgStore store.KnowledgeGraphStore, bts store.BuiltinTool
 			slog.Warn("kg extract: provider not found", "provider", settings.ExtractionProvider, "error", err)
 			return
 		}
-		extractor := kg.NewExtractor(p, settings.ExtractionModel, settings.MinConfidence)
+		// Load custom types from DB for dynamic prompt
+		entityTypes, _ := kgStore.GetEntityTypes(ctx, agentID)
+		relationTypes, _ := kgStore.GetRelationTypes(ctx, agentID)
+		var extractor *kg.Extractor
+		if len(entityTypes) > 0 {
+			extractor = kg.NewExtractorWithTypes(p, settings.ExtractionModel, settings.MinConfidence, entityTypes, relationTypes)
+		} else {
+			extractor = kg.NewExtractor(p, settings.ExtractionModel, settings.MinConfidence)
+		}
 		result, err := extractor.Extract(ctx, content)
 		if err != nil {
 			slog.Warn("kg extract: extraction failed", "agent", agentID, "error", err)
