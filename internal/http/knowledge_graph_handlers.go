@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"strconv"
 
+	kg "github.com/nextlevelbuilder/goclaw/internal/knowledgegraph"
 	"github.com/nextlevelbuilder/goclaw/internal/i18n"
 	"github.com/nextlevelbuilder/goclaw/internal/store"
 )
@@ -179,7 +180,20 @@ func (h *KnowledgeGraphHandler) handleExtract(w http.ResponseWriter, r *http.Req
 		return
 	}
 
-	extractor := h.NewExtractor(r.Context(), body.Provider, body.Model, body.MinConf)
+	// Load custom types for dynamic extraction prompt
+	entityTypes, _ := h.store.GetEntityTypes(r.Context(), agentID)
+	relationTypes, _ := h.store.GetRelationTypes(r.Context(), agentID)
+	var extractor *kg.Extractor
+	if len(entityTypes) > 0 && h.providerReg != nil {
+		p, pErr := h.providerReg.Get(r.Context(), body.Provider)
+		if pErr != nil {
+			writeJSON(w, http.StatusBadRequest, map[string]string{"error": i18n.T(locale, i18n.MsgInvalidProviderOrModel)})
+			return
+		}
+		extractor = kg.NewExtractorWithTypes(p, body.Model, body.MinConf, entityTypes, relationTypes)
+	} else {
+		extractor = h.NewExtractor(r.Context(), body.Provider, body.Model, body.MinConf)
+	}
 	if extractor == nil {
 		writeJSON(w, http.StatusBadRequest, map[string]string{"error": i18n.T(locale, i18n.MsgInvalidProviderOrModel)})
 		return

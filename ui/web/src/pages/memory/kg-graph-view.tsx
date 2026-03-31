@@ -17,7 +17,7 @@ import { forceSimulation, forceLink, forceManyBody, forceCenter, forceCollide, f
 import "@xyflow/react/dist/style.css";
 import { useTranslation } from "react-i18next";
 import { useUiStore } from "@/stores/use-ui-store";
-import type { KGEntity, KGRelation } from "@/types/knowledge-graph";
+import type { KGEntity, KGRelation, KGEntityType } from "@/types/knowledge-graph";
 
 const GRAPH_LIMIT = 50;
 
@@ -59,8 +59,8 @@ function computeDegreeMap(entities: KGEntity[], relations: KGRelation[]): Map<st
 const HANDLE_STYLE = { opacity: 0, width: 0, height: 0, pointerEvents: "none" as const };
 
 // memo prevents re-render during pan/zoom — only re-renders when data changes
-const EntityNode = memo(function EntityNode({ data }: { data: { label: string; type: string; degree: number; isDark: boolean } }) {
-  const tc = TYPE_COLORS[data.type] || DEFAULT_TC;
+const EntityNode = memo(function EntityNode({ data }: { data: { label: string; type: string; degree: number; isDark: boolean; colorMap: Record<string, TypeColor> } }) {
+  const tc = (data.colorMap || TYPE_COLORS)[data.type] || DEFAULT_TC;
   const t = data.isDark ? tc.dark : tc.light;
   const isHub = data.degree >= 4;
   return (
@@ -89,12 +89,12 @@ const nodeTypes = { entity: EntityNode };
 
 interface SimNode extends SimulationNodeDatum { id: string; mass: number }
 
-function buildGraph(entities: KGEntity[], relations: KGRelation[], isDark: boolean) {
+function buildGraph(entities: KGEntity[], relations: KGRelation[], isDark: boolean, colorMap: Record<string, TypeColor>) {
   const entityIds = new Set(entities.map((e) => e.id));
   const degreeMap = computeDegreeMap(entities, relations);
   const nodes: Node[] = entities.map((e) => ({
     id: e.id, type: "entity", position: { x: 0, y: 0 },
-    data: { label: e.name, type: e.entity_type, degree: degreeMap.get(e.id) ?? 0, isDark },
+    data: { label: e.name, type: e.entity_type, degree: degreeMap.get(e.id) ?? 0, isDark, colorMap },
   }));
   // Edge color handled by ReactFlow colorMode — use neutral gray
   const edgeColor = "#64748b";
@@ -140,6 +140,7 @@ function computeForceLayout(nodes: Node[], edges: Edge[], entities: KGEntity[]):
 interface KGGraphViewProps {
   entities: KGEntity[];
   relations: KGRelation[];
+  entityTypes?: KGEntityType[];
   onEntityClick?: (entity: KGEntity) => void;
 }
 
@@ -151,7 +152,24 @@ export function KGGraphView(props: KGGraphViewProps) {
   );
 }
 
-function KGGraphViewInner({ entities: allEntities, relations: allRelations, onEntityClick }: KGGraphViewProps) {
+// Build a dynamic color map from custom entity types
+function buildColorMap(customTypes?: KGEntityType[]): Record<string, TypeColor> {
+  if (!customTypes || customTypes.length === 0) return TYPE_COLORS;
+  const merged: Record<string, TypeColor> = { ...TYPE_COLORS };
+  for (const ct of customTypes) {
+    if (!ct.color) continue;
+    const hex = ct.color;
+    merged[ct.name] = {
+      border: hex,
+      dark: { bg: hex + "26", text: hex },
+      light: { bg: hex + "18", text: hex },
+    };
+  }
+  return merged;
+}
+
+function KGGraphViewInner({ entities: allEntities, relations: allRelations, entityTypes, onEntityClick }: KGGraphViewProps) {
+  const colorMap = useMemo(() => buildColorMap(entityTypes), [entityTypes]);
   const { t } = useTranslation("memory");
   const { fitView } = useReactFlow();
   const theme = useUiStore((s) => s.theme);
@@ -178,7 +196,7 @@ function KGGraphViewInner({ entities: allEntities, relations: allRelations, onEn
 
   // Build graph — isDark only affects node data colors, not layout
   const { rawNodes, rawEdges } = useMemo(() => {
-    const { nodes, edges } = buildGraph(entities, relations, isDark);
+    const { nodes, edges } = buildGraph(entities, relations, isDark, colorMap);
     return { rawNodes: nodes, rawEdges: edges };
   }, [entities, relations, isDark]);
 
@@ -228,7 +246,8 @@ function KGGraphViewInner({ entities: allEntities, relations: allRelations, onEn
       return;
     }
     const ent = entityMap.get(selectedNodeId);
-    const tc = TYPE_COLORS[ent?.entity_type ?? ""] || DEFAULT_TC;
+    const localColorMap = buildColorMap(entityTypes);
+    const tc = localColorMap[ent?.entity_type ?? ""] || DEFAULT_TC;
     const labelColor = isDark ? tc.dark.text : tc.light.text;
     const fadedEdge = isDark ? "#1e293b" : "#e2e8f0";
     const labelBg = isDark ? "rgba(15,23,42,0.85)" : "rgba(255,255,255,0.9)";
