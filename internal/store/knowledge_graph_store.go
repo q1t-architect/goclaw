@@ -100,8 +100,70 @@ type KnowledgeGraphStore interface {
 
 	Stats(ctx context.Context, agentID, userID string) (*GraphStats, error)
 
+	// Type management
+	GetEntityTypes(ctx context.Context, agentID string) ([]EntityType, error)
+	UpsertEntityType(ctx context.Context, et *EntityType) error
+	DeleteEntityType(ctx context.Context, agentID, typeID string) error
+
+	GetRelationTypes(ctx context.Context, agentID string) ([]RelationType, error)
+	UpsertRelationType(ctx context.Context, rt *RelationType) error
+	DeleteRelationType(ctx context.Context, agentID, typeID string) error
+
+	// SeedKGTypes seeds default types for an agent from a preset.
+	// Presets: "general" (10+22 default types), "legal", "development", "empty" (no-op).
+	SeedKGTypes(ctx context.Context, agentID string, preset string) error
+
 	// SetEmbeddingProvider configures the embedding provider for semantic search.
 	SetEmbeddingProvider(provider EmbeddingProvider)
 
 	Close() error
+}
+
+// PropertyField describes one custom field in a type's properties_schema.
+type PropertyField struct {
+	Key        string   `json:"key"`
+	Label      string   `json:"label"`
+	Type       string   `json:"type"` // "string", "number", "date", "enum"
+	Required   bool     `json:"required"`
+	EnumValues []string `json:"enum_values,omitempty"`
+}
+
+// EntityType represents a custom entity type definition.
+type EntityType struct {
+	ID               string           `json:"id"`
+	AgentID          string           `json:"agent_id"`
+	Name             string           `json:"name"`              // slug: "person", "contract"
+	DisplayName      string           `json:"display_name"`      // "Person", "Contract"
+	Color            string           `json:"color"`             // "#E85D24"
+	Icon             string           `json:"icon,omitempty"`    // "user", "file"
+	Description      string           `json:"description"`       // Description for LLM prompt
+	PropertiesSchema []PropertyField  `json:"properties_schema,omitempty"`
+	IsSystem         bool             `json:"is_system"`
+	SortOrder        int              `json:"sort_order"`
+	CreatedAt        int64            `json:"created_at"`
+	UpdatedAt        int64            `json:"updated_at"`
+}
+
+// RelationType represents a custom relation type definition.
+type RelationType struct {
+	ID               string           `json:"id"`
+	AgentID          string           `json:"agent_id"`
+	Name             string           `json:"name"`              // "works_on", "governs"
+	DisplayName      string           `json:"display_name"`      // "Works on"
+	Color            string           `json:"color"`
+	Directed         bool             `json:"directed"`
+	Description      string           `json:"description"`
+	PropertiesSchema []PropertyField  `json:"properties_schema,omitempty"`
+	IsSystem         bool             `json:"is_system"`
+	SortOrder        int              `json:"sort_order"`
+	CreatedAt        int64            `json:"created_at"`
+	UpdatedAt        int64            `json:"updated_at"`
+}
+
+// KGTypePreset defines a named preset of entity + relation types.
+type KGTypePreset struct {
+	Name          string        `json:"name"`
+	DisplayName   string        `json:"display_name"`
+	EntityTypes   []EntityType  `json:"entity_types"`
+	RelationTypes []RelationType `json:"relation_types"`
 }
