@@ -93,7 +93,5 @@ export const queryKeys = {
     stats: (agentId: string, userId?: string) => ["kg", "stats", agentId, userId] as const,
     graph: (agentId: string, userId?: string) => ["kg", "graph", agentId, userId] as const,
     dedup: (agentId: string, userId?: string) => ["kg", "dedup", agentId, userId] as const,
-    entityTypes: (agentId: string) => ["kg", "entity-types", agentId] as const,
-    relationTypes: (agentId: string) => ["kg", "relation-types", agentId] as const,
   },
 };
