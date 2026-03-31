@@ -9,6 +9,7 @@ import (
 
 	"github.com/nextlevelbuilder/goclaw/internal/bus"
 	"github.com/nextlevelbuilder/goclaw/internal/config"
+	"github.com/nextlevelbuilder/goclaw/internal/upgrade"
 	"github.com/nextlevelbuilder/goclaw/internal/store"
 	"github.com/nextlevelbuilder/goclaw/internal/store/pg"
 	"github.com/nextlevelbuilder/goclaw/internal/tracing"
@@ -31,6 +32,11 @@ func setupStoresAndTracing(
 		os.Exit(1)
 	}
 
+
+	if err := upgrade.RunCustomMigrations(cfg.Database.PostgresDSN); err != nil {
+		slog.Error("custom migrations failed", "error", err)
+		os.Exit(1)
+	}
 	storeCfg := store.StoreConfig{
 		PostgresDSN:      cfg.Database.PostgresDSN,
 		EncryptionKey:    os.Getenv("GOCLAW_ENCRYPTION_KEY"),
