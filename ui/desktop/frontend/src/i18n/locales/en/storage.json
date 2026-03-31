@@ -26,5 +26,8 @@
   "newFolderPlaceholder": "Folder name",
   "folderCreated": "Folder created",
   "folderCreateFailed": "Failed to create folder",
-  "folderAlreadyExists": "A folder with that name already exists"
+  "folderAlreadyExists": "A folder with that name already exists",
+  "rename": "Rename",
+  "renamed": "Renamed successfully",
+  "renameFailed": "Failed to rename"
 }

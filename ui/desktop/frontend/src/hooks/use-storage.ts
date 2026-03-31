@@ -67,8 +67,8 @@ export function useStorage() {
     await api.uploadFile(`/v1/storage/files${params}`, file)
   }, [])
 
-  const moveFile = useCallback(async (fromPath: string, toFolder: string) => {
-    const fileName = fromPath.split('/').pop() ?? fromPath
+  const moveFile = useCallback(async (fromPath: string, toFolder: string, newName?: string) => {
+    const fileName = newName ?? fromPath.split('/').pop() ?? fromPath
     const newPath = toFolder ? `${toFolder}/${fileName}` : fileName
     if (fromPath === newPath) return
     const api = getApiClient()

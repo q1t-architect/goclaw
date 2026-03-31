@@ -25,13 +25,16 @@ interface StorageFileBrowserProps {
   newFolderParent: string | null
   onNewFolder: (parent: string | null) => void
   onCreateFolder: (name: string) => void
+  renamingPath: string | null
+  onRename: (path: string, newName: string) => void
+  onRenamingPathChange: (path: string | null) => void
   showSize?: boolean
 }
 
 export function StorageFileBrowser({
   tree, filesLoading, activePath, onSelect,
   contentLoading, fileContent,
-  onDelete, onLoadMore, onMove, onDownload, fetchBlob, expandedPaths, onToggleExpand, newFolderParent, onNewFolder, onCreateFolder, showSize,
+  onDelete, onLoadMore, onMove, onDownload, fetchBlob, expandedPaths, onToggleExpand, newFolderParent, onNewFolder, onCreateFolder, renamingPath, onRename, onRenamingPathChange, showSize,
 }: StorageFileBrowserProps) {
   const { t } = useTranslation('common')
   const containerRef = useRef<HTMLDivElement>(null)
@@ -78,6 +81,9 @@ export function StorageFileBrowser({
           newFolderParent={newFolderParent}
           onNewFolder={onNewFolder}
           onCreateFolder={onCreateFolder}
+          renamingPath={renamingPath}
+          onRename={onRename}
+          onRenamingPathChange={onRenamingPathChange}
           showSize={showSize}
         />
       </div>

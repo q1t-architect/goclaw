@@ -155,16 +155,57 @@ function NewFolderInput({ onCreate, onCancel }: { onCreate: (name: string) => vo
   )
 }
 
+
+// --- RenameInput ---
+
+function RenameInput({ currentName, onRename, onCancel }: { currentName: string; onRename: (name: string) => void; onCancel: () => void }) {
+  const [name, setName] = useState(currentName)
+  const inputRef = useRef<HTMLInputElement>(null)
+  const committedRef = useRef(false)
+
+  useEffect(() => {
+    const el = inputRef.current
+    if (el) {
+      el.focus()
+      // Select name without extension for files
+      const dotIdx = currentName.lastIndexOf('.')
+      el.setSelectionRange(0, dotIdx > 0 ? dotIdx : currentName.length)
+    }
+  }, [currentName])
+
+  const commit = useCallback(() => {
+    if (committedRef.current) return
+    committedRef.current = true
+    if (name.trim() && name.trim() !== currentName) onRename(name.trim())
+    else onCancel()
+  }, [name, currentName, onRename, onCancel])
+
+  return (
+    <input
+      ref={inputRef}
+      className="flex-1 min-w-0 bg-surface-primary border border-accent rounded px-1 py-0 text-xs text-text-primary outline-none"
+      value={name}
+      onChange={(e) => setName(e.target.value)}
+      onKeyDown={(e) => {
+        if (e.key === 'Enter') commit()
+        if (e.key === 'Escape') { committedRef.current = true; onCancel() }
+      }}
+      onBlur={commit}
+    />
+  )
+}
+
 // --- TreeItem ---
 
 function TreeItem({
-  node, depth, activePath, onSelect, onDelete, onLoadMore, dndEnabled, autoExpandPath, expandedPaths, onToggleExpand, newFolderParent, onNewFolder, onCreateFolder, showSize,
+  node, depth, activePath, onSelect, onDelete, onLoadMore, dndEnabled, autoExpandPath, expandedPaths, onToggleExpand, newFolderParent, onNewFolder, onCreateFolder, renamingPath, onRename, onRenamingPathChange, showSize,
 }: {
   node: TreeNode; depth: number; activePath: string | null
   onSelect: (path: string) => void; onDelete?: (path: string, isDir: boolean) => void
   onLoadMore?: (path: string) => void; dndEnabled: boolean; autoExpandPath: string | null
   expandedPaths: Set<string>; onToggleExpand: (path: string, expanded: boolean) => void
   newFolderParent: string | null; onNewFolder: (parent: string | null) => void; onCreateFolder: (name: string) => void
+  renamingPath: string | null; onRename: (path: string, newName: string) => void; onRenamingPathChange: (path: string | null) => void
   showSize?: boolean
 }) {
   const { t } = useTranslation('common')
@@ -218,7 +259,18 @@ function TreeItem({
         >
           <ChevronRightIcon className={`h-3 w-3 shrink-0 transition-transform ${expanded ? 'rotate-90' : ''}`} />
           <FolderIcon open={expanded} />
-          <span className="truncate text-text-primary">{node.name}</span>
+          {renamingPath === node.path ? (
+            <RenameInput
+              currentName={node.name}
+              onRename={(newName) => onRename(node.path, newName)}
+              onCancel={() => onRenamingPathChange(null)}
+            />
+          ) : (
+            <span
+              className="truncate text-text-primary"
+              onDoubleClick={(e) => { e.stopPropagation(); if (!node.protected) onRenamingPathChange(node.path) }}
+            >{node.name}</span>
+          )}
           {node.loading && <SpinnerIcon />}
           {sizeLabel}
           {deleteBtn}
@@ -228,7 +280,8 @@ function TreeItem({
             key={child.path} node={child} depth={depth + 1} activePath={activePath}
             onSelect={onSelect} onDelete={onDelete} onLoadMore={onLoadMore}
             dndEnabled={dndEnabled} autoExpandPath={autoExpandPath} expandedPaths={expandedPaths} onToggleExpand={onToggleExpand}
-            newFolderParent={newFolderParent} onNewFolder={onNewFolder} onCreateFolder={onCreateFolder} showSize={showSize}
+            newFolderParent={newFolderParent} onNewFolder={onNewFolder} onCreateFolder={onCreateFolder}
+            renamingPath={renamingPath} onRename={onRename} onRenamingPathChange={onRenamingPathChange} showSize={showSize}
           />
         ))}
         {expanded && node.hasChildren && node.children.length === 0 && !node.loading && (
@@ -269,7 +322,18 @@ function TreeItem({
       onClick={() => onSelect(node.path)}
     >
       <FileIcon name={node.name} />
-      <span className="truncate">{node.name}</span>
+      {renamingPath === node.path ? (
+        <RenameInput
+          currentName={node.name}
+          onRename={(newName) => onRename(node.path, newName)}
+          onCancel={() => onRenamingPathChange(null)}
+        />
+      ) : (
+        <span
+          className="truncate"
+          onDoubleClick={(e) => { e.stopPropagation(); if (!node.protected) onRenamingPathChange(node.path) }}
+        >{node.name}</span>
+      )}
       {sizeLabel}
       {deleteBtn}
     </div>
@@ -309,11 +373,14 @@ interface FileTreePanelProps {
   newFolderParent: string | null
   onNewFolder: (parent: string | null) => void
   onCreateFolder: (name: string) => void
+  renamingPath: string | null
+  onRename: (path: string, newName: string) => void
+  onRenamingPathChange: (path: string | null) => void
   showSize?: boolean
 }
 
 export function FileTreePanel({
-  tree, filesLoading, activePath, onSelect, onDelete, onLoadMore, onMove, expandedPaths, onToggleExpand, newFolderParent, onNewFolder, onCreateFolder, showSize,
+  tree, filesLoading, activePath, onSelect, onDelete, onLoadMore, onMove, expandedPaths, onToggleExpand, newFolderParent, onNewFolder, onCreateFolder, renamingPath, onRename, onRenamingPathChange, showSize,
 }: FileTreePanelProps) {
   const { t } = useTranslation('common')
   const dndEnabled = !!onMove
@@ -405,6 +472,7 @@ export function FileTreePanel({
               onSelect={onSelect} onDelete={onDelete} onLoadMore={onLoadMore}
               dndEnabled showSize={showSize} autoExpandPath={autoExpandPath} expandedPaths={expandedPaths} onToggleExpand={onToggleExpand}
               newFolderParent={newFolderParent} onNewFolder={onNewFolder} onCreateFolder={onCreateFolder}
+              renamingPath={renamingPath} onRename={onRename} onRenamingPathChange={onRenamingPathChange}
             />
           ))}
         </RootDropZone>
@@ -420,6 +488,7 @@ export function FileTreePanel({
               onSelect={onSelect} onDelete={onDelete} onLoadMore={onLoadMore}
               dndEnabled={false} showSize={showSize} autoExpandPath={null} expandedPaths={expandedPaths} onToggleExpand={onToggleExpand}
               newFolderParent={newFolderParent} onNewFolder={onNewFolder} onCreateFolder={onCreateFolder}
+              renamingPath={renamingPath} onRename={onRename} onRenamingPathChange={onRenamingPathChange}
             />
           ))}
         </>

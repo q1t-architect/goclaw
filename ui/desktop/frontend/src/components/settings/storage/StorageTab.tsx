@@ -32,6 +32,7 @@ export function StorageTab() {
   const [expandedPaths, setExpandedPaths] = useState<Set<string>>(new Set())
   const initialExpandDone = useRef(false)
   const [newFolderParent, setNewFolderParent] = useState<string | null>(null)
+  const [renamingPath, setRenamingPath] = useState<string | null>(null)
 
   // Rebuild tree when files change — expanded state persists via expandedPaths
   useEffect(() => {
@@ -189,6 +190,45 @@ export function StorageTab() {
     setNewFolderParent(null)
   }, [createFolder, newFolderParent, listFiles])
 
+  // Rename a file or folder
+  const handleRename = useCallback(async (path: string, newName: string) => {
+    if (!newName.trim() || !renamingPath) { setRenamingPath(null); return }
+    const currentName = path.split('/').pop() ?? path
+    if (newName.trim() === currentName) { setRenamingPath(null); return }
+    const parentPath = path.includes('/') ? path.substring(0, path.lastIndexOf('/')) : ''
+    try {
+      await moveFile(path, parentPath, newName.trim())
+      // Update activePath if renamed file was active
+      const newPath = parentPath ? `${parentPath}/${newName.trim()}` : newName.trim()
+      if (activePath === path) {
+        setActivePath(newPath)
+        if (fileContent?.path === path) setFileContent({ ...fileContent, path: newPath })
+      } else if (activePath?.startsWith(path + '/')) {
+        const updatedActive = newPath + activePath.slice(path.length)
+        setActivePath(updatedActive)
+        if (fileContent?.path === activePath) setFileContent({ ...fileContent, path: updatedActive })
+      }
+      // Update expandedPaths: replace old prefix with new
+      if (newPath !== path) {
+        setExpandedPaths(prev => {
+          const next = new Set<string>()
+          for (const p of prev) {
+            if (p === path) {
+              next.add(newPath)
+            } else if (p.startsWith(path + '/')) {
+              next.add(newPath + p.slice(path.length))
+            } else {
+              next.add(p)
+            }
+          }
+          return next
+        })
+      }
+      listFiles({ silent: true })
+    } catch { /* error handled by API */ }
+    setRenamingPath(null)
+  }, [renamingPath, moveFile, listFiles, activePath, fileContent])
+
   // Active folder for scoped uploads
   const activeFolder = useMemo(() => {
     if (!activePath) return ''
@@ -254,6 +294,9 @@ export function StorageTab() {
           newFolderParent={newFolderParent}
           onNewFolder={setNewFolderParent}
           onCreateFolder={handleCreateFolder}
+          renamingPath={renamingPath}
+          onRename={handleRename}
+          onRenamingPathChange={setRenamingPath}
           showSize
         />
       </div>
