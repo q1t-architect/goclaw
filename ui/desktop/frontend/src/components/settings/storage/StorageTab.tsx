@@ -4,7 +4,7 @@
 import { useState, useEffect, useCallback, useMemo, useRef } from 'react'
 import { useTranslation } from 'react-i18next'
 import { useStorage, useStorageSize } from '../../../hooks/use-storage'
-import { buildTree, mergeSubtree, setNodeLoading, formatSize, isTextFile, getSelectedPaths, clearAllSelections } from '../../../lib/file-helpers'
+import { buildTree, mergeSubtree, setNodeLoading, formatSize, isTextFile } from '../../../lib/file-helpers'
 import { getApiClient } from '../../../lib/api'
 import { wails } from '../../../lib/wails'
 import { ConfirmDialog } from '../../common/ConfirmDialog'
@@ -177,7 +177,7 @@ export function StorageTab() {
   const handleToggleExpand = useCallback((path: string, expanded: boolean) => {
     setExpandedPaths(prev => {
       const next = new Set(prev)
-      if (expanded) next.add(path) else next.delete(path)
+      if (expanded) { next.add(path) } else { next.delete(path) }
       return next
     })
   }, [])
@@ -186,7 +186,7 @@ export function StorageTab() {
   const handleSelectNode = useCallback((path: string, selected: boolean) => {
     setSelectedPaths(prev => {
       const next = new Set(prev)
-      if (selected) next.add(path) else next.delete(path)
+      if (selected) { next.add(path) } else { next.delete(path) }
       return next
     })
   }, [])
