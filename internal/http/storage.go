@@ -52,6 +52,7 @@ func (h *StorageHandler) RegisterRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("GET /v1/storage/size", h.auth(h.handleSize))
 	mux.HandleFunc("POST /v1/storage/files", requireAuth(permissions.RoleAdmin, h.handleUpload))
 	mux.HandleFunc("PUT /v1/storage/move", requireAuth(permissions.RoleAdmin, h.handleMove))
+	mux.HandleFunc("POST /v1/storage/mkdir", requireAuth(permissions.RoleAdmin, h.handleMkdir))
 }
 
 func (h *StorageHandler) auth(next http.HandlerFunc) http.HandlerFunc {
@@ -595,5 +596,56 @@ func (h *StorageHandler) handleMove(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, map[string]any{
 		"from": fromRel,
 		"to":   toRel,
+	})
+}
+
+// handleMkdir creates a new directory (and any intermediate directories) in the storage data directory.
+// Admin-only. Query param: ?path=relative/path/to/new/folder
+func (h *StorageHandler) handleMkdir(w http.ResponseWriter, r *http.Request) {
+	locale := extractLocale(r)
+	relPath := r.URL.Query().Get("path")
+	if relPath == "" {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": i18n.T(locale, i18n.MsgRequired, "path")})
+		return
+	}
+	if strings.Contains(relPath, "..") {
+		slog.Warn("security.storage_mkdir_traversal", "path", relPath)
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": i18n.T(locale, i18n.MsgInvalidPath)})
+		return
+	}
+
+	if isProtectedPath(relPath) {
+		writeJSON(w, http.StatusForbidden, map[string]string{"error": i18n.T(locale, i18n.MsgCannotDeleteSkillsDir)})
+		return
+	}
+
+	base := h.tenantBaseDir(r)
+	absPath := filepath.Join(base, filepath.Clean(relPath))
+	if !strings.HasPrefix(absPath, base+string(filepath.Separator)) {
+		slog.Warn("security.storage_mkdir_escape", "resolved", absPath, "root", base)
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": i18n.T(locale, i18n.MsgInvalidPath)})
+		return
+	}
+
+	// Check if already exists
+	if info, err := os.Stat(absPath); err == nil {
+		if info.IsDir() {
+			writeJSON(w, http.StatusConflict, map[string]string{"error": "a folder with that name already exists"})
+		} else {
+			writeJSON(w, http.StatusConflict, map[string]string{"error": "a file with that name already exists"})
+		}
+		return
+	}
+
+	if err := os.MkdirAll(absPath, 0750); err != nil {
+		slog.Error("storage.mkdir_failed", "path", absPath, "error", err)
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": i18n.T(locale, i18n.MsgInternalError, "failed to create directory")})
+		return
+	}
+
+	slog.Info("storage.mkdir", "path", relPath)
+	writeJSON(w, http.StatusOK, map[string]any{
+		"path":   relPath,
+		"status": "created",
 	})
 }

@@ -17,7 +17,7 @@ export function StorageTab() {
   const { t: tc } = useTranslation('common')
   const {
     files, baseDir, loading,
-    listFiles, loadSubtree, readFile, deleteFile, uploadFile, moveFile, fetchRawBlob,
+    listFiles, loadSubtree, readFile, deleteFile, uploadFile, moveFile, createFolder, fetchRawBlob,
   } = useStorage()
   const { totalSize, loading: sizeLoading, refreshSize } = useStorageSize()
 
@@ -31,6 +31,7 @@ export function StorageTab() {
   const [uploadFolder, setUploadFolder] = useState('')
   const [expandedPaths, setExpandedPaths] = useState<Set<string>>(new Set())
   const initialExpandDone = useRef(false)
+  const [newFolderParent, setNewFolderParent] = useState<string | null>(null)
 
   // Rebuild tree when files change — expanded state persists via expandedPaths
   useEffect(() => {
@@ -174,6 +175,20 @@ export function StorageTab() {
     })
   }, [])
 
+  // Create a new folder in the storage tree
+  const handleCreateFolder = useCallback(async (name: string) => {
+    if (!name.trim()) return
+    const parentPath = newFolderParent ?? ''
+    const fullPath = parentPath ? `${parentPath}/${name.trim()}` : name.trim()
+    try {
+      await createFolder(fullPath)
+      // Auto-expand parent to show new folder
+      if (parentPath) setExpandedPaths(prev => { const n = new Set(prev); n.add(parentPath); return n })
+      listFiles({ silent: true })
+    } catch { /* error handled by API */ }
+    setNewFolderParent(null)
+  }, [createFolder, newFolderParent, listFiles])
+
   // Active folder for scoped uploads
   const activeFolder = useMemo(() => {
     if (!activePath) return ''
@@ -236,6 +251,9 @@ export function StorageTab() {
           fetchBlob={handleFetchBlob}
           expandedPaths={expandedPaths}
           onToggleExpand={handleToggleExpand}
+          newFolderParent={newFolderParent}
+          onNewFolder={setNewFolderParent}
+          onCreateFolder={handleCreateFolder}
           showSize
         />
       </div>

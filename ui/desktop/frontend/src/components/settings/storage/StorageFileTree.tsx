@@ -120,15 +120,52 @@ function DragPreview({ name, isDir }: { name: string; isDir: boolean }) {
   )
 }
 
+
+// --- NewFolderInput ---
+
+function NewFolderInput({ onCreate, onCancel }: { onCreate: (name: string) => void; onCancel: () => void }) {
+  const [name, setName] = useState('')
+  const inputRef = useRef<HTMLInputElement>(null)
+
+  useEffect(() => { inputRef.current?.focus() }, [])
+
+  const handleSubmit = useCallback(() => {
+    if (name.trim()) onCreate(name.trim())
+    else onCancel()
+  }, [name, onCreate, onCancel])
+
+  return (
+    <div className="flex items-center gap-1 px-2 py-1" style={{ paddingLeft: '28px' }}>
+      <svg className="h-4 w-4 shrink-0 text-yellow-600" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
+        <path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z" />
+      </svg>
+      <input
+        ref={inputRef}
+        className="flex-1 min-w-0 bg-surface-primary border border-accent rounded px-1 py-0 text-xs text-text-primary outline-none"
+        placeholder="Folder name"
+        value={name}
+        onChange={(e) => setName(e.target.value)}
+        onKeyDown={(e) => {
+          if (e.key === 'Enter') handleSubmit()
+          if (e.key === 'Escape') onCancel()
+        }}
+        onBlur={handleSubmit}
+      />
+    </div>
+  )
+}
+
 // --- TreeItem ---
 
 function TreeItem({
-  node, depth, activePath, onSelect, onDelete, onLoadMore, dndEnabled, autoExpandPath, expandedPaths, onToggleExpand, showSize,
+  node, depth, activePath, onSelect, onDelete, onLoadMore, dndEnabled, autoExpandPath, expandedPaths, onToggleExpand, newFolderParent, onNewFolder, onCreateFolder, showSize,
 }: {
   node: TreeNode; depth: number; activePath: string | null
   onSelect: (path: string) => void; onDelete?: (path: string, isDir: boolean) => void
   onLoadMore?: (path: string) => void; dndEnabled: boolean; autoExpandPath: string | null
-  expandedPaths: Set<string>; onToggleExpand: (path: string, expanded: boolean) => void; showSize?: boolean
+  expandedPaths: Set<string>; onToggleExpand: (path: string, expanded: boolean) => void
+  newFolderParent: string | null; onNewFolder: (parent: string | null) => void; onCreateFolder: (name: string) => void
+  showSize?: boolean
 }) {
   const { t } = useTranslation('common')
   const expanded = expandedPaths.has(node.path)
@@ -190,7 +227,8 @@ function TreeItem({
           <TreeItem
             key={child.path} node={child} depth={depth + 1} activePath={activePath}
             onSelect={onSelect} onDelete={onDelete} onLoadMore={onLoadMore}
-            dndEnabled={dndEnabled} autoExpandPath={autoExpandPath} expandedPaths={expandedPaths} onToggleExpand={onToggleExpand} showSize={showSize}
+            dndEnabled={dndEnabled} autoExpandPath={autoExpandPath} expandedPaths={expandedPaths} onToggleExpand={onToggleExpand}
+            newFolderParent={newFolderParent} onNewFolder={onNewFolder} onCreateFolder={onCreateFolder} showSize={showSize}
           />
         ))}
         {expanded && node.hasChildren && node.children.length === 0 && !node.loading && (
@@ -202,6 +240,9 @@ function TreeItem({
             <SpinnerIcon />
             <span>{t('loadMore')}</span>
           </div>
+        )}
+        {newFolderParent === node.path && (
+          <NewFolderInput onCreate={onCreateFolder} onCancel={() => onNewFolder(null)} />
         )}
       </>
     )
@@ -265,11 +306,14 @@ interface FileTreePanelProps {
   onMove?: (fromPath: string, toFolder: string) => void
   expandedPaths: Set<string>
   onToggleExpand: (path: string, expanded: boolean) => void
+  newFolderParent: string | null
+  onNewFolder: (parent: string | null) => void
+  onCreateFolder: (name: string) => void
   showSize?: boolean
 }
 
 export function FileTreePanel({
-  tree, filesLoading, activePath, onSelect, onDelete, onLoadMore, onMove, expandedPaths, onToggleExpand, showSize,
+  tree, filesLoading, activePath, onSelect, onDelete, onLoadMore, onMove, expandedPaths, onToggleExpand, newFolderParent, onNewFolder, onCreateFolder, showSize,
 }: FileTreePanelProps) {
   const { t } = useTranslation('common')
   const dndEnabled = !!onMove
@@ -331,26 +375,54 @@ export function FileTreePanel({
     return <p className="px-3 py-4 text-xs text-text-muted">{t('noFiles')}</p>
   }
 
+  // New folder button in tree header
+  const newFolderBtn = (
+    <button
+      type="button"
+      className="p-0.5 text-text-muted hover:text-text-primary transition-colors cursor-pointer"
+      title={t('newFolder', 'New Folder')}
+      onClick={() => onNewFolder('')}
+    >
+      <svg className="h-3.5 w-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
+        <path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z" />
+        <line x1="12" y1="11" x2="12" y2="17" />
+        <line x1="9" y1="14" x2="15" y2="14" />
+      </svg>
+    </button>
+  )
+
   const treeContent = (
     <div className="flex-1 min-h-0">
       {dndEnabled ? (
         <RootDropZone>
+          {newFolderBtn}
+          {newFolderParent === '' && (
+            <NewFolderInput onCreate={onCreateFolder} onCancel={() => onNewFolder(null)} />
+          )}
           {tree.map((node) => (
             <TreeItem
               key={node.path} node={node} depth={0} activePath={activePath}
               onSelect={onSelect} onDelete={onDelete} onLoadMore={onLoadMore}
               dndEnabled showSize={showSize} autoExpandPath={autoExpandPath} expandedPaths={expandedPaths} onToggleExpand={onToggleExpand}
+              newFolderParent={newFolderParent} onNewFolder={onNewFolder} onCreateFolder={onCreateFolder}
             />
           ))}
         </RootDropZone>
       ) : (
-        tree.map((node) => (
-          <TreeItem
-            key={node.path} node={node} depth={0} activePath={activePath}
-            onSelect={onSelect} onDelete={onDelete} onLoadMore={onLoadMore}
-            dndEnabled={false} showSize={showSize} autoExpandPath={null} expandedPaths={expandedPaths} onToggleExpand={onToggleExpand}
-          />
-        ))
+        <>
+          {newFolderBtn}
+          {newFolderParent === '' && (
+            <NewFolderInput onCreate={onCreateFolder} onCancel={() => onNewFolder(null)} />
+          )}
+          {tree.map((node) => (
+            <TreeItem
+              key={node.path} node={node} depth={0} activePath={activePath}
+              onSelect={onSelect} onDelete={onDelete} onLoadMore={onLoadMore}
+              dndEnabled={false} showSize={showSize} autoExpandPath={null} expandedPaths={expandedPaths} onToggleExpand={onToggleExpand}
+              newFolderParent={newFolderParent} onNewFolder={onNewFolder} onCreateFolder={onCreateFolder}
+            />
+          ))}
+        </>
       )}
     </div>
   )

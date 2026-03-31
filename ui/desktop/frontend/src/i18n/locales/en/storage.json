@@ -1,7 +1,7 @@
 {
   "title": "Storage",
   "description": "Workspace file browser",
-  "descriptionWithPath": "{{path}} — {{size}}",
+  "descriptionWithPath": "{{path}} \u2014 {{size}}",
   "sizeCacheInfo": "Storage size is cached for 60 minutes",
   "unsupportedFile": "This file type is not supported for preview",
   "download": "Download",
@@ -21,5 +21,10 @@
   "toast": {
     "deleted": "File deleted",
     "deleteFailed": "Failed to delete file"
-  }
+  },
+  "newFolder": "New Folder",
+  "newFolderPlaceholder": "Folder name",
+  "folderCreated": "Folder created",
+  "folderCreateFailed": "Failed to create folder",
+  "folderAlreadyExists": "A folder with that name already exists"
 }

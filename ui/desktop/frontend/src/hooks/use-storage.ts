@@ -77,6 +77,11 @@ export function useStorage() {
     )
   }, [])
 
+  const createFolder = useCallback(async (path: string) => {
+    const api = getApiClient()
+    await api.post(`/v1/storage/mkdir?path=${encodeURIComponent(path)}`)
+  }, [])
+
   const fetchRawBlob = useCallback((path: string, download?: boolean): Promise<Blob> => {
     const api = getApiClient()
     const params: Record<string, string> = { raw: 'true' }
@@ -84,7 +89,7 @@ export function useStorage() {
     return api.fetchBlob(`/v1/storage/files/${encodeURIComponent(path)}`, params)
   }, [])
 
-  return { files, baseDir, loading, listFiles, loadSubtree, readFile, deleteFile, uploadFile, moveFile, fetchRawBlob }
+  return { files, baseDir, loading, listFiles, loadSubtree, readFile, deleteFile, uploadFile, moveFile, createFolder, fetchRawBlob }
 }
 
 interface SizeState {

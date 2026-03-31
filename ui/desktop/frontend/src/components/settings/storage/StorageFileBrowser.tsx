@@ -22,13 +22,16 @@ interface StorageFileBrowserProps {
   fetchBlob?: (path: string) => Promise<Blob>
   expandedPaths: Set<string>
   onToggleExpand: (path: string, expanded: boolean) => void
+  newFolderParent: string | null
+  onNewFolder: (parent: string | null) => void
+  onCreateFolder: (name: string) => void
   showSize?: boolean
 }
 
 export function StorageFileBrowser({
   tree, filesLoading, activePath, onSelect,
   contentLoading, fileContent,
-  onDelete, onLoadMore, onMove, onDownload, fetchBlob, expandedPaths, onToggleExpand, showSize,
+  onDelete, onLoadMore, onMove, onDownload, fetchBlob, expandedPaths, onToggleExpand, newFolderParent, onNewFolder, onCreateFolder, showSize,
 }: StorageFileBrowserProps) {
   const { t } = useTranslation('common')
   const containerRef = useRef<HTMLDivElement>(null)
@@ -72,6 +75,9 @@ export function StorageFileBrowser({
           onMove={onMove}
           expandedPaths={expandedPaths}
           onToggleExpand={onToggleExpand}
+          newFolderParent={newFolderParent}
+          onNewFolder={onNewFolder}
+          onCreateFolder={onCreateFolder}
           showSize={showSize}
         />
       </div>
