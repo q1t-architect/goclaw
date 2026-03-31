@@ -132,7 +132,10 @@ function NewFolderInput({ onCreate, onCancel }: { onCreate: (name: string) => vo
 
   useEffect(() => { inputRef.current?.focus() }, [])
 
+  const committedRef = useRef(false)
   const handleSubmit = useCallback(() => {
+    if (committedRef.current) return
+    committedRef.current = true
     if (name.trim()) onCreate(name.trim())
     else onCancel()
   }, [name, onCreate, onCancel])
@@ -416,6 +419,7 @@ export function FileTreePanel({
   tree, filesLoading, activePath, onSelect, onDelete, onLoadMore, onMove, expandedPaths, onToggleExpand, newFolderParent, onNewFolder, onCreateFolder, renamingPath, onRename, onRenamingPathChange, selectedPaths, onSelectNode, onDeleteSelected, onClearSelection, showSize,
 }: FileTreePanelProps) {
   const { t } = useTranslation('common')
+  const { t: ts } = useTranslation('storage')
   const dndEnabled = !!onMove
   const [activeId, setActiveId] = useState<string | null>(null)
   const [autoExpandPath, setAutoExpandPath] = useState<string | null>(null)
@@ -486,7 +490,7 @@ export function FileTreePanel({
   const selectedCount = selectedPaths.size
   const batchBar = selectedCount > 0 && (
     <div className="flex items-center gap-2 px-2 py-1.5 border-b border-border text-xs text-text-secondary">
-      <span className="text-text-muted">{selectedCount} selected</span>
+      <span className="text-text-muted">{ts('batch.selectedCount', { count: selectedCount })}</span>
       {onDeleteSelected && (
         <button
           type="button"
@@ -494,7 +498,7 @@ export function FileTreePanel({
           onClick={onDeleteSelected}
         >
           <TrashIcon />
-          <span>Delete</span>
+          <span>{ts('batch.deleteSelected')}</span>
         </button>
       )}
       <button
@@ -502,7 +506,7 @@ export function FileTreePanel({
         className="px-1.5 py-0.5 text-[11px] hover:bg-surface-tertiary rounded transition-colors cursor-pointer"
         onClick={onClearSelection}
       >
-        Clear
+        {ts('batch.clearSelection')}
       </button>
     </div>
   )

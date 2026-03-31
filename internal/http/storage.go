@@ -2,6 +2,7 @@ package http
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"log/slog"
@@ -697,17 +698,21 @@ func (h *StorageHandler) handleWrite(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Size limit: 1MB
+	// Size limit: 1MB — decode JSON body
 	r.Body = http.MaxBytesReader(w, r.Body, 1<<20)
-	data, err := io.ReadAll(r.Body)
-	if err != nil {
-		if err.Error() == "http: request body too large" {
+	var req struct {
+		Content string `json:"content"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		var maxErr *http.MaxBytesError
+		if errors.As(err, &maxErr) {
 			writeJSON(w, http.StatusRequestEntityTooLarge, map[string]string{"error": i18n.T(locale, i18n.MsgFileTooLarge)})
 			return
 		}
 		writeJSON(w, http.StatusBadRequest, map[string]string{"error": i18n.T(locale, i18n.MsgFailedToReadFile)})
 		return
 	}
+	data := []byte(req.Content)
 
 	// Write with original file permissions
 	if err := os.WriteFile(absPath, data, info.Mode()); err != nil {

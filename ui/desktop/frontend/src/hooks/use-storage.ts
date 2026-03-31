@@ -86,7 +86,7 @@ export function useStorage() {
     const api = getApiClient()
     return api.put<{ path: string; size: number }>(
       `/v1/storage/files/${encodeURIComponent(path)}`,
-      content,
+      { content },
     )
   }, [])
 

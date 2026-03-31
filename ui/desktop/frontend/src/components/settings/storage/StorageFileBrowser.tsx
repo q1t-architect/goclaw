@@ -5,7 +5,7 @@ import { useState, useRef, useCallback } from 'react'
 import { useTranslation } from 'react-i18next'
 import { FileTreePanel } from './StorageFileTree'
 import { FileContentPanel } from './StorageFileViewer'
-import { formatSize } from '../../../lib/file-helpers'
+import { formatSize, isTextFile } from '../../../lib/file-helpers'
 import type { TreeNode } from '../../../lib/file-helpers'
 
 interface StorageFileBrowserProps {
@@ -137,13 +137,7 @@ export function StorageFileBrowser({
                 </>
               ) : (
                 <>
-                  {(() => {
-                    // Import guard: isTextFile check
-                    const name = fileContent.path.split('/').pop() ?? ''
-                    const ext = name.includes('.') ? name.slice(name.lastIndexOf('.') + 1).toLowerCase() : ''
-                    const textExts = new Set(['txt','md','mdx','json','json5','yaml','yml','toml','csv','tsv','xml','html','htm','css','scss','less','js','jsx','ts','tsx','mjs','cjs','go','rs','py','rb','php','java','c','cpp','h','hpp','sh','bash','zsh','fish','ps1','bat','cmd','sql','graphql','gql','vue','svelte','astro','lua','pl','r','swift','kt','dart','makefile','dockerfile','gitignore','env','ini','cfg','conf','log','properties','gradle','cmake'])
-                    const isText = textExts.has(ext) || (!name.includes('.') && name.toLowerCase() !== 'readme')
-                    return isText && fileContent.size <= 1048576 ? (
+                  {isTextFile(fileContent.path) && fileContent.size <= 1048576 ? (
                       <button
                         onClick={onStartEdit}
                         className="p-0.5 text-text-muted hover:text-text-primary transition-colors cursor-pointer"
@@ -154,8 +148,7 @@ export function StorageFileBrowser({
                           <path d="m15 5 4 4" />
                         </svg>
                       </button>
-                    ) : null
-                  })()}
+                    ) : null}
                   {onDownload && (
                     <button
                       onClick={() => onDownload(fileContent.path)}
