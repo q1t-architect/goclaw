@@ -70,6 +70,15 @@ func (p *OpenAIProvider) APIKey() string         { return p.apiKey }
 func (p *OpenAIProvider) APIBase() string        { return p.apiBase }
 func (p *OpenAIProvider) ProviderType() string   { return p.providerType }
 
+// schemaProviderName returns the most specific provider identifier for schema normalization.
+// Prefers providerType (from DB) over name for accurate profile matching.
+func (p *OpenAIProvider) schemaProviderName() string {
+	if p.providerType != "" {
+		return p.providerType
+	}
+	return p.name
+}
+
 // WithProviderType sets the DB provider_type for correct API endpoint routing in media tools.
 func (p *OpenAIProvider) WithProviderType(pt string) *OpenAIProvider {
 	p.providerType = pt
@@ -385,7 +394,7 @@ func (p *OpenAIProvider) buildRequestBody(model string, req ChatRequest, stream 
 	}
 
 	if len(req.Tools) > 0 {
-		body["tools"] = CleanToolSchemas(p.name, req.Tools)
+		body["tools"] = CleanToolSchemas(p.schemaProviderName(), req.Tools)
 		body["tool_choice"] = "auto"
 	}
 

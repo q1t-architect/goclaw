@@ -29,17 +29,20 @@ interface TypeColor {
 }
 const TYPE_COLORS: Record<string, TypeColor> = {
   person:       { border: "#E85D24", dark: { bg: "rgba(232,93,36,0.15)", text: "#f4a574" },  light: { bg: "#fde8d8", text: "#7a2610" } },
+  organization: { border: "#ef4444", dark: { bg: "rgba(239,68,68,0.15)", text: "#fca5a5" },  light: { bg: "#fee2e2", text: "#991b1b" } },
   project:      { border: "#22c55e", dark: { bg: "rgba(34,197,94,0.15)", text: "#86efac" },  light: { bg: "#dcfce7", text: "#166534" } },
+  product:      { border: "#f97316", dark: { bg: "rgba(249,115,22,0.15)", text: "#fdba74" }, light: { bg: "#ffedd5", text: "#9a3412" } },
+  technology:   { border: "#3b82f6", dark: { bg: "rgba(59,130,246,0.15)", text: "#93c5fd" }, light: { bg: "#dbeafe", text: "#1e40af" } },
   task:         { border: "#f59e0b", dark: { bg: "rgba(245,158,11,0.15)", text: "#fcd34d" }, light: { bg: "#fef3c7", text: "#92400e" } },
   event:        { border: "#ec4899", dark: { bg: "rgba(236,72,153,0.15)", text: "#f9a8d4" }, light: { bg: "#fce7f3", text: "#9d174d" } },
+  document:     { border: "#8b5cf6", dark: { bg: "rgba(139,92,246,0.15)", text: "#c4b5fd" }, light: { bg: "#ede9fe", text: "#6d28d9" } },
   concept:      { border: "#a78bfa", dark: { bg: "rgba(167,139,250,0.12)", text: "#c4b5fd" }, light: { bg: "#ede9fe", text: "#5b21b6" } },
   location:     { border: "#14b8a6", dark: { bg: "rgba(20,184,166,0.15)", text: "#5eead4" },  light: { bg: "#ccfbf1", text: "#115e59" } },
-  organization: { border: "#ef4444", dark: { bg: "rgba(239,68,68,0.15)", text: "#fca5a5" },  light: { bg: "#fee2e2", text: "#991b1b" } },
 };
 const DEFAULT_TC: TypeColor = { border: "#9ca3af", dark: { bg: "rgba(156,163,175,0.12)", text: "#d1d5db" }, light: { bg: "#f3f4f6", text: "#374151" } };
 
 const TYPE_MASS: Record<string, number> = {
-  organization: 8, project: 6, person: 4, concept: 3, location: 3, event: 2, task: 1.5,
+  organization: 8, project: 6, product: 5, person: 4, technology: 3.5, concept: 3, location: 3, document: 2.5, event: 2, task: 1.5,
 };
 const DEFAULT_MASS = 2;
 

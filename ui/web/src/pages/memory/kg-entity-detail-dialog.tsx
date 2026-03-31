@@ -1,15 +1,17 @@
-import React, { useState, useEffect, useCallback } from "react";
+import React, { useState, useEffect, useCallback, useMemo } from "react";
 import {
   Dialog,
   DialogContent,
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { GitFork } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { useKGTraversal } from "./hooks/use-knowledge-graph";
+import { KGGraphView } from "./kg-graph-view";
 import type { KGEntity, KGRelation } from "@/types/knowledge-graph";
 
 interface KGEntityDetailDialogProps {
@@ -45,14 +47,44 @@ export function KGEntityDetailDialog({ open, onOpenChange, agentId, entity, getE
     }
   }, [open, entity, loadRelations]);
 
-  const handleTraverse = () => {
+  const handleTraverse = useCallback(() => {
     if (!entity) return;
-    traverse(entity.id, entity.user_id, 2);
-  };
+    traverse(entity.id, entity.user_id, 3);
+  }, [entity, traverse]);
+
+  // Auto-traverse on open
+  useEffect(() => {
+    if (open && entity && traversalResults.length === 0 && !traversing) {
+      traverse(entity.id, entity.user_id, 3);
+    }
+  }, [open, entity]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Build graph data from traversal results
+  const graphData = useMemo(() => {
+    if (!entity || traversalResults.length === 0) return null;
+    const entities = [entity, ...traversalResults.map((r) => r.entity)];
+    const graphRelations: KGRelation[] = traversalResults
+      .filter((r) => r.path.length >= 2 && r.via && r.path[r.path.length - 2])
+      .map((r, i) => {
+        const parentId = r.path[r.path.length - 2]!;
+        const isReverse = r.via.startsWith("~");
+        const relType = isReverse ? r.via.slice(1) : r.via;
+        return {
+          id: `trav-${i}`,
+          agent_id: entity.agent_id,
+          source_entity_id: isReverse ? r.entity.id : parentId,
+          relation_type: relType,
+          target_entity_id: isReverse ? parentId : r.entity.id,
+          confidence: r.entity.confidence,
+          created_at: 0,
+        };
+      });
+    return { entities, relations: graphRelations };
+  }, [entity, traversalResults]);
 
   return (
     <Dialog open={open} onOpenChange={(v) => !traversing && onOpenChange(v)}>
-      <DialogContent aria-describedby={undefined} className="max-w-3xl max-h-[85vh] flex flex-col">
+      <DialogContent aria-describedby={undefined} className="max-w-5xl max-h-[90vh] flex flex-col">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             <span>{entity?.name}</span>
@@ -97,7 +129,7 @@ export function KGEntityDetailDialog({ open, onOpenChange, agentId, entity, getE
             </div>
           )}
 
-          {/* Relations */}
+          {/* Relations tabs */}
           <div>
             <div className="flex items-center justify-between mb-2">
               <h4 className="text-sm font-medium">{t("kg.entity.relations")}</h4>
@@ -106,36 +138,66 @@ export function KGEntityDetailDialog({ open, onOpenChange, agentId, entity, getE
                 {traversing ? t("kg.entity.traversing") : t("kg.entity.traverse")}
               </Button>
             </div>
-            {loadingRels ? (
-              <p className="text-xs text-muted-foreground">{t("kg.entity.loading")}</p>
-            ) : relations.length === 0 ? (
-              <p className="text-xs text-muted-foreground">{t("kg.entity.noRelations")}</p>
-            ) : (
-              <RelationsTable relations={relations} entityId={entity?.id} t={t} />
-            )}
-          </div>
 
-          {/* Traversal results */}
-          {traversalResults.length > 0 && (
-            <div>
-              <h4 className="text-sm font-medium mb-2">
-                {t("kg.entity.traversalResults", { count: traversalResults.length })}
-              </h4>
-              <div className="space-y-1">
-                {traversalResults.map((tr, i) => (
-                  <div key={i} className="flex items-center gap-2 text-xs rounded border p-2">
-                    <Badge variant="outline" className="text-[10px]">depth {tr.depth}</Badge>
-                    {tr.via && <span className="font-mono text-muted-foreground">—[{tr.via}]→</span>}
-                    <span className="font-medium">{tr.entity.name}</span>
-                    <Badge variant="secondary" className="text-[10px]">{tr.entity.entity_type}</Badge>
-                    {tr.entity.description && (
-                      <span className="text-muted-foreground truncate max-w-[200px]">{tr.entity.description}</span>
-                    )}
+            <Tabs defaultValue="table">
+              <TabsList className="mb-2">
+                <TabsTrigger value="table">{t("kg.entity.tabs.table")}</TabsTrigger>
+                <TabsTrigger value="graph">{t("kg.entity.tabs.graph")}</TabsTrigger>
+              </TabsList>
+
+              <TabsContent value="table" className="space-y-3">
+                {loadingRels ? (
+                  <p className="text-xs text-muted-foreground">{t("kg.entity.loading")}</p>
+                ) : relations.length === 0 ? (
+                  <p className="text-xs text-muted-foreground">{t("kg.entity.noRelations")}</p>
+                ) : (
+                  <RelationsTable relations={relations} entityId={entity?.id} t={t} />
+                )}
+
+                {/* Traversal results */}
+                {traversalResults.length > 0 && (
+                  <div>
+                    <h4 className="text-sm font-medium mb-2">
+                      {t("kg.entity.traversalResults", { count: traversalResults.length })}
+                    </h4>
+                    <div className="space-y-1">
+                      {traversalResults.map((tr, i) => (
+                        <div key={i} className="flex items-center gap-2 text-xs rounded border p-2">
+                          <Badge variant="outline" className="text-[10px]">depth {tr.depth}</Badge>
+                          {tr.via && (
+                            tr.via.startsWith("~")
+                              ? <span className="font-mono text-muted-foreground">←[{tr.via.slice(1)}]—</span>
+                              : <span className="font-mono text-muted-foreground">—[{tr.via}]→</span>
+                          )}
+                          <span className="font-medium">{tr.entity.name}</span>
+                          <Badge variant="secondary" className="text-[10px]">{tr.entity.entity_type}</Badge>
+                          {tr.entity.description && (
+                            <span className="text-muted-foreground truncate max-w-[200px]">{tr.entity.description}</span>
+                          )}
+                        </div>
+                      ))}
+                    </div>
                   </div>
-                ))}
-              </div>
-            </div>
-          )}
+                )}
+              </TabsContent>
+
+              <TabsContent value="graph">
+                {traversing ? (
+                  <div className="flex items-center justify-center h-[400px] text-sm text-muted-foreground">
+                    {t("kg.entity.traversing")}...
+                  </div>
+                ) : graphData ? (
+                  <div className="h-[400px]">
+                    <KGGraphView entities={graphData.entities} relations={graphData.relations} />
+                  </div>
+                ) : (
+                  <div className="flex items-center justify-center h-[400px] text-sm text-muted-foreground">
+                    {t("kg.entity.noRelations")}
+                  </div>
+                )}
+              </TabsContent>
+            </Tabs>
+          </div>
         </div>
       </DialogContent>
     </Dialog>

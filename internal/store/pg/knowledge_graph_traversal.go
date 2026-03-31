@@ -68,6 +68,22 @@ func (s *PGKnowledgeGraphStore) Traverse(ctx context.Context, agentID, userID, s
 			JOIN kg_entities  e ON r.target_entity_id = e.id AND e.agent_id = $2
 			WHERE p.depth < $%d
 			  AND NOT e.id::text = ANY(p.path)
+
+			UNION ALL
+
+			SELECT
+				e.id, e.agent_id, e.user_id, e.external_id,
+				e.name, e.entity_type, e.description,
+				e.properties, e.source_id, e.confidence,
+				e.created_at, e.updated_at,
+				p.depth + 1,
+				p.path || e.id::text,
+				'~' || r.relation_type
+			FROM paths p
+			JOIN kg_relations r ON p.id = r.target_entity_id AND r.agent_id = $2
+			JOIN kg_entities  e ON r.source_entity_id = e.id AND e.agent_id = $2
+			WHERE p.depth < $%[2]d
+			  AND NOT e.id::text = ANY(p.path)
 		)
 		SELECT
 			id, agent_id, user_id, external_id,
@@ -112,6 +128,22 @@ func (s *PGKnowledgeGraphStore) Traverse(ctx context.Context, agentID, userID, s
 			JOIN kg_relations r ON p.id = r.source_entity_id AND r.user_id = $3
 			JOIN kg_entities  e ON r.target_entity_id = e.id AND e.user_id = $3
 			WHERE p.depth < $%d
+			  AND NOT e.id::text = ANY(p.path)
+
+			UNION ALL
+
+			SELECT
+				e.id, e.agent_id, e.user_id, e.external_id,
+				e.name, e.entity_type, e.description,
+				e.properties, e.source_id, e.confidence,
+				e.created_at, e.updated_at,
+				p.depth + 1,
+				p.path || e.id::text,
+				'~' || r.relation_type
+			FROM paths p
+			JOIN kg_relations r ON p.id = r.target_entity_id AND r.user_id = $3
+			JOIN kg_entities  e ON r.source_entity_id = e.id AND e.user_id = $3
+			WHERE p.depth < $%[2]d
 			  AND NOT e.id::text = ANY(p.path)
 		)
 		SELECT
