@@ -230,12 +230,15 @@ export function FileContentBody({
 // --- FileContentPanel (loading state + empty state wrapper) ---
 
 export function FileContentPanel({
-  fileContent, contentLoading, fetchBlob, onDownload,
+  fileContent, contentLoading, fetchBlob, onDownload, isEditing, editContent, onEditContentChange,
 }: {
   fileContent: { content: string; path: string; size: number } | null
   contentLoading: boolean
   fetchBlob?: (path: string) => Promise<Blob>
   onDownload?: (path: string) => void
+  isEditing?: boolean
+  editContent?: string
+  onEditContentChange?: (content: string) => void
 }) {
   const { t } = useTranslation('common')
 
@@ -246,6 +249,17 @@ export function FileContentPanel({
           <path d="M21 12a9 9 0 1 1-6.219-8.56" />
         </svg>
       </div>
+    )
+  }
+
+  if (fileContent && isEditing && editContent !== undefined && onEditContentChange) {
+    return (
+      <textarea
+        className="w-full h-full min-h-[300px] bg-surface-primary text-text-primary font-mono text-xs p-3 border border-accent rounded-lg resize-none focus:outline-none focus:border-accent"
+        value={editContent}
+        onChange={(e) => onEditContentChange(e.target.value)}
+        spellCheck={false}
+      />
     )
   }
 

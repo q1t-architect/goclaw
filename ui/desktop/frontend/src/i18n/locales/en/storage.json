@@ -1,7 +1,7 @@
 {
   "title": "Storage",
   "description": "Workspace file browser",
-  "descriptionWithPath": "{{path}} — {{size}}",
+  "descriptionWithPath": "{{path}} \u2014 {{size}}",
   "sizeCacheInfo": "Storage size is cached for 60 minutes",
   "unsupportedFile": "This file type is not supported for preview",
   "download": "Download",
@@ -21,5 +21,27 @@
   "toast": {
     "deleted": "File deleted",
     "deleteFailed": "Failed to delete file"
+  },
+  "newFolder": "New Folder",
+  "newFolderPlaceholder": "Folder name",
+  "folderCreated": "Folder created",
+  "folderCreateFailed": "Failed to create folder",
+  "folderAlreadyExists": "A folder with that name already exists",
+  "rename": "Rename",
+  "renamed": "Renamed successfully",
+  "renameFailed": "Failed to rename",
+  "edit": "Edit",
+  "save": "Save",
+  "cancelEdit": "Cancel",
+  "saving": "Saving...",
+  "fileSaved": "File saved",
+  "saveFailed": "Failed to save file",
+  "fileTooLargeToEdit": "File is too large to edit (max 1MB)",
+  "batch": {
+    "selectedCount": "{{count}} selected",
+    "deleteSelected": "Delete selected",
+    "deleteConfirmTitle": "Delete {{count}} items",
+    "deleteConfirmDesc": "Are you sure you want to delete {{count}} items?",
+    "clearSelection": "Clear"
   }
 }

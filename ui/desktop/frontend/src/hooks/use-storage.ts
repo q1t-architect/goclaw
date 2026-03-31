@@ -67,13 +67,26 @@ export function useStorage() {
     await api.uploadFile(`/v1/storage/files${params}`, file)
   }, [])
 
-  const moveFile = useCallback(async (fromPath: string, toFolder: string) => {
-    const fileName = fromPath.split('/').pop() ?? fromPath
+  const moveFile = useCallback(async (fromPath: string, toFolder: string, newName?: string) => {
+    const fileName = newName ?? fromPath.split('/').pop() ?? fromPath
     const newPath = toFolder ? `${toFolder}/${fileName}` : fileName
     if (fromPath === newPath) return
     const api = getApiClient()
     await api.putRaw(
       `/v1/storage/move?from=${encodeURIComponent(fromPath)}&to=${encodeURIComponent(newPath)}`,
+    )
+  }, [])
+
+  const createFolder = useCallback(async (path: string) => {
+    const api = getApiClient()
+    await api.post(`/v1/storage/mkdir?path=${encodeURIComponent(path)}`)
+  }, [])
+
+  const saveFile = useCallback(async (path: string, content: string) => {
+    const api = getApiClient()
+    return api.put<{ path: string; size: number }>(
+      `/v1/storage/files/${encodeURIComponent(path)}`,
+      { content },
     )
   }, [])
 
@@ -84,7 +97,7 @@ export function useStorage() {
     return api.fetchBlob(`/v1/storage/files/${encodeURIComponent(path)}`, params)
   }, [])
 
-  return { files, baseDir, loading, listFiles, loadSubtree, readFile, deleteFile, uploadFile, moveFile, fetchRawBlob }
+  return { files, baseDir, loading, listFiles, loadSubtree, readFile, deleteFile, uploadFile, moveFile, createFolder, saveFile, fetchRawBlob }
 }
 
 interface SizeState {
