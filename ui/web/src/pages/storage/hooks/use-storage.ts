@@ -80,7 +80,20 @@ export function useStorage() {
     [http],
   );
 
-  return { files, baseDir, loading, listFiles, loadSubtree, readFile, deleteFile, fetchRawBlob };
+  // Feature 2: Create folder
+  const createFolder = useCallback(async (path: string) => {
+    await http.post(`/v1/storage/mkdir?path=${encodeURIComponent(path)}`);
+  }, [http]);
+
+  // Feature 4: Save file content
+  const saveFile = useCallback(async (path: string, content: string) => {
+    return http.put<{ path: string; size: number }>(
+      `/v1/storage/files/${encodeURIComponent(path)}`,
+      { content },
+    );
+  }, [http]);
+
+  return { files, baseDir, loading, listFiles, loadSubtree, readFile, deleteFile, fetchRawBlob, createFolder, saveFile };
 }
 
 interface SizeState {

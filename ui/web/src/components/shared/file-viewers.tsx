@@ -277,11 +277,17 @@ export function FileContentPanel({
   contentLoading,
   fetchBlob,
   onDownload,
+  isEditing,
+  editContent,
+  onEditContentChange,
 }: {
   fileContent: { content: string; path: string; size: number } | null;
   contentLoading: boolean;
   fetchBlob?: (path: string) => Promise<Blob>;
   onDownload?: (path: string) => void;
+  isEditing?: boolean;
+  editContent?: string;
+  onEditContentChange?: (content: string) => void;
 }) {
   const { t } = useTranslation("common");
   if (contentLoading) {
@@ -289,6 +295,17 @@ export function FileContentPanel({
       <div className="flex items-center justify-center py-8">
         <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
       </div>
+    );
+  }
+  // Feature 4: Edit mode
+  if (fileContent && isEditing && editContent !== undefined && onEditContentChange) {
+    return (
+      <textarea
+        className="w-full h-full min-h-[300px] bg-background font-mono text-xs p-3 border border-primary rounded-lg resize-none focus:outline-none focus:border-primary"
+        value={editContent}
+        onChange={(e) => onEditContentChange(e.target.value)}
+        spellCheck={false}
+      />
     );
   }
   if (fileContent) {

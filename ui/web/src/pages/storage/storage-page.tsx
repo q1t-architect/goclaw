@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useMemo } from "react";
+import { useState, useEffect, useCallback, useMemo, useRef } from "react";
 import { Info, RefreshCw, Upload } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { toast } from "@/stores/use-toast-store";
@@ -27,7 +27,7 @@ import { useHttp } from "@/hooks/use-ws";
 export function StoragePage() {
   const { t } = useTranslation("storage");
   const http = useHttp();
-  const { files, baseDir, loading, listFiles, loadSubtree, readFile, deleteFile, fetchRawBlob } = useStorage();
+  const { files, baseDir, loading, listFiles, loadSubtree, readFile, deleteFile, fetchRawBlob, createFolder, saveFile } = useStorage();
   const { totalSize, loading: sizeLoading, refreshSize } = useStorageSize();
 
   const [tree, setTree] = useState(buildTree(files));
@@ -38,14 +38,44 @@ export function StoragePage() {
   const [deleting, setDeleting] = useState(false);
   const [uploadOpen, setUploadOpen] = useState(false);
 
-  // Rebuild tree when files change from initial load or refresh
-  useEffect(() => { setTree(buildTree(files)); }, [files]);
+  // Feature 1: Tree state persistence
+  const [expandedPaths, setExpandedPaths] = useState<Set<string>>(new Set());
+  const initialExpandDone = useRef(false);
 
-  // Load file list + size on mount
+  // Feature 2: Folder creation
+  const [newFolderParent, setNewFolderParent] = useState<string | null>(null);
+
+  // Feature 3: Rename
+  const [renamingPath, setRenamingPath] = useState<string | null>(null);
+
+  // Feature 4: File editing
+  const [isEditing, setIsEditing] = useState(false);
+  const [editContent, setEditContent] = useState("");
+  const [saving, setSaving] = useState(false);
+
+  // Feature 5: Multi-select + batch
+  const [selectedPaths, setSelectedPaths] = useState<Set<string>>(new Set());
+
+  // Rebuild tree when files change
+  useEffect(() => {
+    const newTree = buildTree(files);
+    setTree(newTree);
+    if (!initialExpandDone.current && newTree.length > 0) {
+      initialExpandDone.current = true;
+      setExpandedPaths(prev => {
+        const next = new Set(prev);
+        for (const node of newTree) {
+          if (node.isDir) next.add(node.path);
+        }
+        return next;
+      });
+    }
+  }, [files]);
+
+  // Load file list + size on initial render
   useEffect(() => { listFiles(); refreshSize(); }, [listFiles, refreshSize]);
 
   const handleLoadMore = useCallback(async (path: string) => {
-    // Mark node as loading
     setTree((prev) => setNodeLoading(prev, path, true));
     try {
       const children = await loadSubtree(path);
@@ -55,15 +85,26 @@ export function StoragePage() {
     }
   }, [loadSubtree]);
 
-  /** Find a file node's size from the flat files list. */
   const fileSizeMap = useMemo(() => {
     const m = new Map<string, number>();
     for (const f of files) if (!f.isDir) m.set(f.path, f.size);
     return m;
   }, [files]);
 
+  // Feature 1: Toggle expand handler
+  const handleToggleExpand = useCallback((path: string, expanded: boolean) => {
+    setExpandedPaths(prev => {
+      const next = new Set(prev);
+      if (expanded) { next.add(path); } else { next.delete(path); }
+      return next;
+    });
+  }, []);
+
   const handleSelect = useCallback(async (path: string) => {
     setActivePath(path);
+    setIsEditing(false);
+    setEditContent("");
+    if (selectedPaths.size > 0) setSelectedPaths(new Set());
     if (isTextFile(path)) {
       setContentLoading(true);
       try {
@@ -75,12 +116,10 @@ export function StoragePage() {
         setContentLoading(false);
       }
     } else {
-      // For non-text files (images, binaries): don't fetch content — just set metadata.
-      // ImageViewer will fetch the blob separately; UnsupportedViewer just shows size.
       const size = fileSizeMap.get(path) ?? 0;
       setFileContent({ content: "", path, size });
     }
-  }, [readFile, fileSizeMap]);
+  }, [readFile, fileSizeMap, selectedPaths]);
 
   const handleDeleteRequest = useCallback((path: string, isDir: boolean) => {
     setDeleteTarget({ path, isDir });
@@ -102,6 +141,43 @@ export function StoragePage() {
     }
   }, [deleteTarget, deleteFile, listFiles, activePath]);
 
+  // Feature 5: Batch delete
+  const handleBatchDelete = useCallback(() => {
+    setDeleteTarget({ path: `__batch__${selectedPaths.size}`, isDir: false });
+  }, [selectedPaths]);
+
+  const handleBatchDeleteConfirm = useCallback(async () => {
+    setDeleting(true);
+    const paths = Array.from(selectedPaths);
+    try {
+      for (const path of paths) {
+        try { await deleteFile(path); } catch { /* individual errors handled */ }
+      }
+      setSelectedPaths(new Set());
+      setDeleteTarget(null);
+      if (activePath && paths.some(p => activePath === p || activePath.startsWith(p + "/"))) {
+        setActivePath(null);
+        setFileContent(null);
+      }
+      await listFiles();
+    } finally {
+      setDeleting(false);
+    }
+  }, [selectedPaths, deleteFile, listFiles, activePath]);
+
+  // Feature 5: Select/clear
+  const handleSelectNode = useCallback((path: string, selected: boolean) => {
+    setSelectedPaths(prev => {
+      const next = new Set(prev);
+      if (selected) { next.add(path); } else { next.delete(path); }
+      return next;
+    });
+  }, []);
+
+  const handleClearSelection = useCallback(() => {
+    setSelectedPaths(new Set());
+  }, []);
+
   const handleDownload = useCallback(async (path: string) => {
     try {
       const blob = await fetchRawBlob(path, true);
@@ -116,7 +192,6 @@ export function StoragePage() {
     } catch { /* silent fail */ }
   }, [fetchRawBlob]);
 
-  /** Fetch raw blob for image rendering (no download header). */
   const handleFetchBlob = useCallback(async (path: string) => {
     return fetchRawBlob(path, false);
   }, [fetchRawBlob]);
@@ -126,14 +201,12 @@ export function StoragePage() {
     refreshSize();
   }, [listFiles, refreshSize]);
 
-  /** Derive the folder containing the currently selected file (or "" for root). */
   const activeFolder = useMemo(() => {
     if (!activePath) return "";
     const idx = activePath.lastIndexOf("/");
     return idx > 0 ? activePath.slice(0, idx) : "";
   }, [activePath]);
 
-  // uploadFolder is captured when user clicks Upload, so it won't change mid-dialog.
   const [uploadFolder, setUploadFolder] = useState("");
 
   const handleUploadFile = useCallback(async (file: File) => {
@@ -152,14 +225,23 @@ export function StoragePage() {
   const handleMove = useCallback(async (fromPath: string, toFolder: string) => {
     const fileName = fromPath.split("/").pop() ?? fromPath;
     const newPath = toFolder ? `${toFolder}/${fileName}` : fileName;
-    if (fromPath === newPath) return; // no-op: same location
+    if (fromPath === newPath) return;
     try {
       await http.put(`/v1/storage/move?from=${encodeURIComponent(fromPath)}&to=${encodeURIComponent(newPath)}`);
-      // Clear stale selection if the moved item was active.
       if (activePath === fromPath || activePath?.startsWith(fromPath + "/")) {
         setActivePath(null);
         setFileContent(null);
       }
+      setExpandedPaths(prev => {
+        const next = new Set<string>();
+        for (const p of prev) {
+          if (p === fromPath) next.add(newPath);
+          else if (p.startsWith(fromPath + "/")) next.add(newPath + p.slice(fromPath.length));
+          else next.add(p);
+        }
+        return next;
+      });
+      setSelectedPaths(new Set());
       listFiles({ silent: true });
     } catch (err) {
       const msg = err instanceof Error ? err.message : "Move failed";
@@ -167,9 +249,97 @@ export function StoragePage() {
     }
   }, [http, listFiles, activePath]);
 
-  const deleteName = deleteTarget?.path.split("/").pop() ?? "";
+  // Feature 2: Folder creation
+  const handleCreateFolder = useCallback(async (name: string) => {
+    if (!name.trim()) return;
+    const parentPath = newFolderParent ?? "";
+    const fullPath = parentPath ? `${parentPath}/${name.trim()}` : name.trim();
+    try {
+      await createFolder(fullPath);
+      if (parentPath) {
+        setExpandedPaths(prev => { const n = new Set(prev); n.add(parentPath); return n; });
+      }
+      listFiles({ silent: true });
+      toast.success(t("toast.folderCreated"));
+    } catch {
+      toast.error(t("folderCreateFailed"));
+    }
+    setNewFolderParent(null);
+  }, [createFolder, newFolderParent, listFiles, t]);
 
-  // Size description with cache tooltip
+  // Feature 3: Rename
+  const handleRename = useCallback(async (path: string, newName: string) => {
+    if (!newName.trim() || !renamingPath) { setRenamingPath(null); return; }
+    const currentName = path.split("/").pop() ?? path;
+    if (newName.trim() === currentName) { setRenamingPath(null); return; }
+    const parentPath = path.includes("/") ? path.substring(0, path.lastIndexOf("/")) : "";
+    const newPath = parentPath ? `${parentPath}/${newName.trim()}` : newName.trim();
+    try {
+      await http.put(`/v1/storage/move?from=${encodeURIComponent(path)}&to=${encodeURIComponent(newPath)}`);
+      if (activePath === path) {
+        setActivePath(newPath);
+        if (fileContent?.path === path) setFileContent({ ...fileContent, path: newPath });
+      } else if (activePath?.startsWith(path + "/")) {
+        const updatedActive = newPath + activePath.slice(path.length);
+        setActivePath(updatedActive);
+        if (fileContent?.path === activePath) setFileContent({ ...fileContent, path: updatedActive });
+      }
+      if (newPath !== path) {
+        setExpandedPaths(prev => {
+          const next = new Set<string>();
+          for (const p of prev) {
+            if (p === path) next.add(newPath);
+            else if (p.startsWith(path + "/")) next.add(newPath + p.slice(path.length));
+            else next.add(p);
+          }
+          return next;
+        });
+      }
+      setSelectedPaths(new Set());
+      listFiles({ silent: true });
+      toast.success(t("toast.renamed"));
+    } catch {
+      toast.error(t("renameFailed"));
+    }
+    setRenamingPath(null);
+  }, [renamingPath, http, listFiles, activePath, fileContent, t]);
+
+  // Feature 4: Edit handlers
+  const handleStartEdit = useCallback(() => {
+    if (!fileContent) return;
+    setEditContent(fileContent.content);
+    setIsEditing(true);
+  }, [fileContent]);
+
+  const handleCancelEdit = useCallback(() => {
+    setIsEditing(false);
+    setEditContent("");
+  }, []);
+
+  const handleSaveEdit = useCallback(async () => {
+    if (!activePath) return;
+    setSaving(true);
+    try {
+      await saveFile(activePath, editContent);
+      if (isTextFile(activePath)) {
+        const res = await readFile(activePath);
+        setFileContent(res);
+      }
+      setIsEditing(false);
+      setEditContent("");
+      listFiles({ silent: true });
+      toast.success(t("toast.saved"));
+    } catch {
+      toast.error(t("saveFailed"));
+    } finally {
+      setSaving(false);
+    }
+  }, [activePath, editContent, saveFile, readFile, listFiles, t]);
+
+  const isBatchDelete = deleteTarget?.path.startsWith("__batch__") ?? false;
+  const batchCount = isBatchDelete ? Number(deleteTarget?.path.split("__")[2]) : 0;
+  const deleteName = isBatchDelete ? "" : (deleteTarget?.path.split("/").pop() ?? "");
+
   const sizeDescription = useMemo(() => {
     if (!baseDir) return t("description");
     const sizeStr = sizeLoading ? `${formatSize(totalSize)}...` : formatSize(totalSize);
@@ -223,6 +393,25 @@ export function StoragePage() {
           onDownload={handleDownload}
           fetchBlob={handleFetchBlob}
           showSize
+          expandedPaths={expandedPaths}
+          onToggleExpand={handleToggleExpand}
+          newFolderParent={newFolderParent}
+          onNewFolder={setNewFolderParent}
+          onCreateFolder={handleCreateFolder}
+          renamingPath={renamingPath}
+          onRename={handleRename}
+          onRenamingPathChange={setRenamingPath}
+          isEditing={isEditing}
+          editContent={editContent}
+          saving={saving}
+          onStartEdit={handleStartEdit}
+          onCancelEdit={handleCancelEdit}
+          onSaveEdit={handleSaveEdit}
+          onEditContentChange={setEditContent}
+          selectedPaths={selectedPaths}
+          onSelectNode={handleSelectNode}
+          onDeleteSelected={handleBatchDelete}
+          onClearSelection={handleClearSelection}
         />
       </div>
 
@@ -238,18 +427,22 @@ export function StoragePage() {
       <Dialog open={!!deleteTarget} onOpenChange={(open) => { if (!open) setDeleteTarget(null); }}>
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>{deleteTarget?.isDir ? t("delete.folderTitle") : t("delete.fileTitle")}</DialogTitle>
+            <DialogTitle>
+              {isBatchDelete
+                ? t("batch.deleteConfirmTitle", { count: batchCount })
+                : deleteTarget?.isDir ? t("delete.folderTitle") : t("delete.fileTitle")}
+            </DialogTitle>
             <DialogDescription>
-              {t("delete.description", { name: deleteName })}
-              {deleteTarget?.isDir && t("delete.folderWarning")}
-              {t("delete.undone")}
+              {isBatchDelete
+                ? t("batch.deleteConfirmDesc", { count: batchCount }) + t("delete.undone")
+                : t("delete.description", { name: deleteName }) + (deleteTarget?.isDir ? t("delete.folderWarning") : "") + t("delete.undone")}
             </DialogDescription>
           </DialogHeader>
           <DialogFooter>
             <Button variant="outline" onClick={() => setDeleteTarget(null)} disabled={deleting}>
               {t("common:cancel", "Cancel")}
             </Button>
-            <Button variant="destructive" onClick={handleDeleteConfirm} disabled={deleting}>
+            <Button variant="destructive" onClick={isBatchDelete ? handleBatchDeleteConfirm : handleDeleteConfirm} disabled={deleting}>
               {deleting ? t("delete.deleting") : t("delete.confirmLabel")}
             </Button>
           </DialogFooter>

@@ -21,11 +21,14 @@ function PreviewIcon({ name, isDir }: { name: string; isDir: boolean }) {
 }
 
 /** Compact drag overlay shown while dragging a file/folder in the tree. */
-export function DragPreview({ name, isDir }: { name: string; isDir: boolean }) {
+export function DragPreview({ name, isDir, count }: { name: string; isDir: boolean; count?: number }) {
   return (
     <div className="flex items-center gap-1.5 rounded-md border bg-popover px-3 py-1.5 text-sm shadow-lg opacity-90 pointer-events-none max-w-[240px]">
       <PreviewIcon name={name} isDir={isDir} />
       <span className="truncate">{name}</span>
+      {count != null && count > 1 && (
+        <span className="ml-1 px-1.5 py-0.5 rounded-full bg-primary text-primary-foreground text-[10px]">{count}</span>
+      )}
     </div>
   );
 }
