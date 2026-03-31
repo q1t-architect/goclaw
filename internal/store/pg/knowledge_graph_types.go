@@ -11,6 +11,12 @@ import (
 	"github.com/nextlevelbuilder/goclaw/internal/store"
 )
 
+// ErrEntityTypeInUse is returned when trying to delete an entity type that has entities.
+var ErrEntityTypeInUse = fmt.Errorf("entity type is in use")
+
+// ErrRelationTypeInUse is returned when trying to delete a relation type that has relations.
+var ErrRelationTypeInUse = fmt.Errorf("relation type is in use")
+
 // --- Entity Types ---
 
 func (s *PGKnowledgeGraphStore) GetEntityTypes(ctx context.Context, agentID string) ([]store.EntityType, error) {
@@ -46,6 +52,21 @@ func (s *PGKnowledgeGraphStore) GetEntityTypes(ctx context.Context, agentID stri
 		types = append(types, et)
 	}
 	return types, rows.Err()
+}
+
+// CountEntitiesByType returns the number of entities using a given entity type.
+func (s *PGKnowledgeGraphStore) CountEntitiesByType(ctx context.Context, agentID, typeID string) (int64, error) {
+	aid := mustParseUUID(agentID)
+	tid := mustParseUUID(typeID)
+	var count int64
+	err := s.db.QueryRowContext(ctx,
+		`SELECT COUNT(*) FROM knowledge_graph_entities WHERE agent_id = $1 AND entity_type_id = $2`,
+		aid, tid,
+	).Scan(&count)
+	if err != nil {
+		return 0, fmt.Errorf("count entities by type: %w", err)
+	}
+	return count, nil
 }
 
 func (s *PGKnowledgeGraphStore) UpsertEntityType(ctx context.Context, et *store.EntityType) error {
@@ -103,6 +124,15 @@ func (s *PGKnowledgeGraphStore) DeleteEntityType(ctx context.Context, agentID, t
 		return fmt.Errorf("cannot delete system entity type")
 	}
 
+	// Check if any entities are using this type
+	count, err := s.CountEntitiesByType(ctx, agentID, typeID)
+	if err != nil {
+		return fmt.Errorf("check entity type usage: %w", err)
+	}
+	if count > 0 {
+		return fmt.Errorf("%w: %d entities are using it", ErrEntityTypeInUse, count)
+	}
+
 	res, err := s.db.ExecContext(ctx,
 		`DELETE FROM kg_entity_types WHERE id = $1 AND agent_id = $2`,
 		tid, aid)
@@ -150,6 +180,21 @@ func (s *PGKnowledgeGraphStore) GetRelationTypes(ctx context.Context, agentID st
 		types = append(types, rt)
 	}
 	return types, rows.Err()
+}
+
+// CountRelationsByType returns the number of relations using a given relation type.
+func (s *PGKnowledgeGraphStore) CountRelationsByType(ctx context.Context, agentID, typeID string) (int64, error) {
+	aid := mustParseUUID(agentID)
+	tid := mustParseUUID(typeID)
+	var count int64
+	err := s.db.QueryRowContext(ctx,
+		`SELECT COUNT(*) FROM knowledge_graph_relations WHERE agent_id = $1 AND relation_type_id = $2`,
+		aid, tid,
+	).Scan(&count)
+	if err != nil {
+		return 0, fmt.Errorf("count relations by type: %w", err)
+	}
+	return count, nil
 }
 
 func (s *PGKnowledgeGraphStore) UpsertRelationType(ctx context.Context, rt *store.RelationType) error {
@@ -205,6 +250,15 @@ func (s *PGKnowledgeGraphStore) DeleteRelationType(ctx context.Context, agentID,
 	}
 	if isSystem {
 		return fmt.Errorf("cannot delete system relation type")
+	}
+
+	// Check if any relations are using this type
+	count, err := s.CountRelationsByType(ctx, agentID, typeID)
+	if err != nil {
+		return fmt.Errorf("check relation type usage: %w", err)
+	}
+	if count > 0 {
+		return fmt.Errorf("%w: %d relations are using it", ErrRelationTypeInUse, count)
 	}
 
 	res, err := s.db.ExecContext(ctx,

@@ -104,10 +104,12 @@ type KnowledgeGraphStore interface {
 	GetEntityTypes(ctx context.Context, agentID string) ([]EntityType, error)
 	UpsertEntityType(ctx context.Context, et *EntityType) error
 	DeleteEntityType(ctx context.Context, agentID, typeID string) error
+	CountEntitiesByType(ctx context.Context, agentID, typeID string) (int64, error)
 
 	GetRelationTypes(ctx context.Context, agentID string) ([]RelationType, error)
 	UpsertRelationType(ctx context.Context, rt *RelationType) error
 	DeleteRelationType(ctx context.Context, agentID, typeID string) error
+	CountRelationsByType(ctx context.Context, agentID, typeID string) (int64, error)
 
 	// SeedKGTypes seeds default types for an agent from a preset.
 	// Presets: "general" (10+22 default types), "legal", "development", "empty" (no-op).

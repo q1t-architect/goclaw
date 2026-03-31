@@ -2,11 +2,13 @@ package http
 
 import (
 	"encoding/json"
+	"errors"
 	"log/slog"
 	"net/http"
 
 	"github.com/nextlevelbuilder/goclaw/internal/i18n"
 	"github.com/nextlevelbuilder/goclaw/internal/store"
+	"github.com/nextlevelbuilder/goclaw/internal/store/pg"
 )
 
 // --- Entity Types ---
@@ -136,8 +138,11 @@ func (h *KnowledgeGraphHandler) handleDeleteEntityType(w http.ResponseWriter, r 
 	if err != nil {
 		slog.Warn("kg.delete_entity_type failed", "error", err)
 		status := http.StatusInternalServerError
-		if err.Error() == "cannot delete system entity type" {
+		switch {
+		case err.Error() == "cannot delete system entity type":
 			status = http.StatusForbidden
+		case errors.Is(err, pg.ErrEntityTypeInUse):
+			status = http.StatusConflict
 		}
 		writeJSON(w, status, map[string]string{"error": err.Error()})
 		return
@@ -272,8 +277,11 @@ func (h *KnowledgeGraphHandler) handleDeleteRelationType(w http.ResponseWriter, 
 	if err != nil {
 		slog.Warn("kg.delete_relation_type failed", "error", err)
 		status := http.StatusInternalServerError
-		if err.Error() == "cannot delete system relation type" {
+		switch {
+		case err.Error() == "cannot delete system relation type":
 			status = http.StatusForbidden
+		case errors.Is(err, pg.ErrRelationTypeInUse):
+			status = http.StatusConflict
 		}
 		writeJSON(w, status, map[string]string{"error": err.Error()})
 		return
