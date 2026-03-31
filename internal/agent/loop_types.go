@@ -537,4 +537,8 @@ type runState struct {
 	// Loop detector kill flag — set when any detector triggers critical level.
 	// Propagated to RunResult.LoopKilled so the consumer can auto-fail team tasks.
 	loopKilled bool
+
+	// Truncation retry counter — caps consecutive truncation/parse-error retries
+	// to prevent burning through all iterations when max_tokens is too low.
+	truncationRetries int
 }

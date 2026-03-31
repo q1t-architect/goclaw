@@ -476,6 +476,9 @@ func (h *ChannelInstancesHandler) handleListContacts(w http.ResponseWriter, r *h
 	if v := r.URL.Query().Get("peer_kind"); v != "" {
 		opts.PeerKind = v
 	}
+	if v := r.URL.Query().Get("contact_type"); v != "" {
+		opts.ContactType = v
+	}
 	if v := r.URL.Query().Get("limit"); v != "" {
 		if n, err := strconv.Atoi(v); err == nil && n > 0 && n <= 200 {
 			opts.Limit = n

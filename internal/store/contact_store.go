@@ -30,6 +30,7 @@ type ContactListOpts struct {
 	Search      string // ILIKE on display_name, username, sender_id
 	ChannelType string // filter by platform (telegram, discord, etc.)
 	PeerKind    string // "direct" or "group"
+	ContactType string // "user" or "group"
 	Limit       int
 	Offset      int
 }

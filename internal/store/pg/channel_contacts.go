@@ -68,6 +68,11 @@ func contactWhereClause(ctx context.Context, opts store.ContactListOpts) (string
 		args = append(args, opts.PeerKind)
 		argIdx++
 	}
+	if opts.ContactType != "" {
+		conditions = append(conditions, fmt.Sprintf("contact_type = $%d", argIdx))
+		args = append(args, opts.ContactType)
+		argIdx++
+	}
 	if opts.Search != "" {
 		escaped := strings.NewReplacer("%", "\\%", "_", "\\_").Replace(opts.Search)
 		pattern := escaped + "%"

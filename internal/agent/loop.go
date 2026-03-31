@@ -410,20 +410,42 @@ func (l *Loop) runLoop(ctx context.Context, req RunRequest) (result *RunResult, 
 			}
 		}
 
-		// Output truncated (max_tokens hit). Tool call args are likely incomplete.
+		// Output truncated (max_tokens hit) or tool call args malformed.
 		// Inject a system hint so the model can retry with shorter output.
-		if resp.FinishReason == "length" && len(resp.ToolCalls) > 0 {
-			slog.Warn("output truncated (max_tokens), tool calls may have incomplete args",
-				"agent", l.id, "iteration", rs.iteration, "max_tokens", l.effectiveMaxTokens())
+		// Cap consecutive truncation retries to avoid burning through all iterations.
+		truncated := resp.FinishReason == "length" && len(resp.ToolCalls) > 0
+		parseErr := !truncated && hasParseErrors(resp.ToolCalls)
+		if truncated || parseErr {
+			rs.truncationRetries++
+			reason := "output truncated (max_tokens)"
+			if parseErr {
+				reason = "tool call arguments malformed (likely truncated)"
+			}
+			slog.Warn(reason, "agent", l.id, "iteration", rs.iteration,
+				"truncation_retry", rs.truncationRetries, "max_tokens", l.effectiveMaxTokens())
+
+			if rs.truncationRetries >= maxTruncationRetries {
+				slog.Warn("truncation retry limit reached, giving up",
+					"agent", l.id, "retries", rs.truncationRetries)
+				rs.finalContent = resp.Content
+				if rs.finalContent == "" {
+					rs.finalContent = "[Unable to complete: output repeatedly exceeded max_tokens. Try a simpler request or increase the token limit.]"
+				}
+				break
+			}
+
+			hint := "[System] Your output was truncated because it exceeded max_tokens. Your tool call arguments were incomplete. Please retry with shorter content — split large writes into multiple smaller calls, or reduce the amount of text."
+			if parseErr {
+				hint = "[System] One or more tool call arguments were malformed (truncated JSON). This usually means your output was too long. Please retry with shorter content — split large writes into multiple smaller calls."
+			}
 			messages = append(messages,
 				providers.Message{Role: "assistant", Content: resp.Content},
-				providers.Message{
-					Role:    "user",
-					Content: "[System] Your output was truncated because it exceeded max_tokens. Your tool call arguments were incomplete. Please retry with shorter content — split large writes into multiple smaller calls, or reduce the amount of text.",
-				},
+				providers.Message{Role: "user", Content: hint},
 			)
 			continue
 		}
+		// Reset truncation counter on successful tool call (model recovered).
+		rs.truncationRetries = 0
 
 		// No tool calls — exit or drain injected follow-ups.
 		if len(resp.ToolCalls) == 0 {
@@ -744,6 +766,21 @@ func (l *Loop) resolveToolCallName(name string) string {
 		return tools.StripToolPrefix(l.agentToolPolicy.ToolCallPrefix, name)
 	}
 	return name
+}
+
+// maxTruncationRetries caps consecutive truncation/parse-error retries.
+// After this many retries the loop gives up rather than burning all iterations.
+const maxTruncationRetries = 3
+
+// hasParseErrors returns true if any tool call has a non-empty ParseError,
+// indicating the arguments JSON was malformed or truncated by the provider.
+func hasParseErrors(calls []providers.ToolCall) bool {
+	for _, tc := range calls {
+		if tc.ParseError != "" {
+			return true
+		}
+	}
+	return false
 }
 
 func truncateToolArgs(args map[string]any, maxLen int) map[string]any {

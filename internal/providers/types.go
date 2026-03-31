@@ -142,10 +142,11 @@ type Message struct {
 
 // ToolCall represents a tool invocation requested by the LLM.
 type ToolCall struct {
-	ID        string            `json:"id"`
-	Name      string            `json:"name"`
-	Arguments map[string]any    `json:"arguments"`
-	Metadata  map[string]string `json:"metadata,omitempty"` // provider-specific (e.g. Gemini thought_signature)
+	ID         string            `json:"id"`
+	Name       string            `json:"name"`
+	Arguments  map[string]any    `json:"arguments"`
+	Metadata   map[string]string `json:"metadata,omitempty"`    // provider-specific (e.g. Gemini thought_signature)
+	ParseError string            `json:"parse_error,omitempty"` // set when arguments JSON was malformed/truncated
 }
 
 // ToolDefinition describes a tool available to the LLM.

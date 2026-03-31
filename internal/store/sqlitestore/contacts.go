@@ -72,6 +72,10 @@ func contactWhereSQLite(ctx context.Context, opts store.ContactListOpts) (string
 		conditions = append(conditions, "peer_kind = ?")
 		args = append(args, opts.PeerKind)
 	}
+	if opts.ContactType != "" {
+		conditions = append(conditions, "contact_type = ?")
+		args = append(args, opts.ContactType)
+	}
 	if opts.Search != "" {
 		escaped := strings.NewReplacer("%", "\\%", "_", "\\_").Replace(opts.Search)
 		pattern := escaped + "%"
