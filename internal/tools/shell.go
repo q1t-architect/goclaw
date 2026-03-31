@@ -290,7 +290,7 @@ func (t *ExecTool) executeOnHost(ctx context.Context, command, cwd string) *Resu
 		result = "(command completed with no output)"
 	}
 
-	return SilentResult(result)
+	return SilentResult(capExecOutput(result, execMaxOutputChars))
 }
 
 // executeInSandbox routes a command through a Docker sandbox container.
@@ -339,7 +339,7 @@ func (t *ExecTool) executeInSandbox(ctx context.Context, command, cwd, sandboxKe
 		output = "(command completed with no output)"
 	}
 
-	return SilentResult(output)
+	return SilentResult(capExecOutput(output, execMaxOutputChars))
 }
 
 // limitedBuffer caps output to prevent OOM from runaway commands.

@@ -87,6 +87,8 @@ func (c *Channel) handleBotCommand(ctx context.Context, message *telego.Message,
 			"/status — Show bot status\n" +
 			"/tasks — List team tasks\n" +
 			"/task_detail <id> — View task detail\n" +
+			"/subagents — List subagent tasks\n" +
+			"/subagent <id> — View subagent task detail\n" +
 			"/writers — List file writers for this group\n" +
 			"/addwriter — Add a file writer (reply to their message)\n" +
 			"/removewriter — Remove a file writer (reply to their message)\n" +
@@ -203,6 +205,14 @@ func (c *Channel) handleBotCommand(ctx context.Context, message *telego.Message,
 
 	case "/task_detail":
 		c.handleTaskDetail(ctx, chatID, text, isGroup, setThread)
+		return true
+
+	case "/subagents":
+		c.handleSubagentsList(ctx, chatID, isGroup, setThread)
+		return true
+
+	case "/subagent":
+		c.handleSubagentDetail(ctx, chatID, text, isGroup, setThread)
 		return true
 
 	case "/addwriter":

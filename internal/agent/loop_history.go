@@ -617,14 +617,14 @@ func (l *Loop) maybeSummarize(ctx context.Context, sessionKey string) {
 		}
 
 		var prompt strings.Builder
-		prompt.WriteString("Provide a concise summary of this conversation, preserving key context:\n")
+		prompt.WriteString(compactionSummaryPrompt)
 		if len(mediaKinds) > 0 {
 			// Deduplicate and count media types for a compact note.
 			counts := make(map[string]int)
 			for _, k := range mediaKinds {
 				counts[k]++
 			}
-			prompt.WriteString("\nNote: user shared media files (")
+			prompt.WriteString("Note: user shared media files (")
 			first := true
 			for k, n := range counts {
 				if !first {
@@ -633,12 +633,12 @@ func (l *Loop) maybeSummarize(ctx context.Context, sessionKey string) {
 				prompt.WriteString(fmt.Sprintf("%d %s(s)", n, k))
 				first = false
 			}
-			prompt.WriteString(") which are no longer in context. Mention briefly if relevant.\n")
+			prompt.WriteString(") which are no longer in context. Mention briefly if relevant.\n\n")
 		}
 		if summary != "" {
-			prompt.WriteString("Existing context: " + summary + "\n")
+			prompt.WriteString("Existing context: " + summary + "\n\n")
 		}
-		prompt.WriteString("\n" + sb.String())
+		prompt.WriteString(sb.String())
 
 		resp, err := l.provider.Chat(sctx, providers.ChatRequest{
 			Messages: []providers.Message{{Role: "user", Content: prompt.String()}},

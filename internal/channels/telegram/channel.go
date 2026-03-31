@@ -29,9 +29,10 @@ type Channel struct {
 	transport        *http.Transport
 	ipv4Once         sync.Once          // guards enableIPv4Only to prevent data race
 	pairingService   store.PairingStore
-	agentStore      store.AgentStore              // for agent key lookup (nil if not configured)
-	configPermStore store.ConfigPermissionStore   // for group file writer management (nil if not configured)
-	teamStore       store.TeamStore               // for /tasks, /task_detail commands (nil if not configured)
+	agentStore          store.AgentStore              // for agent key lookup (nil if not configured)
+	configPermStore     store.ConfigPermissionStore   // for group file writer management (nil if not configured)
+	teamStore           store.TeamStore               // for /tasks, /task_detail commands (nil if not configured)
+	subagentTaskStore   store.SubagentTaskStore        // for /subagents, /subagent commands (nil if not configured)
 	placeholders     sync.Map         // localKey string → messageID int
 	stopThinking     sync.Map         // localKey string → *thinkingCancel
 	typingCtrls      sync.Map         // localKey string → *typing.Controller
@@ -60,16 +61,40 @@ func (c *thinkingCancel) Cancel() {
 	}
 }
 
+// Option configures optional dependencies for the Telegram channel.
+type Option func(*Channel)
+
+// WithAgentStore sets the agent store for agent key resolution.
+func WithAgentStore(s store.AgentStore) Option { return func(c *Channel) { c.agentStore = s } }
+
+// WithConfigPermStore sets the config permission store for group file writer management.
+func WithConfigPermStore(s store.ConfigPermissionStore) Option {
+	return func(c *Channel) { c.configPermStore = s }
+}
+
+// WithTeamStore sets the team store for /tasks, /task_detail commands.
+func WithTeamStore(s store.TeamStore) Option { return func(c *Channel) { c.teamStore = s } }
+
+// WithSubagentTaskStore sets the subagent task store for /subagents, /subagent commands.
+func WithSubagentTaskStore(s store.SubagentTaskStore) Option {
+	return func(c *Channel) { c.subagentTaskStore = s }
+}
+
+// WithPendingMessageStore sets the pending message store for group history buffering.
+func WithPendingMessageStore(s store.PendingMessageStore) Option {
+	return func(c *Channel) {
+		c.groupHistory = channels.MakeHistory(channels.TypeTelegram, s, c.TenantID())
+	}
+}
+
 // New creates a new Telegram channel from config.
 // pairingSvc is optional (nil = fall back to allowlist only).
-// agentStore is optional (nil = group file writer commands disabled).
-// configPermStore is optional (nil = group file writer commands disabled).
-// teamStore is optional (nil = /tasks, /task_detail commands disabled).
-func New(cfg config.TelegramConfig, msgBus *bus.MessageBus, pairingSvc store.PairingStore, agentStore store.AgentStore, configPermStore store.ConfigPermissionStore, teamStore store.TeamStore, pendingStore store.PendingMessageStore) (*Channel, error) {
-	var opts []telego.BotOption
+// Optional stores are set via Option functions.
+func New(cfg config.TelegramConfig, msgBus *bus.MessageBus, pairingSvc store.PairingStore, chanOpts ...Option) (*Channel, error) {
+	var botOpts []telego.BotOption
 
 	if cfg.APIServer != "" {
-		opts = append(opts, telego.WithAPIServer(cfg.APIServer))
+		botOpts = append(botOpts, telego.WithAPIServer(cfg.APIServer))
 	}
 
 	// Isolate transport per account: prevents cross-bot connection pool contention
@@ -95,9 +120,9 @@ func New(cfg config.TelegramConfig, msgBus *bus.MessageBus, pairingSvc store.Pai
 		slog.Info("telegram: forced IPv4 for account via config")
 	}
 
-	opts = append(opts, telego.WithHTTPClient(httpClient))
+	botOpts = append(botOpts, telego.WithHTTPClient(httpClient))
 
-	bot, err := telego.NewBot(cfg.Token, opts...)
+	bot, err := telego.NewBot(cfg.Token, botOpts...)
 	if err != nil {
 		return nil, fmt.Errorf("create telegram bot: %w", err)
 	}
@@ -124,21 +149,22 @@ func New(cfg config.TelegramConfig, msgBus *bus.MessageBus, pairingSvc store.Pai
 		mentionMode = "strict"
 	}
 
-	return &Channel{
-		BaseChannel:     base,
-		bot:             bot,
-		config:          cfg,
-		httpClient:      httpClient,
-		transport:       transport,
-		pairingService:  pairingSvc,
-		agentStore:      agentStore,
-		configPermStore: configPermStore,
-		teamStore:       teamStore,
-		groupHistory:    channels.MakeHistory(channels.TypeTelegram, pendingStore, base.TenantID()),
-		historyLimit:    historyLimit,
-		requireMention:  requireMention,
-		mentionMode:     mentionMode,
-	}, nil
+	ch := &Channel{
+		BaseChannel:    base,
+		bot:            bot,
+		config:         cfg,
+		httpClient:     httpClient,
+		transport:      transport,
+		pairingService: pairingSvc,
+		groupHistory:   channels.MakeHistory(channels.TypeTelegram, nil, base.TenantID()),
+		historyLimit:   historyLimit,
+		requireMention: requireMention,
+		mentionMode:    mentionMode,
+	}
+	for _, o := range chanOpts {
+		o(ch)
+	}
+	return ch, nil
 }
 
 // Start begins long polling for Telegram updates.

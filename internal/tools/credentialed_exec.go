@@ -223,7 +223,9 @@ func (t *ExecTool) executeCredentialedSandbox(ctx context.Context, absPath strin
 	if output == "" {
 		output = "(command completed with no output)"
 	}
-	return SilentResult(ScrubCredentials(output))
+	output = ScrubCredentials(output)
+	output = capExecOutput(output, execMaxOutputChars)
+	return SilentResult(output)
 }
 
 // buildCredentialedEnv creates a minimal environment with injected credentials.
@@ -270,7 +272,9 @@ func formatCredentialedResult(binary string, args []string,
 	if output == "" {
 		output = "(command completed with no output)"
 	}
-	return SilentResult(ScrubCredentials(output))
+	output = ScrubCredentials(output)
+	output = capExecOutput(output, execMaxOutputChars)
+	return SilentResult(output)
 }
 
 // lookupCredentialedBinary checks if a command's binary has credential config.

@@ -14,7 +14,7 @@ var schemaSQL string
 
 // SchemaVersion is the current SQLite schema version.
 // Bump this when adding new migration steps below.
-const SchemaVersion = 3
+const SchemaVersion = 4
 
 // migrations maps version → SQL to apply when upgrading FROM that version.
 // schema.sql always represents the LATEST full schema (for fresh DBs).
@@ -42,6 +42,36 @@ UPDATE cron_jobs SET
   deliver_to = COALESCE(json_extract(payload, '$.to'), ''),
   wake_heartbeat = COALESCE(json_extract(payload, '$.wake_heartbeat'), 0)
 WHERE payload IS NOT NULL;`,
+	// Version 3 → 4: add subagent_tasks table for subagent lifecycle persistence.
+	3: `CREATE TABLE IF NOT EXISTS subagent_tasks (
+    id                TEXT PRIMARY KEY,
+    tenant_id         TEXT NOT NULL REFERENCES tenants(id) ON DELETE CASCADE,
+    parent_agent_key  VARCHAR(255) NOT NULL,
+    session_key       VARCHAR(500),
+    subject           VARCHAR(255) NOT NULL,
+    description       TEXT NOT NULL,
+    status            VARCHAR(20) NOT NULL DEFAULT 'running',
+    result            TEXT,
+    depth             INTEGER NOT NULL DEFAULT 1,
+    model             VARCHAR(255),
+    provider          VARCHAR(255),
+    iterations        INTEGER NOT NULL DEFAULT 0,
+    input_tokens      INTEGER NOT NULL DEFAULT 0,
+    output_tokens     INTEGER NOT NULL DEFAULT 0,
+    origin_channel    VARCHAR(50),
+    origin_chat_id    VARCHAR(255),
+    origin_peer_kind  VARCHAR(20),
+    origin_user_id    VARCHAR(255),
+    spawned_by        TEXT,
+    completed_at      TEXT,
+    archived_at       TEXT,
+    metadata          TEXT NOT NULL DEFAULT '{}',
+    created_at        TEXT DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+    updated_at        TEXT DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
+);
+CREATE INDEX IF NOT EXISTS idx_subagent_tasks_parent_status ON subagent_tasks(tenant_id, parent_agent_key, status);
+CREATE INDEX IF NOT EXISTS idx_subagent_tasks_session ON subagent_tasks(session_key);
+CREATE INDEX IF NOT EXISTS idx_subagent_tasks_created ON subagent_tasks(tenant_id, created_at);`,
 }
 
 // EnsureSchema creates tables if they don't exist and applies incremental migrations.

@@ -154,6 +154,8 @@ func DefaultMenuCommands() []telego.BotCommand {
 		{Command: "status", Description: "Show bot status"},
 		{Command: "tasks", Description: "List team tasks"},
 		{Command: "task_detail", Description: "View task detail by ID"},
+		{Command: "subagents", Description: "List subagent tasks"},
+		{Command: "subagent", Description: "View subagent task detail by ID"},
 		{Command: "writers", Description: "List file writers for this group"},
 		{Command: "addwriter", Description: "Add a file writer (reply to their message)"},
 		{Command: "removewriter", Description: "Remove a file writer (reply to their message)"},
