@@ -134,6 +134,7 @@ func (t *KnowledgeGraphMutateTool) createEntity(ctx context.Context, agentID, us
 		AgentID:    agentID,
 		UserID:     userID,
 		ExternalID: fmt.Sprintf("agent:%s", agentID[:8]),
+		SourceID:    "agent",
 		Name:       name,
 		EntityType: entityType,
 		Confidence: confidence,
@@ -213,8 +214,8 @@ func (t *KnowledgeGraphMutateTool) createRelation(ctx context.Context, agentID, 
 		return ErrorResult(fmt.Sprintf("failed to create relation: %v", err))
 	}
 
-	srcName := t.resolveEntityName(ctx, agentID, userID, srcID, nil)
-	tgtName := t.resolveEntityName(ctx, agentID, userID, tgtID, nil)
+	srcName := t.resolveEntityName(ctx, agentID, userID, srcID)
+	tgtName := t.resolveEntityName(ctx, agentID, userID, tgtID)
 
 	return NewResult(fmt.Sprintf("Relation created: %s —[%s]→ %s", srcName, strings.ReplaceAll(relType, "_", " "), tgtName))
 }
@@ -234,17 +235,9 @@ func (t *KnowledgeGraphMutateTool) deleteRelation(ctx context.Context, agentID, 
 }
 
 // resolveEntityName resolves entity ID to a human-readable name.
-func (t *KnowledgeGraphMutateTool) resolveEntityName(ctx context.Context, agentID, userID, entityID string, cache map[string]string) string {
-	if cache != nil {
-		if name, ok := cache[entityID]; ok {
-			return name
-		}
-	}
+func (t *KnowledgeGraphMutateTool) resolveEntityName(ctx context.Context, agentID, userID, entityID string) string {
 	e, err := t.kgStore.GetEntity(ctx, agentID, userID, entityID)
 	if err == nil && e != nil {
-		if cache != nil {
-			cache[entityID] = e.Name
-		}
 		return e.Name
 	}
 	if len(entityID) >= 8 {
