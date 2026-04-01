@@ -206,6 +206,23 @@
       "skill_search": "Search for available skills by keyword or description to find relevant capabilities",
       "use_skill": "Activate a skill to use its specialized capabilities (tracing marker)",
       "team_tasks": "View, create, update, and complete tasks on the team task board"
+    },
+    "kgMutateSettings": {
+      "title": "Knowledge Graph Mutate Settings",
+      "description": "Configure limits and restrictions for agent knowledge graph write access.",
+      "maxEntitiesPerRun": "Max Entities per Run",
+      "maxEntitiesPerRunHint": "Maximum entities an agent can create in one tool call.",
+      "maxRelationsPerRun": "Max Relations per Run",
+      "maxRelationsPerRunHint": "Maximum relations an agent can create in one tool call.",
+      "allowedEntityTypes": "Allowed Entity Types",
+      "allowedEntityTypesPlaceholder": "e.g. person, organization, project",
+      "allowedEntityTypesHint": "Comma-separated list. Leave empty to allow all types.",
+      "allowedRelationTypes": "Allowed Relation Types",
+      "allowedRelationTypesPlaceholder": "e.g. works_with, member_of, depends_on",
+      "allowedRelationTypesHint": "Comma-separated list. Leave empty to allow all types.",
+      "cancel": "Cancel",
+      "saving": "Saving...",
+      "save": "Save"
     }
   }
 }

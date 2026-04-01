@@ -15,9 +15,11 @@ import type { BuiltinToolData } from "./hooks/use-builtin-tools";
 import { MEDIA_TOOLS } from "./media-provider-params-schema";
 import { MediaProviderChainForm } from "./media-provider-chain-form";
 import { KGSettingsForm } from "./kg-settings-form";
+import { KGMutateSettingsForm } from "./kg-mutate-settings-form";
 import { WebFetchExtractorChainForm } from "./web-fetch-extractor-chain-form";
 
 const KG_TOOL = "knowledge_graph_search";
+const KG_MUTATE_TOOL = "knowledge_graph_mutate";
 const WEB_FETCH_TOOL = "web_fetch";
 
 interface Props {
@@ -30,8 +32,9 @@ interface Props {
 export function BuiltinToolSettingsDialog({ tool, open, onOpenChange, onSave }: Props) {
   const isMedia = tool ? MEDIA_TOOLS.has(tool.name) : false;
   const isKG = tool?.name === KG_TOOL;
+  const isKGMutate = tool?.name === KG_MUTATE_TOOL;
   const isWebFetch = tool?.name === WEB_FETCH_TOOL;
-  const wide = isMedia || isKG || isWebFetch;
+  const wide = isMedia || isKG || isKGMutate || isWebFetch;
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -51,6 +54,12 @@ export function BuiltinToolSettingsDialog({ tool, open, onOpenChange, onSave }: 
           />
         ) : isKG && tool ? (
           <KGSettingsForm
+            initialSettings={tool.settings ?? {}}
+            onSave={(settings) => onSave(tool.name, settings).then(() => onOpenChange(false))}
+            onCancel={() => onOpenChange(false)}
+          />
+        ) : isKGMutate && tool ? (
+          <KGMutateSettingsForm
             initialSettings={tool.settings ?? {}}
             onSave={(settings) => onSave(tool.name, settings).then(() => onOpenChange(false))}
             onCancel={() => onOpenChange(false)}

@@ -2,22 +2,148 @@ package tools
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"log/slog"
 	"strings"
+	"sync"
+	"time"
 
 	"github.com/google/uuid"
 	"github.com/nextlevelbuilder/goclaw/internal/store"
 )
 
+// kgMutateSettings defines configurable limits for agent KG writes.
+type kgMutateSettings struct {
+	MaxEntitiesPerRun    int    `json:"max_entities_per_run"`
+	MaxRelationsPerRun   int    `json:"max_relations_per_run"`
+	AllowedEntityTypes   string `json:"allowed_entity_types"`   // comma-separated, empty = all
+	AllowedRelationTypes string `json:"allowed_relation_types"` // comma-separated, empty = all
+}
+
+func defaultKGMutateSettings() kgMutateSettings {
+	return kgMutateSettings{
+		MaxEntitiesPerRun:  10,
+		MaxRelationsPerRun: 20,
+	}
+}
+
+func (t *KnowledgeGraphMutateTool) readSettings(ctx context.Context) kgMutateSettings {
+	s := defaultKGMutateSettings()
+	if settings := BuiltinToolSettingsFromCtx(ctx); settings != nil {
+		if raw, ok := settings["knowledge_graph_mutate"]; ok && len(raw) > 0 {
+			_ = json.Unmarshal(raw, &s) // ignore error, use defaults
+		}
+	}
+	return s
+}
+
+// isEntityTypeAllowed checks if entity type is in the whitelist (or all allowed if empty).
+func (s kgMutateSettings) isEntityTypeAllowed(entityType string) bool {
+	if s.AllowedEntityTypes == "" {
+		return true
+	}
+	for _, t := range strings.Split(s.AllowedEntityTypes, ",") {
+		if strings.TrimSpace(t) == entityType {
+			return true
+		}
+	}
+	return false
+}
+
+// isRelationTypeAllowed checks if relation type is in the whitelist (or all allowed if empty).
+func (s kgMutateSettings) isRelationTypeAllowed(relType string) bool {
+	if s.AllowedRelationTypes == "" {
+		return true
+	}
+	for _, t := range strings.Split(s.AllowedRelationTypes, ",") {
+		if strings.TrimSpace(t) == relType {
+			return true
+		}
+	}
+	return false
+}
+
+// kgMutateCounter tracks entity/relation creation counts per agent within a time window.
+type kgMutateCounter struct {
+	mu       sync.Mutex
+	counters map[string]*kgRunCount
+}
+
+type kgRunCount struct {
+	entities  int
+	relations int
+	lastSeen  time.Time
+}
+
+func newKGMutateCounter() *kgMutateCounter {
+	c := &kgMutateCounter{counters: make(map[string]*kgRunCount)}
+	go c.cleanup()
+	return c
+}
+
+func (c *kgMutateCounter) cleanup() {
+	ticker := time.NewTicker(5 * time.Minute)
+	defer ticker.Stop()
+	for range ticker.C {
+		c.mu.Lock()
+		for k, v := range c.counters {
+			if time.Since(v.lastSeen) > 10*time.Minute {
+				delete(c.counters, k)
+			}
+		}
+		c.mu.Unlock()
+	}
+}
+
+func (c *kgMutateCounter) canCreateEntity(agentID string, limit int) bool {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	return c.get(agentID).entities < limit
+}
+
+func (c *kgMutateCounter) canCreateRelation(agentID string, limit int) bool {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	return c.get(agentID).relations < limit
+}
+
+func (c *kgMutateCounter) incEntity(agentID string) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	r := c.get(agentID)
+	r.entities++
+	r.lastSeen = time.Now()
+}
+
+func (c *kgMutateCounter) incRelation(agentID string) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	r := c.get(agentID)
+	r.relations++
+	r.lastSeen = time.Now()
+}
+
+func (c *kgMutateCounter) get(agentID string) *kgRunCount {
+	r, ok := c.counters[agentID]
+	if !ok {
+		r = &kgRunCount{}
+		c.counters[agentID] = r
+	}
+	return r
+}
+
 // KnowledgeGraphMutateTool provides write access to the knowledge graph for agents.
 // It is disabled by default — admin must enable it via builtin_tools settings.
 type KnowledgeGraphMutateTool struct {
-	kgStore store.KnowledgeGraphStore
+	kgStore   store.KnowledgeGraphStore
+	kgCounter *kgMutateCounter
 }
 
 func NewKnowledgeGraphMutateTool() *KnowledgeGraphMutateTool {
-	return &KnowledgeGraphMutateTool{}
+	return &KnowledgeGraphMutateTool{
+		kgCounter: newKGMutateCounter(),
+	}
 }
 
 func (t *KnowledgeGraphMutateTool) SetKGStore(ks store.KnowledgeGraphStore) {
@@ -95,6 +221,7 @@ func (t *KnowledgeGraphMutateTool) Execute(ctx context.Context, args map[string]
 		return ErrorResult("agent context not available")
 	}
 	userID := store.KGUserID(ctx)
+	settings := t.readSettings(ctx)
 
 	action, _ := args["action"].(string)
 	if action == "" {
@@ -103,25 +230,34 @@ func (t *KnowledgeGraphMutateTool) Execute(ctx context.Context, args map[string]
 
 	switch action {
 	case "create_entity":
-		return t.createEntity(ctx, agentID.String(), userID, args)
+		return t.createEntity(ctx, agentID.String(), userID, args, settings)
 	case "update_entity":
-		return t.updateEntity(ctx, agentID.String(), userID, args)
+		return t.updateEntity(ctx, agentID.String(), userID, args, settings)
 	case "create_relation":
-		return t.createRelation(ctx, agentID.String(), userID, args)
+		return t.createRelation(ctx, agentID.String(), userID, args, settings)
 	case "delete_relation":
-		return t.deleteRelation(ctx, agentID.String(), userID, args)
+		return t.deleteRelation(ctx, agentID.String(), userID, args, settings)
 	default:
 		return ErrorResult(fmt.Sprintf("unknown action: %q. Valid: create_entity, update_entity, create_relation, delete_relation", action))
 	}
 }
 
-func (t *KnowledgeGraphMutateTool) createEntity(ctx context.Context, agentID, userID string, args map[string]any) *Result {
+func (t *KnowledgeGraphMutateTool) createEntity(ctx context.Context, agentID, userID string, args map[string]any, settings kgMutateSettings) *Result {
 	name, _ := args["name"].(string)
 	entityType, _ := args["entity_type"].(string)
 	desc, _ := args["description"].(string)
 
 	if name == "" || entityType == "" {
 		return ErrorResult("name and entity_type are required for create_entity")
+	}
+
+	if !settings.isEntityTypeAllowed(entityType) {
+		return ErrorResult(fmt.Sprintf("entity type %q is not allowed. Allowed types: %s", entityType, settings.AllowedEntityTypes))
+	}
+
+	// Enforce per-run entity limit
+	if !t.kgCounter.canCreateEntity(agentID, settings.MaxEntitiesPerRun) {
+		return ErrorResult(fmt.Sprintf("entity creation limit reached (%d per run). Wait and try again.", settings.MaxEntitiesPerRun))
 	}
 
 	confidence := 1.0
@@ -134,7 +270,7 @@ func (t *KnowledgeGraphMutateTool) createEntity(ctx context.Context, agentID, us
 		AgentID:    agentID,
 		UserID:     userID,
 		ExternalID: fmt.Sprintf("agent:%s", agentID[:8]),
-		SourceID:    "agent",
+		SourceID:   "agent",
 		Name:       name,
 		EntityType: entityType,
 		Confidence: confidence,
@@ -148,10 +284,11 @@ func (t *KnowledgeGraphMutateTool) createEntity(ctx context.Context, agentID, us
 		return ErrorResult(fmt.Sprintf("failed to create entity: %v", err))
 	}
 
+	t.kgCounter.incEntity(agentID)
 	return NewResult(fmt.Sprintf("Entity created: %s [%s] (id: %s)", name, entityType, entity.ID))
 }
 
-func (t *KnowledgeGraphMutateTool) updateEntity(ctx context.Context, agentID, userID string, args map[string]any) *Result {
+func (t *KnowledgeGraphMutateTool) updateEntity(ctx context.Context, agentID, userID string, args map[string]any, _ kgMutateSettings) *Result {
 	entityID, _ := args["entity_id"].(string)
 	if entityID == "" {
 		return ErrorResult("entity_id is required for update_entity")
@@ -184,13 +321,22 @@ func (t *KnowledgeGraphMutateTool) updateEntity(ctx context.Context, agentID, us
 	return NewResult(fmt.Sprintf("Entity updated: %s [%s]", entity.Name, entity.EntityType))
 }
 
-func (t *KnowledgeGraphMutateTool) createRelation(ctx context.Context, agentID, userID string, args map[string]any) *Result {
+func (t *KnowledgeGraphMutateTool) createRelation(ctx context.Context, agentID, userID string, args map[string]any, settings kgMutateSettings) *Result {
 	srcID, _ := args["source_entity_id"].(string)
 	tgtID, _ := args["target_entity_id"].(string)
 	relType, _ := args["relation_type"].(string)
 
 	if srcID == "" || tgtID == "" || relType == "" {
 		return ErrorResult("source_entity_id, target_entity_id, and relation_type are required for create_relation")
+	}
+
+	if !settings.isRelationTypeAllowed(relType) {
+		return ErrorResult(fmt.Sprintf("relation type %q is not allowed. Allowed types: %s", relType, settings.AllowedRelationTypes))
+	}
+
+	// Enforce per-run relation limit
+	if !t.kgCounter.canCreateRelation(agentID, settings.MaxRelationsPerRun) {
+		return ErrorResult(fmt.Sprintf("relation creation limit reached (%d per run). Wait and try again.", settings.MaxRelationsPerRun))
 	}
 
 	confidence := 1.0
@@ -214,13 +360,14 @@ func (t *KnowledgeGraphMutateTool) createRelation(ctx context.Context, agentID, 
 		return ErrorResult(fmt.Sprintf("failed to create relation: %v", err))
 	}
 
+	t.kgCounter.incRelation(agentID)
 	srcName := t.resolveEntityName(ctx, agentID, userID, srcID)
 	tgtName := t.resolveEntityName(ctx, agentID, userID, tgtID)
 
 	return NewResult(fmt.Sprintf("Relation created: %s —[%s]→ %s", srcName, strings.ReplaceAll(relType, "_", " "), tgtName))
 }
 
-func (t *KnowledgeGraphMutateTool) deleteRelation(ctx context.Context, agentID, userID string, args map[string]any) *Result {
+func (t *KnowledgeGraphMutateTool) deleteRelation(ctx context.Context, agentID, userID string, args map[string]any, _ kgMutateSettings) *Result {
 	relationID, _ := args["relation_id"].(string)
 	if relationID == "" {
 		return ErrorResult("relation_id is required for delete_relation")
