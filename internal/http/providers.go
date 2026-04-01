@@ -212,8 +212,8 @@ func (h *ProvidersHandler) registerInMemory(p *store.LLMProviderData) {
 
 // validateProviderURL rejects provider base URLs pointing to internal/private networks.
 // Defense-in-depth: prevents SSRF when providers are later used for API calls.
-func validateProviderURL(rawURL string) error {
-	if rawURL == "" {
+func validateProviderURL(rawURL string, providerType string) error {
+	if rawURL == "" || providerType == store.ProviderACP {
 		return nil
 	}
 	u, err := url.Parse(rawURL)
@@ -316,7 +316,7 @@ func (h *ProvidersHandler) handleCreateProvider(w http.ResponseWriter, r *http.R
 		return
 	}
 
-	if err := validateProviderURL(p.APIBase); err != nil {
+	if err := validateProviderURL(p.APIBase, p.ProviderType); err != nil {
 		writeJSON(w, http.StatusBadRequest, map[string]string{"error": err.Error()})
 		return
 	}
@@ -376,15 +376,11 @@ func (h *ProvidersHandler) handleUpdateProvider(w http.ResponseWriter, r *http.R
 		}
 	}
 
-	// Validate provider_type if being updated.
-	// IMPORTANT: Do NOT replace this with delete(updates, "provider_type").
-	// We must return 400 so the caller knows the value is invalid,
-	// silently deleting it would hide the error from the end user.
-	if pt, ok := updates["provider_type"]; ok {
-		if s, _ := pt.(string); !store.ValidProviderTypes[s] {
-			writeJSON(w, http.StatusBadRequest, map[string]string{"error": i18n.T(locale, i18n.MsgInvalidRequest, "unsupported provider_type")})
-			return
-		}
+	// provider_type is immutable after creation — changing it would bypass
+	// security checks (e.g. ACP skips URL validation). Reject if client tries.
+	if _, ok := updates["provider_type"]; ok {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": i18n.T(locale, i18n.MsgInvalidRequest, "provider_type cannot be changed after creation")})
+		return
 	}
 
 	// Strip masked API key — don't overwrite real value with "***"
@@ -406,9 +402,6 @@ func (h *ProvidersHandler) handleUpdateProvider(w http.ResponseWriter, r *http.R
 	candidate := *currentProvider
 	if name, ok := updates["name"].(string); ok && name != "" {
 		candidate.Name = name
-	}
-	if providerType, ok := updates["provider_type"].(string); ok && providerType != "" {
-		candidate.ProviderType = providerType
 	}
 	if apiKey, ok := updates["api_key"].(string); ok {
 		candidate.APIKey = apiKey
@@ -433,7 +426,7 @@ func (h *ProvidersHandler) handleUpdateProvider(w http.ResponseWriter, r *http.R
 
 	if apiBase, ok := updates["api_base"]; ok {
 		if s, _ := apiBase.(string); s != "" {
-			if err := validateProviderURL(s); err != nil {
+			if err := validateProviderURL(s, candidate.ProviderType); err != nil {
 				writeJSON(w, http.StatusBadRequest, map[string]string{"error": err.Error()})
 				return
 			}
@@ -441,7 +434,7 @@ func (h *ProvidersHandler) handleUpdateProvider(w http.ResponseWriter, r *http.R
 	}
 	if baseURL, ok := updates["base_url"]; ok {
 		if s, _ := baseURL.(string); s != "" {
-			if err := validateProviderURL(s); err != nil {
+			if err := validateProviderURL(s, candidate.ProviderType); err != nil {
 				writeJSON(w, http.StatusBadRequest, map[string]string{"error": err.Error()})
 				return
 			}

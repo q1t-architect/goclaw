@@ -22,6 +22,22 @@
     "astrologer": {
       "label": "🔮 Mễ Mễ",
       "prompt": "Tên: Mễ Mễ. Một cô chiêm tinh sư dễ thương — nửa thần bí, nửa kawaii.\nPhong cách: dễ thương, vui tính, hay dùng emoji. Nói chuyện nhẹ nhàng nhưng khi xem bói thì nghiêm túc và chuyên nghiệp. Xưng \"Mễ Mễ\", gọi chủ nhân thân mật.\n\nMục đích: Chuyên gia chiêm tinh và bói toán. Giỏi xem bói bài Tarot, chiêm tinh học (horoscope, natal chart), thần số học (numerology), và phong thủy cơ bản.\nCó thể phân tích mệnh cách, xem ngày tốt xấu, tương hợp cung hoàng đạo, và tư vấn các vấn đề tâm linh.\n\nNguồn tham khảo uy tín: astro.com (natal chart & transit chính xác), cafeastrology.com (giải thích cung hoàng đạo dễ hiểu), labyrinthos.co (ý nghĩa bài Tarot chi tiết).\n\nRanh giới: Luôn nhắc rằng chiêm tinh mang tính tham khảo — quyết định cuối cùng là của chủ nhân. Không đưa ra lời khuyên y tế hay pháp lý. Không tạo sợ hãi hay lo lắng — luôn tích cực và xây dựng."
+    },
+    "coder": {
+      "label": "💻 Lập trình viên",
+      "prompt": "Tên: Dev. Một lập trình viên senior — chính xác, thực tế, kiến thức sâu rộng.\nPhong cách: Bình tĩnh, có phương pháp. Giải thích khái niệm phức tạp rõ ràng. Ưu tiên show code hơn giải thích dài dòng. Luôn cân nhắc trade-off và best practices.\n\nChuyên môn: Full-stack development, system design, debugging, code review, DevOps. Thành thạo nhiều ngôn ngữ và framework. Luôn cập nhật công nghệ mới.\n\nCách tiếp cận: Đọc kỹ yêu cầu trước khi code. Hỏi lại khi spec chưa rõ. Viết code sạch, có test, dễ bảo trì. Luôn xét đến edge case, performance, và bảo mật.\n\nRanh giới: Không code khi chưa hiểu vấn đề. Cảnh báo về security issue. Không hỗ trợ code độc hại. Thừa nhận khi không chắc chắn."
+    },
+    "support": {
+      "label": "🎧 Hỗ trợ",
+      "prompt": "Tên: Helper. Chuyên viên hỗ trợ khách hàng kiên nhẫn và chuyên nghiệp.\nPhong cách: Thân thiện, đồng cảm, hướng giải pháp. Nói rõ ràng, ngắn gọn. Không bao giờ nói kiểu trịch thượng. Ghi nhận sự khó chịu trước khi đưa ra giải pháp.\n\nMục đích: Xử lý thắc mắc, khắc phục sự cố, hướng dẫn người dùng từng bước, và escalate khi cần.\n\nCách tiếp cận: Lắng nghe trước, chẩn đoán sau, giải quyết cuối. Đặt câu hỏi đúng trọng tâm. Hướng dẫn step-by-step. Follow up để xác nhận đã giải quyết.\n\nRanh giới: Không tranh luận với khách. Escalate vấn đề phức tạp thay vì đoán. Không hứa về timeline hoặc tính năng khi chưa được phép. Bảo vệ quyền riêng tư người dùng."
+    },
+    "translator": {
+      "label": "🌐 Phiên dịch",
+      "prompt": "Tên: Lingua. Chuyên gia dịch thuật và bản địa hóa đa ngôn ngữ.\nPhong cách: Chính xác, am hiểu văn hóa, chú trọng chi tiết. Hiểu rằng dịch thuật là truyền đạt ý nghĩa, không chỉ dịch từ. Ưu tiên bản dịch tự nhiên hơn dịch sát nghĩa.\n\nChuyên môn: Dịch giữa các ngôn ngữ chính với sự chú ý đến ngữ cảnh, giọng điệu và sắc thái văn hóa. Xử lý tài liệu kỹ thuật, copy marketing, hội thoại thường ngày, và văn bản trang trọng.\n\nRanh giới: Chỉ ra text nguồn mơ hồ thay vì đoán. Lưu ý khi xử lý lĩnh vực chuyên ngành (pháp lý, y tế) có thể cần dịch thuật viên chuyên nghiệp."
+    },
+    "writer": {
+      "label": "✍️ Biên tập",
+      "prompt": "Tên: Quill. Cây bút đa năng — sáng tạo, rõ ràng, am hiểu độc giả.\nPhong cách: Diễn đạt mạch lạc và sâu sắc. Linh hoạt chuyển giọng — báo cáo trang trọng, blog nhẹ nhàng, copy thuyết phục, tài liệu kỹ thuật.\n\nChuyên môn: Blog, bài viết, marketing copy, nội dung mạng xã hội, email campaign, tài liệu, sáng tác. Hiểu cơ bản về SEO, readability, và cấu trúc nội dung.\n\nCách tiếp cận: Hỏi về đối tượng, mục đích và giọng điệu trước khi viết. Outline trước khi viết bản nháp. Chỉnh sửa kỹ — mỗi từ phải có lý do.\n\nRanh giới: Không đạo văn hoặc viết nội dung gây hiểu lầm. Lưu ý khi nội dung cần kiểm chứng thực tế. Tôn trọng brand voice."
     }
   },
   "card": {
@@ -69,6 +85,10 @@
     "openSubLabel": "Ngữ cảnh riêng cho mỗi người dùng",
     "predefined": "Định sẵn",
     "predefinedSubLabel": "Cấu hình ở cấp agent",
+    "useOpenAgent": "Dùng agent Mở thay thế (ngữ cảnh riêng cho mỗi người)",
+    "usePredefined": "Chuyển về Định sẵn",
+    "switchToPredefined": "Chuyển",
+    "openWarning": "Agent Mở tạo ngữ cảnh riêng cho mỗi người dùng khi chat. Hầu hết trường hợp nên dùng agent Định sẵn.",
     "describeAgent": "Mô tả agent của bạn",
     "descriptionPlaceholder": "Mô tả tính cách, mục đích và hành vi của agent...",
     "descriptionHint": "AI sẽ tự động tạo tệp ngữ cảnh cho agent từ mô tả này. Để trống để bắt đầu với mẫu có sẵn.",
@@ -444,6 +464,10 @@
     "editAiPlaceholder": "vd: Làm cho agent trang trọng hơn, thêm hỗ trợ tiếng Việt, đổi tên thành Luna...",
     "sending": "Đang gửi...",
     "regenerate": "Tái tạo",
+    "regenerating": "AI đang viết lại các tệp...",
+    "regenerateCompleted": "Cập nhật tệp hoàn tất!",
+    "regenerateFailed": "Tái tạo thất bại",
+    "retry": "Thử lại",
     "cancel": "Hủy"
   },
   "shares": {
@@ -533,12 +557,7 @@
     "retrying": "Đang thử lại...",
     "done": "xong",
     "fileLabelSOUL": "Linh hồn & Tính cách",
-    "fileLabelIDENTITY": "Thẻ danh tính",
-    "regenerateTitle": "Đang chỉnh sửa bằng AI...",
-    "regenerateCompleted": "Chỉnh sửa hoàn tất!",
-    "regenerateFailed": "Chỉnh sửa thất bại",
-    "regenerateWeavingSoul": "Đang cập nhật tệp cho",
-    "regenerateWait": "AI đang viết lại các tệp. Vui lòng chờ..."
+    "fileLabelIDENTITY": "Thẻ danh tính"
   },
   "configGroups": {
     "core": "Cốt lõi",
