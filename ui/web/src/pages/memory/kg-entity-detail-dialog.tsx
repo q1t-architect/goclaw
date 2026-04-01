@@ -306,7 +306,16 @@ const RelationsTable = React.memo(function RelationsTable({
                   ? t("kg.entity.direction.outgoing")
                   : t("kg.entity.direction.incoming")}
               </td>
-              <td className="px-3 py-2 font-mono">{rel.relation_type}</td>
+              <td className="px-3 py-2">
+                  <span className="font-mono">{rel.relation_type}</span>
+                  {rel.source && (
+                    <Badge variant="outline" className={"ml-1 text-[10px] " + (
+                      rel.source === "manual" ? "border-blue-400 text-blue-500" :
+                      rel.source === "extraction" ? "border-green-400 text-green-500" :
+                      "border-orange-400 text-orange-500"
+                    )}>{rel.source}</Badge>
+                  )}
+                </td>
               <td className="px-3 py-2">
                 {rel.source_entity_id === entityId
                   ? (entityLookup.get(rel.target_entity_id)?.name ?? rel.target_entity_id.slice(0, 8))

@@ -162,7 +162,8 @@
         "relation": "Quan hệ",
         "target": "Đích",
         "confidence": "Độ tin cậy",
-        "actions": "Actions"
+        "actions": "Actions",
+        "source": "Source"
       },
       "addRelation": "Add Relation"
     },
@@ -215,7 +216,12 @@
       "description": "Are you sure you want to delete this relation?",
       "confirmLabel": "Delete"
     },
-    "newEntity": "New Entity"
+    "newEntity": "New Entity",
+    "source": {
+      "manual": "Manual",
+      "extraction": "Extraction",
+      "agent": "Agent"
+    }
   },
   "toast": {
     "created": "Đã tạo tài liệu bộ nhớ",

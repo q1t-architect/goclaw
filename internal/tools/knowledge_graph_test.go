@@ -65,6 +65,9 @@ func (m *mockKGStore) SearchEntities(_ context.Context, _, _, query string, limi
 }
 
 func (m *mockKGStore) UpsertRelation(_ context.Context, r *store.Relation) error {
+	if r.Source == "" {
+		r.Source = "manual"
+	}
 	m.relations = append(m.relations, *r)
 	return nil
 }

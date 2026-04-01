@@ -28,6 +28,8 @@ type Relation struct {
 	TargetEntityID string            `json:"target_entity_id"`
 	Confidence     float64           `json:"confidence"`
 	Properties     map[string]string `json:"properties,omitempty"`
+	Source         string            `json:"source,omitempty"`
+	UpdatedAt      int64             `json:"updated_at,omitempty"`
 	CreatedAt      int64             `json:"created_at"`
 }
 

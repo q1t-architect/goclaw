@@ -162,7 +162,8 @@
         "relation": "关系",
         "target": "目标",
         "confidence": "置信度",
-        "actions": "Actions"
+        "actions": "Actions",
+        "source": "Source"
       },
       "addRelation": "Add Relation"
     },
@@ -215,7 +216,12 @@
       "description": "Are you sure you want to delete this relation?",
       "confirmLabel": "Delete"
     },
-    "newEntity": "New Entity"
+    "newEntity": "New Entity",
+    "source": {
+      "manual": "Manual",
+      "extraction": "Extraction",
+      "agent": "Agent"
+    }
   },
   "toast": {
     "created": "记忆文档已创建",

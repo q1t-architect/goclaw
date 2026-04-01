@@ -162,7 +162,8 @@
         "relation": "Relation",
         "target": "Target",
         "confidence": "Confidence",
-        "actions": "Actions"
+        "actions": "Actions",
+        "source": "Source"
       },
       "addRelation": "Add Relation"
     },
@@ -215,7 +216,12 @@
       "description": "Are you sure you want to delete this relation?",
       "confirmLabel": "Delete"
     },
-    "newEntity": "New Entity"
+    "newEntity": "New Entity",
+    "source": {
+      "manual": "Manual",
+      "extraction": "Extraction",
+      "agent": "Agent"
+    }
   },
   "toast": {
     "created": "Memory document created",

@@ -439,6 +439,9 @@ func (h *KnowledgeGraphHandler) handleUpsertRelation(w http.ResponseWriter, r *h
 	if relation.Confidence <= 0 {
 		relation.Confidence = 1.0
 	}
+	if relation.Source == "" {
+		relation.Source = "manual"
+	}
 
 	if err := h.store.UpsertRelation(r.Context(), &relation); err != nil {
 		slog.Warn("kg.upsert_relation failed", "error", err)
