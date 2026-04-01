@@ -7,6 +7,7 @@ import (
 	"cmp"
 	"fmt"
 	"slices"
+	"strings"
 	"time"
 
 	"github.com/google/uuid"
@@ -366,4 +367,100 @@ func hybridMergeEntities(ilike, vec []scoredEntity, textWeight, vectorWeight flo
 	})
 
 	return results
+}
+
+// UpdateEntity partially updates an entity. Only whitelisted fields from updates map are applied.
+// Returns (nil, nil) if entity not found.
+func (s *PGKnowledgeGraphStore) UpdateEntity(ctx context.Context, agentID, userID, entityID string, updates map[string]any) (*store.Entity, error) {
+	allowed := map[string]bool{
+		"name": true, "entity_type": true, "description": true,
+		"properties": true, "confidence": true,
+	}
+
+	var setClauses []string
+	var args []any
+	idx := 1
+
+	for field, val := range updates {
+		col := toSnakeCase(field)
+		if !allowed[col] {
+			continue
+		}
+		setClauses = append(setClauses, fmt.Sprintf("%s = $%d", col, idx))
+		// Marshal properties map to JSON
+		if col == "properties" {
+			j, err := json.Marshal(val)
+			if err != nil {
+				continue
+			}
+			args = append(args, string(j))
+		} else {
+			args = append(args, val)
+		}
+		idx++
+	}
+
+	if len(setClauses) == 0 {
+		return nil, fmt.Errorf("no valid fields to update")
+	}
+
+	// Always update updated_at
+	setClauses = append(setClauses, fmt.Sprintf("updated_at = NOW()"))
+
+	aid := mustParseUUID(agentID)
+	eid := mustParseUUID(entityID)
+
+	args = append(args, eid, aid)
+	whereIdx := idx
+
+	var query string
+	var whereArgs []any
+	if store.IsSharedKG(ctx) {
+		tc, tcArgs, _, err := scopeClause(ctx, whereIdx+2)
+		if err != nil {
+			return nil, err
+		}
+		query = fmt.Sprintf(`UPDATE kg_entities SET %s WHERE id = $%d AND agent_id = $%d%s RETURNING id, agent_id, user_id, external_id, name, entity_type, description, properties, source_id, confidence, created_at, updated_at`,
+			strings.Join(setClauses, ", "), whereIdx, whereIdx+1, tc)
+		whereArgs = append(args, tcArgs...)
+	} else {
+		args = append(args, userID)
+		tc, tcArgs, _, err := scopeClause(ctx, whereIdx+3)
+		if err != nil {
+			return nil, err
+		}
+		query = fmt.Sprintf(`UPDATE kg_entities SET %s WHERE id = $%d AND agent_id = $%d AND user_id = $%d%s RETURNING id, agent_id, user_id, external_id, name, entity_type, description, properties, source_id, confidence, created_at, updated_at`,
+			strings.Join(setClauses, ", "), whereIdx, whereIdx+1, whereIdx+2, tc)
+		whereArgs = append(args, tcArgs...)
+	}
+
+	row := s.db.QueryRowContext(ctx, query, whereArgs...)
+	entity, err := scanEntity(row)
+	if err != nil {
+		if err == sql.ErrNoRows {
+			return nil, nil
+		}
+		return nil, err
+	}
+
+	// Re-embed if name or description changed
+	if _, ok := updates["name"]; ok {
+		go s.EmbedEntity(context.WithoutCancel(ctx), entity.ID, entity.Name, entity.Description)
+	} else if _, ok := updates["description"]; ok {
+		go s.EmbedEntity(context.WithoutCancel(ctx), entity.ID, entity.Name, entity.Description)
+	}
+
+	return entity, nil
+}
+
+// toSnakeCase converts camelCase to snake_case.
+func toSnakeCase(s string) string {
+	var result []rune
+	for i, r := range s {
+		if i > 0 && r >= 'A' && r <= 'Z' {
+			result = append(result, '_')
+		}
+		result = append(result, []rune(strings.ToLower(string(r)))...)
+	}
+	return string(result)
 }

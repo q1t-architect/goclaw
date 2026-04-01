@@ -33,6 +33,13 @@ export class HttpClient {
     return this.request<T>(this.buildUrl(path), { method: "DELETE" });
   }
 
+  async patch<T>(path: string, body?: unknown): Promise<T> {
+    return this.request<T>(this.buildUrl(path), {
+      method: "PATCH",
+      body: body ? JSON.stringify(body) : undefined,
+    });
+  }
+
   async downloadBlob(path: string): Promise<Blob> {
     const res = await fetch(this.buildUrl(path), {
       method: "GET",

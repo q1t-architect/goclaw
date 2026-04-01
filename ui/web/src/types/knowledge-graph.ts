@@ -22,6 +22,8 @@ export interface KGRelation {
   target_entity_id: string;
   confidence: number;
   properties?: Record<string, string>;
+  source?: string;
+  updated_at?: number;
   created_at: number;
 }
 

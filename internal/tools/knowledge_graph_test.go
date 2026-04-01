@@ -65,6 +65,9 @@ func (m *mockKGStore) SearchEntities(_ context.Context, _, _, query string, limi
 }
 
 func (m *mockKGStore) UpsertRelation(_ context.Context, r *store.Relation) error {
+	if r.Source == "" {
+		r.Source = "manual"
+	}
 	m.relations = append(m.relations, *r)
 	return nil
 }
@@ -156,6 +159,10 @@ func (m *mockKGStore) CountEntitiesByType(context.Context, string, string) (int6
 
 func (m *mockKGStore) CountRelationsByType(context.Context, string, string) (int64, error) {
 	return 0, nil
+}
+
+func (m *mockKGStore) UpdateEntity(_ context.Context, _, _, _ string, _ map[string]any) (*store.Entity, error) {
+	return nil, nil
 }
 
 func (m *mockKGStore) SetEmbeddingProvider(store.EmbeddingProvider) {}

@@ -28,6 +28,8 @@ type Relation struct {
 	TargetEntityID string            `json:"target_entity_id"`
 	Confidence     float64           `json:"confidence"`
 	Properties     map[string]string `json:"properties,omitempty"`
+	Source         string            `json:"source,omitempty"`
+	UpdatedAt      int64             `json:"updated_at,omitempty"`
 	CreatedAt      int64             `json:"created_at"`
 }
 
@@ -67,6 +69,7 @@ type DedupCandidate struct {
 type KnowledgeGraphStore interface {
 	UpsertEntity(ctx context.Context, entity *Entity) error
 	GetEntity(ctx context.Context, agentID, userID, entityID string) (*Entity, error)
+	UpdateEntity(ctx context.Context, agentID, userID, entityID string, updates map[string]any) (*Entity, error)
 	DeleteEntity(ctx context.Context, agentID, userID, entityID string) error
 	ListEntities(ctx context.Context, agentID, userID string, opts EntityListOptions) ([]Entity, error)
 	SearchEntities(ctx context.Context, agentID, userID, query string, limit int) ([]Entity, error)

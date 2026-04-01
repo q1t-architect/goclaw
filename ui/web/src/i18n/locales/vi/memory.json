@@ -161,8 +161,11 @@
         "direction": "Chiều",
         "relation": "Quan hệ",
         "target": "Đích",
-        "confidence": "Độ tin cậy"
-      }
+        "confidence": "Độ tin cậy",
+        "actions": "Actions",
+        "source": "Source"
+      },
+      "addRelation": "Add Relation"
     },
     "extractDialog": {
       "title": "Trích xuất thực thể từ văn bản",
@@ -184,6 +187,40 @@
       "selected": "Đã chọn: {{name}}",
       "limitNote": "Hiển thị {{limit}}/{{total}} thực thể",
       "limitHint": "Đồ thị giới hạn {{limit}} thực thể để đảm bảo hiệu năng. Dùng chế độ bảng để xem tất cả {{total}} thực thể."
+    },
+    "entityForm": {
+      "titleCreate": "Create Entity",
+      "titleEdit": "Edit Entity",
+      "name": "Name",
+      "externalId": "External ID",
+      "entityType": "Entity Type",
+      "description": "Description",
+      "confidence": "Confidence",
+      "cancel": "Cancel",
+      "create": "Create",
+      "save": "Save"
+    },
+    "relationForm": {
+      "title": "Add Relation",
+      "direction": "Direction",
+      "outgoing": "Outgoing",
+      "incoming": "Incoming",
+      "targetEntity": "Target Entity",
+      "relationType": "Relation Type",
+      "confidence": "Confidence",
+      "cancel": "Cancel",
+      "add": "Add"
+    },
+    "deleteRelation": {
+      "title": "Delete Relation",
+      "description": "Are you sure you want to delete this relation?",
+      "confirmLabel": "Delete"
+    },
+    "newEntity": "New Entity",
+    "source": {
+      "manual": "Manual",
+      "extraction": "Extraction",
+      "agent": "Agent"
     }
   },
   "toast": {
@@ -212,6 +249,12 @@
     "allIndexed": "Đã lập chỉ mục tất cả tài liệu",
     "allIndexFailed": "Không thể lập chỉ mục tất cả",
     "searchFailed": "Tìm kiếm thất bại",
-    "docLoadFailed": "Không thể tải tài liệu"
+    "docLoadFailed": "Không thể tải tài liệu",
+    "entityUpdated": "Entity updated",
+    "entityUpdateFailed": "Failed to update entity",
+    "relationSaved": "Relation saved",
+    "relationSaveFailed": "Failed to save relation",
+    "relationDeleted": "Relation deleted",
+    "relationDeleteFailed": "Failed to delete relation"
   }
 }
