@@ -100,6 +100,49 @@ export function useKnowledgeGraph(filters: KGFilters) {
     [http, filters.agentId, invalidate],
   );
 
+
+  const updateEntity = useCallback(
+    async (entityId: string, updates: Record<string, unknown>, userId?: string) => {
+      try {
+        await http.patch(`/v1/agents/${filters.agentId}/kg/entities/${entityId}`, updates);
+        await invalidate();
+        toast.success(i18n.t("memory:toast.entityUpdated"));
+      } catch (err) {
+        toast.error(i18n.t("memory:toast.entityUpdateFailed"), err instanceof Error ? err.message : i18n.t("memory:toast.unknownError"));
+        throw err;
+      }
+    },
+    [http, filters.agentId, invalidate],
+  );
+
+  const upsertRelation = useCallback(
+    async (data: { source_entity_id: string; target_entity_id: string; relation_type: string; confidence?: number }, userId?: string) => {
+      try {
+        await http.post(`/v1/agents/${filters.agentId}/kg/relations`, { ...data, user_id: userId || "" });
+        await invalidate();
+        toast.success(i18n.t("memory:toast.relationSaved"));
+      } catch (err) {
+        toast.error(i18n.t("memory:toast.relationSaveFailed"), err instanceof Error ? err.message : i18n.t("memory:toast.unknownError"));
+        throw err;
+      }
+    },
+    [http, filters.agentId, invalidate],
+  );
+
+  const deleteRelation = useCallback(
+    async (relationId: string, userId?: string) => {
+      try {
+        const qs = userId ? `?user_id=${encodeURIComponent(userId)}` : "";
+        await http.delete(`/v1/agents/${filters.agentId}/kg/relations/${relationId}${qs}`);
+        await invalidate();
+        toast.success(i18n.t("memory:toast.relationDeleted"));
+      } catch (err) {
+        toast.error(i18n.t("memory:toast.relationDeleteFailed"), err instanceof Error ? err.message : i18n.t("memory:toast.unknownError"));
+        throw err;
+      }
+    },
+    [http, filters.agentId, invalidate],
+  );
   return {
     entities,
     loading: isLoading,
@@ -109,6 +152,9 @@ export function useKnowledgeGraph(filters: KGFilters) {
     upsertEntity,
     deleteEntity,
     extractFromText,
+    updateEntity,
+    upsertRelation,
+    deleteRelation,
   };
 }
 
