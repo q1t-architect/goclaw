@@ -38,7 +38,7 @@ export function KGEntitiesTab({ agentId, userId }: KGEntitiesTabProps) {
   const [formEntity, setFormEntity] = useState<KGEntity | "new" | null>(null);
   const [viewMode, setViewMode] = useState<ViewMode>("table");
 
-  const { entities, loading, fetching, refresh, deleteEntity, getEntityWithRelations, extractFromText, updateEntity, upsertRelation, deleteRelation } = useKnowledgeGraph({
+  const { entities, loading, fetching, refresh, deleteEntity, getEntityWithRelations, extractFromText, updateEntity, upsertEntity, upsertRelation, deleteRelation } = useKnowledgeGraph({
     agentId,
     userId,
     query: appliedQuery || undefined,
@@ -70,7 +70,7 @@ export function KGEntitiesTab({ agentId, userId }: KGEntitiesTabProps) {
 
   const handleFormSave = async (data: Record<string, unknown>) => {
     if (formEntity && formEntity !== "new") {
-      await updateEntity((formEntity as KGEntity).id, data, (formEntity as KGEntity).user_id);
+      await updateEntity((formEntity as KGEntity).id, data);
     } else {
       await upsertEntity(data as Partial<KGEntity>);
     }

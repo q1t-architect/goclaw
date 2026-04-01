@@ -39,7 +39,7 @@ interface KGEntityFormDialogProps {
   onSave: (data: Record<string, unknown>) => Promise<void>;
 }
 
-export function KGEntityFormDialog({ open, onOpenChange, agentId, userId, entity, entityTypes, onSave }: KGEntityFormDialogProps) {
+export function KGEntityFormDialog({ open, onOpenChange, userId, entity, entityTypes, onSave }: KGEntityFormDialogProps) {
   const { t } = useTranslation("memory");
   const isEdit = !!entity;
 

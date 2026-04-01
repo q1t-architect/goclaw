@@ -102,7 +102,7 @@ export function useKnowledgeGraph(filters: KGFilters) {
 
 
   const updateEntity = useCallback(
-    async (entityId: string, updates: Record<string, unknown>, userId?: string) => {
+    async (entityId: string, updates: Record<string, unknown>) => {
       try {
         await http.patch(`/v1/agents/${filters.agentId}/kg/entities/${entityId}`, updates);
         await invalidate();
