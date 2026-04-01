@@ -89,6 +89,33 @@ func buildSandboxSection(cfg SystemPromptConfig) []string {
 	return lines
 }
 
+// buildMemoryRecallSection generates the ## Memory Recall section for the system prompt.
+// Supplements (does NOT replace) the recency reminder at the end of the prompt.
+func buildMemoryRecallSection(hasMemoryGet, hasKG bool) []string {
+	lines := []string{"## Memory Recall", ""}
+
+	if hasMemoryGet {
+		lines = append(lines,
+			"Before answering questions about prior work, decisions, people, preferences, or todos: "+
+				"call memory_search with a relevant query; then use memory_get to pull only the needed lines. "+
+				"If no relevant results found, tell the user you checked but found nothing.")
+	} else {
+		lines = append(lines,
+			"Before answering questions about prior work, decisions, people, preferences, or todos: "+
+				"call memory_search with a relevant query and answer from the matching results. "+
+				"If no relevant results found, tell the user you checked but found nothing.")
+	}
+
+	if hasKG {
+		lines = append(lines,
+			"Also run knowledge_graph_search when the question involves people, teams, projects, or connections — "+
+				"it finds multi-hop relationship paths that memory_search misses.")
+	}
+
+	lines = append(lines, "")
+	return lines
+}
+
 func buildUserIdentitySection(ownerIDs []string) []string {
 	return []string{
 		"## User Identity",

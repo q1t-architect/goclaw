@@ -3,6 +3,7 @@ package agent
 import (
 	"fmt"
 	"log/slog"
+	"slices"
 	"strings"
 
 	"github.com/nextlevelbuilder/goclaw/internal/bootstrap"
@@ -312,6 +313,12 @@ func BuildSystemPrompt(cfg SystemPromptConfig) string {
 		lines = append(lines, buildProjectContextSection(otherFiles, cfg.AgentType)...)
 	}
 
+	// 12.5. ## Memory Recall — dedicated section (supplements recency reminder at end)
+	if !isMinimal && cfg.HasMemory {
+		hasMemoryGet := slices.Contains(cfg.ToolNames, "memory_get")
+		lines = append(lines, buildMemoryRecallSection(hasMemoryGet, cfg.HasKnowledgeGraph)...)
+	}
+
 	// 13. ## Sub-Agent Spawning — skipped for team agents and bootstrap
 	if !cfg.IsBootstrap && cfg.HasSpawn && !cfg.HasTeam {
 		lines = append(lines, buildSpawnSection()...)
@@ -329,9 +336,9 @@ func BuildSystemPrompt(cfg SystemPromptConfig) string {
 			lines = append(lines, "Reminder: Follow AGENTS.md rules — memory recall before answering, NO_REPLY when silent, match the user's language.", "")
 		}
 		if !isMinimal && cfg.HasMemory {
-			memReminder := "Reminder: Before answering questions about prior work, decisions, or preferences, always run memory_search first."
+			memReminder := "Reminder: Before answering questions about prior work, decisions, or preferences, always run memory_search first. If nothing relevant is found, say you checked but found nothing."
 			if cfg.HasKnowledgeGraph {
-				memReminder += " Also run knowledge_graph_search when the question involves people, teams, projects, or connections — it finds relationship paths that memory_search misses."
+				memReminder += " Also run knowledge_graph_search when the question involves people, teams, projects, or connections."
 			}
 			lines = append(lines, memReminder, "")
 		}
