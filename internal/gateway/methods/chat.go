@@ -60,6 +60,10 @@ func (m *ChatMethods) handleSessionStatus(_ context.Context, client *gateway.Cli
 	}
 
 	isRunning := m.agents.IsSessionBusy(params.SessionKey)
+	var runId string
+	if rid, ok := m.agents.SessionRunID(params.SessionKey); ok {
+		runId = rid
+	}
 	var activity map[string]any
 	if status := m.agents.GetActivity(params.SessionKey); status != nil {
 		activity = map[string]any{
@@ -71,6 +75,7 @@ func (m *ChatMethods) handleSessionStatus(_ context.Context, client *gateway.Cli
 
 	client.SendResponse(protocol.NewOKResponse(req.ID, map[string]any{
 		"isRunning": isRunning,
+		"runId":     runId,
 		"activity":  activity,
 	}))
 }

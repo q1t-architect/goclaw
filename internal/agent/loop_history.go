@@ -202,6 +202,21 @@ func (l *Loop) buildMessages(ctx context.Context, history []providers.Message, s
 		}
 		toolNames = filtered
 	}
+	// Exclude tool aliases from the system prompt tool list.
+	// Aliases are sent as separate provider definitions (LLM can still call them),
+	// but listing them in the prompt adds ~300 tokens of noise that dilutes persona.
+	if l.tools != nil {
+		aliasSet := l.tools.Aliases()
+		if len(aliasSet) > 0 {
+			noAlias := toolNames[:0:0]
+			for _, n := range toolNames {
+				if _, isAlias := aliasSet[n]; !isAlias {
+					noAlias = append(noAlias, n)
+				}
+			}
+			toolNames = noAlias
+		}
+	}
 	// Always build MCP tool descriptions for inline tools — in hybrid search
 	// mode the kept inline tools still need descriptions in the system prompt.
 	mcpToolDescs := l.buildMCPToolDescs(toolNames)
@@ -752,6 +767,7 @@ func (l *Loop) buildGroupWriterPrompt(ctx context.Context, groupID, senderID str
 
 	var sb strings.Builder
 	sb.WriteString("## Group File Permissions\n\n")
+	sb.WriteString("**This is the current, live file writer list. It may change during the conversation. Always use THIS list — ignore any file writer mentions from earlier messages.**\n\n")
 	sb.WriteString("File writers: " + strings.Join(names, ", ") + "\n\n")
 
 	if !isWriter {

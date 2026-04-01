@@ -49,6 +49,13 @@ export function useChatMessages(sessionKey: string, agentId: string) {
     if (sessionKey === prevKeyRef.current) return;
     const wasEmpty = !prevKeyRef.current;
     prevKeyRef.current = sessionKey;
+
+    // "" → newKey: part of new-chat send flow. run.started may have already
+    // captured runIdRef before this effect fires. Don't reset run state —
+    // there's no prior session state to clean up from an empty session.
+    if (wasEmpty) return;
+
+    // Session-to-session switch: full reset
     setStreamText(null);
     setThinkingText(null);
     setToolStream([]);
@@ -57,11 +64,7 @@ export function useChatMessages(sessionKey: string, agentId: string) {
     setBlockReplies([]);
     setTeamTasks([]);
     runIdRef.current = null;
-    // Only reset when switching between existing sessions, not on "" → new key
-    // (the "" → key transition is part of the send flow for new sessions).
-    if (!wasEmpty) {
-      expectingRunRef.current = false;
-    }
+    expectingRunRef.current = false;
     streamRef.current = "";
     thinkingRef.current = "";
     toolStreamRef.current = [];
@@ -150,11 +153,14 @@ export function useChatMessages(sessionKey: string, agentId: string) {
     let cancelled = false;
     if (sessionKey) {
       loadHistory();
-      // Restore session running state
-      ws.call<{ isRunning?: boolean; activity?: RunActivity }>(Methods.CHAT_SESSION_STATUS, { sessionKey })
+      // Restore session running state (including runId for event filtering)
+      ws.call<{ isRunning?: boolean; runId?: string; activity?: RunActivity }>(Methods.CHAT_SESSION_STATUS, { sessionKey })
         .then((res) => {
           if (cancelled) return;
-          if (res.isRunning) setIsRunning(true);
+          if (res.isRunning) {
+            setIsRunning(true);
+            if (res.runId) runIdRef.current = res.runId;
+          }
           if (res.activity) {
             setActivity(res.activity);
             activityRef.current = res.activity;

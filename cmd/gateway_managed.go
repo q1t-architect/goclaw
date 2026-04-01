@@ -94,7 +94,7 @@ func wireExtras(
 	var ensureUserProfile agent.EnsureUserProfileFunc
 	var seedUserFiles agent.SeedUserFilesFunc
 	if stores.Agents != nil {
-		ensureUserProfile = buildEnsureUserProfile(stores.Agents, stores.ConfigPermissions)
+		ensureUserProfile = buildEnsureUserProfile(stores.Agents)
 		seedUserFiles = buildSeedUserFiles(stores.Agents)
 	}
 
