@@ -158,6 +158,10 @@ func (m *mockKGStore) CountRelationsByType(context.Context, string, string) (int
 	return 0, nil
 }
 
+func (m *mockKGStore) UpdateEntity(_ context.Context, _, _, _ string, _ map[string]any) (*store.Entity, error) {
+	return nil, nil
+}
+
 func (m *mockKGStore) SetEmbeddingProvider(store.EmbeddingProvider) {}
 func (m *mockKGStore) Close() error                                 { return nil }
 

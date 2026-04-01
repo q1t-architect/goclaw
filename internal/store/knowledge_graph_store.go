@@ -67,6 +67,7 @@ type DedupCandidate struct {
 type KnowledgeGraphStore interface {
 	UpsertEntity(ctx context.Context, entity *Entity) error
 	GetEntity(ctx context.Context, agentID, userID, entityID string) (*Entity, error)
+	UpdateEntity(ctx context.Context, agentID, userID, entityID string, updates map[string]any) (*Entity, error)
 	DeleteEntity(ctx context.Context, agentID, userID, entityID string) error
 	ListEntities(ctx context.Context, agentID, userID string, opts EntityListOptions) ([]Entity, error)
 	SearchEntities(ctx context.Context, agentID, userID, query string, limit int) ([]Entity, error)

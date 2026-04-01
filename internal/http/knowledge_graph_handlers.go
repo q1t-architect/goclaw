@@ -384,3 +384,99 @@ func (h *KnowledgeGraphHandler) handleGraph(w http.ResponseWriter, r *http.Reque
 		"relations": relations,
 	})
 }
+
+func (h *KnowledgeGraphHandler) handleUpdateEntity(w http.ResponseWriter, r *http.Request) {
+	locale := extractLocale(r)
+	agentID := r.PathValue("agentID")
+	entityID := r.PathValue("entityID")
+	userID := r.URL.Query().Get("user_id")
+
+	var body map[string]any
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": i18n.T(locale, i18n.MsgInvalidJSON)})
+		return
+	}
+	if len(body) == 0 {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "no fields to update"})
+		return
+	}
+	// Strip forbidden fields
+	delete(body, "id")
+	delete(body, "agent_id")
+	delete(body, "user_id")
+	delete(body, "external_id")
+	delete(body, "created_at")
+	delete(body, "updated_at")
+
+	entity, err := h.store.UpdateEntity(r.Context(), agentID, userID, entityID, body)
+	if err != nil {
+		slog.Warn("kg.update_entity failed", "error", err)
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
+		return
+	}
+	if entity == nil {
+		writeJSON(w, http.StatusNotFound, map[string]string{"error": i18n.T(locale, i18n.MsgNotFound, "entity", entityID)})
+		return
+	}
+	writeJSON(w, http.StatusOK, entity)
+}
+
+func (h *KnowledgeGraphHandler) handleUpsertRelation(w http.ResponseWriter, r *http.Request) {
+	locale := extractLocale(r)
+	agentID := r.PathValue("agentID")
+
+	var relation store.Relation
+	if err := json.NewDecoder(r.Body).Decode(&relation); err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": i18n.T(locale, i18n.MsgInvalidJSON)})
+		return
+	}
+	relation.AgentID = agentID
+
+	if relation.SourceEntityID == "" || relation.TargetEntityID == "" || relation.RelationType == "" {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "source_entity_id, target_entity_id, and relation_type are required"})
+		return
+	}
+	if relation.Confidence <= 0 {
+		relation.Confidence = 1.0
+	}
+
+	if err := h.store.UpsertRelation(r.Context(), &relation); err != nil {
+		slog.Warn("kg.upsert_relation failed", "error", err)
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]string{"status": "ok"})
+}
+
+func (h *KnowledgeGraphHandler) handleDeleteRelation(w http.ResponseWriter, r *http.Request) {
+	agentID := r.PathValue("agentID")
+	relationID := r.PathValue("relationID")
+	userID := r.URL.Query().Get("user_id")
+
+	if err := h.store.DeleteRelation(r.Context(), agentID, userID, relationID); err != nil {
+		slog.Warn("kg.delete_relation failed", "error", err)
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]string{"status": "deleted"})
+}
+
+func (h *KnowledgeGraphHandler) handleListAllRelations(w http.ResponseWriter, r *http.Request) {
+	agentID := r.PathValue("agentID")
+	userID := r.URL.Query().Get("user_id")
+	limit, _ := strconv.Atoi(r.URL.Query().Get("limit"))
+	if limit <= 0 {
+		limit = 100
+	}
+
+	relations, err := h.store.ListAllRelations(r.Context(), agentID, userID, limit)
+	if err != nil {
+		slog.Warn("kg.list_relations failed", "error", err)
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
+		return
+	}
+	if relations == nil {
+		relations = []store.Relation{}
+	}
+	writeJSON(w, http.StatusOK, relations)
+}
