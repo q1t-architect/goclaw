@@ -45,6 +45,10 @@ func builtinToolSeedData() []store.BuiltinToolDef {
 			Requires: []string{"knowledge_graph"},
 		},
 
+		{Name: "knowledge_graph_mutate", DisplayName: "Knowledge Graph Mutate", Description: "Allow agents to create and update entities and relations in the knowledge graph", Category: "memory", Enabled: false,
+			Settings: json.RawMessage(`{"max_entities_per_run":10,"max_relations_per_run":20}`),
+			Requires: []string{"knowledge_graph"},
+		},
 		// media — user must configure provider chain via UI before use
 		{Name: "read_image", DisplayName: "Read Image", Description: "Analyze images using a vision-capable LLM provider", Category: "media", Enabled: false,
 			Requires: []string{"vision_provider"},

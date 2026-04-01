@@ -296,6 +296,12 @@ func wireExtras(
 				kgt.SetKGStore(stores.KnowledgeGraph)
 			}
 		}
+		// Wire knowledge graph mutate tool
+		if kgMutTool, ok := toolsReg.Get("knowledge_graph_mutate"); ok {
+			if kgt, ok := kgMutTool.(*tools.KnowledgeGraphMutateTool); ok {
+				kgt.SetKGStore(stores.KnowledgeGraph)
+			}
+		}
 		// Enable KG hint in memory_search results
 		if searchTool, ok := toolsReg.Get("memory_search"); ok {
 			if mst, ok := searchTool.(*tools.MemorySearchTool); ok {

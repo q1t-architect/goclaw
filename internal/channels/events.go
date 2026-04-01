@@ -372,6 +372,7 @@ var toolStatusMap = map[string]string{
 	"memory_search":          "🧠 Searching memory...",
 	"memory_get":             "🧠 Retrieving memory...",
 	"knowledge_graph_search": "🧠 Querying knowledge graph...",
+	"knowledge_graph_mutate": "✏️ Updating knowledge graph...",
 	// Media
 	"read_image":    "👁 Analyzing image...",
 	"read_document": "📄 Reading document...",
