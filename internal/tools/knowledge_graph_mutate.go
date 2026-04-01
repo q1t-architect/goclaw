@@ -6,6 +6,8 @@ import (
 	"fmt"
 	"log/slog"
 	"strings"
+	"sync"
+	"time"
 
 	"github.com/google/uuid"
 	"github.com/nextlevelbuilder/goclaw/internal/store"
@@ -62,14 +64,86 @@ func (s kgMutateSettings) isRelationTypeAllowed(relType string) bool {
 	return false
 }
 
+// kgMutateCounter tracks entity/relation creation counts per agent within a time window.
+type kgMutateCounter struct {
+	mu       sync.Mutex
+	counters map[string]*kgRunCount
+}
+
+type kgRunCount struct {
+	entities  int
+	relations int
+	lastSeen  time.Time
+}
+
+func newKGMutateCounter() *kgMutateCounter {
+	c := &kgMutateCounter{counters: make(map[string]*kgRunCount)}
+	go c.cleanup()
+	return c
+}
+
+func (c *kgMutateCounter) cleanup() {
+	ticker := time.NewTicker(5 * time.Minute)
+	defer ticker.Stop()
+	for range ticker.C {
+		c.mu.Lock()
+		for k, v := range c.counters {
+			if time.Since(v.lastSeen) > 10*time.Minute {
+				delete(c.counters, k)
+			}
+		}
+		c.mu.Unlock()
+	}
+}
+
+func (c *kgMutateCounter) canCreateEntity(agentID string, limit int) bool {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	return c.get(agentID).entities < limit
+}
+
+func (c *kgMutateCounter) canCreateRelation(agentID string, limit int) bool {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	return c.get(agentID).relations < limit
+}
+
+func (c *kgMutateCounter) incEntity(agentID string) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	r := c.get(agentID)
+	r.entities++
+	r.lastSeen = time.Now()
+}
+
+func (c *kgMutateCounter) incRelation(agentID string) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	r := c.get(agentID)
+	r.relations++
+	r.lastSeen = time.Now()
+}
+
+func (c *kgMutateCounter) get(agentID string) *kgRunCount {
+	r, ok := c.counters[agentID]
+	if !ok {
+		r = &kgRunCount{}
+		c.counters[agentID] = r
+	}
+	return r
+}
+
 // KnowledgeGraphMutateTool provides write access to the knowledge graph for agents.
 // It is disabled by default — admin must enable it via builtin_tools settings.
 type KnowledgeGraphMutateTool struct {
-	kgStore store.KnowledgeGraphStore
+	kgStore   store.KnowledgeGraphStore
+	kgCounter *kgMutateCounter
 }
 
 func NewKnowledgeGraphMutateTool() *KnowledgeGraphMutateTool {
-	return &KnowledgeGraphMutateTool{}
+	return &KnowledgeGraphMutateTool{
+		kgCounter: newKGMutateCounter(),
+	}
 }
 
 func (t *KnowledgeGraphMutateTool) SetKGStore(ks store.KnowledgeGraphStore) {
@@ -181,6 +255,11 @@ func (t *KnowledgeGraphMutateTool) createEntity(ctx context.Context, agentID, us
 		return ErrorResult(fmt.Sprintf("entity type %q is not allowed. Allowed types: %s", entityType, settings.AllowedEntityTypes))
 	}
 
+	// Enforce per-run entity limit
+	if !t.kgCounter.canCreateEntity(agentID, settings.MaxEntitiesPerRun) {
+		return ErrorResult(fmt.Sprintf("entity creation limit reached (%d per run). Wait and try again.", settings.MaxEntitiesPerRun))
+	}
+
 	confidence := 1.0
 	if c, ok := args["confidence"].(float64); ok && c > 0 {
 		confidence = c
@@ -205,6 +284,7 @@ func (t *KnowledgeGraphMutateTool) createEntity(ctx context.Context, agentID, us
 		return ErrorResult(fmt.Sprintf("failed to create entity: %v", err))
 	}
 
+	t.kgCounter.incEntity(agentID)
 	return NewResult(fmt.Sprintf("Entity created: %s [%s] (id: %s)", name, entityType, entity.ID))
 }
 
@@ -254,6 +334,11 @@ func (t *KnowledgeGraphMutateTool) createRelation(ctx context.Context, agentID, 
 		return ErrorResult(fmt.Sprintf("relation type %q is not allowed. Allowed types: %s", relType, settings.AllowedRelationTypes))
 	}
 
+	// Enforce per-run relation limit
+	if !t.kgCounter.canCreateRelation(agentID, settings.MaxRelationsPerRun) {
+		return ErrorResult(fmt.Sprintf("relation creation limit reached (%d per run). Wait and try again.", settings.MaxRelationsPerRun))
+	}
+
 	confidence := 1.0
 	if c, ok := args["confidence"].(float64); ok && c > 0 {
 		confidence = c
@@ -275,6 +360,7 @@ func (t *KnowledgeGraphMutateTool) createRelation(ctx context.Context, agentID, 
 		return ErrorResult(fmt.Sprintf("failed to create relation: %v", err))
 	}
 
+	t.kgCounter.incRelation(agentID)
 	srcName := t.resolveEntityName(ctx, agentID, userID, srcID)
 	tgtName := t.resolveEntityName(ctx, agentID, userID, tgtID)
 
