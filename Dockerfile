@@ -4,8 +4,11 @@
 FROM node:22-alpine AS web-builder
 RUN corepack enable && corepack prepare pnpm@10.28.2 --activate
 WORKDIR /app
-COPY ui/web/package.json ui/web/pnpm-lock.yaml ./
-RUN pnpm install --frozen-lockfile
+# Copy .npmrc first so pnpm fetches musl native bindings (needed on Alpine)
+COPY ui/web/.npmrc ui/web/package.json ui/web/pnpm-lock.yaml ./
+# Use --no-frozen-lockfile so pnpm can fetch musl native bindings missing from macOS-generated lockfile.
+# Lockfile is still copied above to pin versions; .npmrc sets supportedArchitectures for Alpine (musl).
+RUN pnpm install --no-frozen-lockfile
 COPY ui/web/ .
 RUN pnpm build
 
