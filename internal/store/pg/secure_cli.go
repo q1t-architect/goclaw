@@ -26,6 +26,11 @@ func NewPGSecureCLIStore(db *sql.DB, encryptionKey string) *PGSecureCLIStore {
 const secureCLISelectCols = `id, binary_name, binary_path, description, encrypted_env,
  deny_args, deny_verbose, timeout_seconds, tips, agent_id, enabled, created_by, created_at, updated_at`
 
+// secureCLISelectColsAliased is the same as secureCLISelectCols but prefixed with table alias "b."
+// Required for LookupByBinary which uses LEFT JOIN (ambiguous column names without prefix).
+const secureCLISelectColsAliased = `b.id, b.binary_name, b.binary_path, b.description, b.encrypted_env,
+ b.deny_args, b.deny_verbose, b.timeout_seconds, b.tips, b.agent_id, b.enabled, b.created_by, b.created_at, b.updated_at`
+
 func (s *PGSecureCLIStore) Create(ctx context.Context, b *store.SecureCLIBinary) error {
 	if err := store.ValidateUserID(b.CreatedBy); err != nil {
 		return err
@@ -271,7 +276,8 @@ func (s *PGSecureCLIStore) LookupByBinary(ctx context.Context, binaryName string
 	}
 
 	// Build query with optional LEFT JOIN for per-user credentials.
-	selectCols := secureCLISelectCols
+	// Use aliased columns (b.) to avoid ambiguous column reference with JOIN.
+	selectCols := secureCLISelectColsAliased
 	joinClause := ""
 	if userID != "" {
 		selectCols += ", uc.encrypted_env AS user_env"
