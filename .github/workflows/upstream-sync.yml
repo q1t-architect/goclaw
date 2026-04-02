@@ -68,7 +68,7 @@ jobs:
         with:
           claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
           claude_args: "--model claude-opus-4-6"
-          direct_prompt: |
+          prompt: |
             You are resolving merge conflicts between upstream (dev) and our fork (custom).
 
             Rules:
@@ -81,7 +81,6 @@ jobs:
               "upstream-sync: merge upstream with conflict resolution"
 
             Resolve all conflicts now. Check every file with conflict markers.
-          timeout_minutes: 10
 
       - name: Push resolved merge
         if: steps.merge.outputs.status == 'conflict'
