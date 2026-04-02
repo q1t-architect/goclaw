@@ -129,6 +129,7 @@ func (m *Manager) Start(ctx context.Context) error {
 		// Local Chrome — launch via rod launcher
 		l := launcher.New().
 			Headless(m.headless).
+			Set("no-sandbox").
 			Set("disable-gpu").
 			Set("no-first-run").
 			Set("no-default-browser-check")
