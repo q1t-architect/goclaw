@@ -121,13 +121,13 @@ func processNormalMessage(
 		}
 		displayName := sessionMeta["display_name"]
 		username := sessionMeta["username"]
-		deps.ContactCollector.EnsureContact(ctx, channelType, msg.Channel, senderNumericID, userID, displayName, username, peerKind, "user")
+		deps.ContactCollector.EnsureContact(ctx, channelType, msg.Channel, senderNumericID, userID, displayName, username, peerKind, "user", "", "")
 
 		// Also collect group chat as a contact (for group permission management / merge).
 		// Group IDs (e.g., Telegram "-100456") differ from user IDs — no UNIQUE conflict.
 		if peerKind == string(sessions.PeerGroup) && msg.ChatID != "" {
 			groupTitle := msg.Metadata["chat_title"] // Telegram: message.Chat.Title
-			deps.ContactCollector.EnsureContact(ctx, channelType, msg.Channel, msg.ChatID, "", groupTitle, "", "group", "group")
+			deps.ContactCollector.EnsureContact(ctx, channelType, msg.Channel, msg.ChatID, "", groupTitle, "", "group", "group", "", "")
 		}
 	}
 

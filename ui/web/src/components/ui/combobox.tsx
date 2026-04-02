@@ -182,12 +182,13 @@ export function Combobox({
     if (!open && options.length > 0) setOpen(true);
   };
 
-  const handleFocus = () => {
-    // Reset dirty state on focus — shows all options initially
+  const handleFocus = (e: React.FocusEvent) => {
+    // Only open dropdown on user-initiated focus (click/tab), not programmatic.
+    // relatedTarget is null for programmatic focus or first tab into page.
+    if (!e.relatedTarget && document.hasFocus()) return;
     inputDirtyRef.current = false;
     setInputDirty(false);
     if (options.length > 0) setOpen(true);
-    // Select all text so user can start typing to replace
     requestAnimationFrame(() => inputRef.current?.select());
   };
 

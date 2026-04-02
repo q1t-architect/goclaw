@@ -191,7 +191,19 @@ func (s *AgentSummoner) finishSummon(ctx context.Context, agentID, tenantID uuid
 		updates["frontmatter"] = frontmatter
 	}
 	if name := extractIdentityName(identityContent); name != "" {
-		updates["display_name"] = name
+		agent, _ := s.agents.GetByID(ctx, agentID)
+		if agent != nil && agent.DisplayName != "" {
+			// User already set a custom name — preserve it, sync IDENTITY.md to match
+			if name != agent.DisplayName {
+				updated := bootstrap.UpdateIdentityField(identityContent, "Name", agent.DisplayName)
+				if updated != identityContent {
+					_ = s.agents.SetAgentContextFile(ctx, agentID, bootstrap.IdentityFile, updated)
+				}
+			}
+		} else {
+			// No custom name — use LLM-generated name
+			updates["display_name"] = name
+		}
 	}
 	if len(updates) > 0 {
 		if err := s.agents.Update(ctx, agentID, updates); err != nil {

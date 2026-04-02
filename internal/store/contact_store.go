@@ -19,7 +19,9 @@ type ChannelContact struct {
 	Username        *string    `json:"username,omitempty"`
 	AvatarURL       *string    `json:"avatar_url,omitempty"`
 	PeerKind        *string    `json:"peer_kind,omitempty"`
-	ContactType     string     `json:"contact_type"` // "user" or "group"
+	ContactType     string     `json:"contact_type"` // "user", "group", or "topic"
+	ThreadID        *string    `json:"thread_id,omitempty"`
+	ThreadType      *string    `json:"thread_type,omitempty"`
 	MergedID        *uuid.UUID `json:"merged_id,omitempty"`
 	FirstSeenAt     time.Time  `json:"first_seen_at"`
 	LastSeenAt      time.Time  `json:"last_seen_at"`
@@ -37,9 +39,10 @@ type ContactListOpts struct {
 
 // ContactStore manages channel contacts (auto-collected user info).
 type ContactStore interface {
-	// UpsertContact creates or updates a contact. On conflict (channel_type, sender_id),
+	// UpsertContact creates or updates a contact. On conflict (tenant_id, channel_type, sender_id, thread_id),
 	// updates display_name, username, user_id, channel_instance, and last_seen_at.
-	UpsertContact(ctx context.Context, channelType, channelInstance, senderID, userID, displayName, username, peerKind, contactType string) error
+	// Pass empty threadID/threadType for base contacts (DM, group root).
+	UpsertContact(ctx context.Context, channelType, channelInstance, senderID, userID, displayName, username, peerKind, contactType, threadID, threadType string) error
 
 	// ListContacts searches contacts with pagination and filters.
 	ListContacts(ctx context.Context, opts ContactListOpts) ([]ChannelContact, error)

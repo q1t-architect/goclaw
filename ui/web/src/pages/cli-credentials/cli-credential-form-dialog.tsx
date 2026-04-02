@@ -12,6 +12,7 @@ import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from "@/components/ui/select";
 import { Plus, X } from "lucide-react";
+import { useHttp } from "@/hooks/use-ws";
 import type { SecureCLIBinary, CLICredentialInput, CLIPreset } from "./hooks/use-cli-credentials";
 
 interface ManualEnvEntry {
@@ -32,6 +33,7 @@ const NONE_PRESET = "__none__";
 export function CliCredentialFormDialog({ open, onOpenChange, credential, presets, onSubmit }: Props) {
   const { t } = useTranslation("cli-credentials");
   const { t: tc } = useTranslation("common");
+  const http = useHttp();
 
   const [selectedPreset, setSelectedPreset] = useState(NONE_PRESET);
   const [binaryName, setBinaryName] = useState("");
@@ -45,6 +47,8 @@ export function CliCredentialFormDialog({ open, onOpenChange, credential, preset
   const [enabled, setEnabled] = useState(true);
   const [envValues, setEnvValues] = useState<Record<string, string>>({});
   const [manualEnvEntries, setManualEnvEntries] = useState<ManualEnvEntry[]>([]);
+  /** Snapshot when dialog opens (edit) — detect clearing all env rows */
+  const [initialEnvKeys, setInitialEnvKeys] = useState<string[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
 
@@ -71,9 +75,38 @@ export function CliCredentialFormDialog({ open, onOpenChange, credential, preset
     setAgentId(credential?.agent_id ?? "");
     setEnabled(credential?.enabled ?? true);
     setEnvValues({});
-    setManualEnvEntries([]);
     setError("");
-  }, [open, credential]);
+
+    if (!credential) {
+      setInitialEnvKeys([]);
+      setManualEnvEntries([]);
+      return;
+    }
+
+    const applyEnvKeys = (keys: string[]) => {
+      setInitialEnvKeys(keys);
+      setManualEnvEntries(keys.length > 0 ? keys.map((k) => ({ key: k, value: "" })) : []);
+    };
+
+    if (credential.env_keys !== undefined) {
+      applyEnvKeys(credential.env_keys ?? []);
+      return;
+    }
+
+    let cancelled = false;
+    void (async () => {
+      try {
+        const full = await http.get<SecureCLIBinary>(`/v1/cli-credentials/${credential.id}`);
+        if (cancelled) return;
+        applyEnvKeys(full.env_keys ?? []);
+      } catch {
+        if (!cancelled) applyEnvKeys([]);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [open, credential, http]);
 
   const applyPreset = (key: string) => {
     setSelectedPreset(key);
@@ -107,12 +140,18 @@ export function CliCredentialFormDialog({ open, onOpenChange, credential, preset
   const splitCommaList = (v: string): string[] =>
     v.split(",").map((s) => s.trim()).filter(Boolean);
 
-  const buildEnvPayload = (): Record<string, string> => {
+  const ENV_KEY_PATTERN = /^[A-Za-z_][A-Za-z0-9_]*$/;
+
+  const buildEnvPayload = (): Record<string, string> | null => {
     if (!isManualMode) return envValues;
     const env: Record<string, string> = {};
     for (const entry of manualEnvEntries) {
       const k = entry.key.trim();
-      if (k && entry.value) env[k] = entry.value;
+      if (k && !ENV_KEY_PATTERN.test(k)) {
+        setError(t("form.invalidEnvKey", { key: k }));
+        return null;
+      }
+      if (k) env[k] = entry.value;
     }
     return env;
   };
@@ -138,7 +177,12 @@ export function CliCredentialFormDialog({ open, onOpenChange, credential, preset
       };
       if (selectedPreset !== NONE_PRESET) payload.preset = selectedPreset;
       const env = buildEnvPayload();
-      if (Object.keys(env).length > 0) payload.env = env;
+      if (!env) return;
+      if (Object.keys(env).length > 0) {
+        payload.env = env;
+      } else if (isEdit && isManualMode && initialEnvKeys.length > 0) {
+        payload.env = {};
+      }
       await onSubmit(payload);
       onOpenChange(false);
     } catch (err) {

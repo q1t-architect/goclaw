@@ -41,9 +41,6 @@ func (c *Channel) handleMessage(ctx context.Context, update telego.Update) {
 
 	userID := fmt.Sprintf("%d", user.ID)
 	senderID := userID
-	if user.Username != "" {
-		senderID = fmt.Sprintf("%s|%s", userID, user.Username)
-	}
 
 	isGroup := message.Chat.Type == "group" || message.Chat.Type == "supergroup"
 
@@ -336,9 +333,14 @@ func (c *Channel) handleMessage(ctx context.Context, update telego.Update) {
 			// Collect contact even when bot is not mentioned (cache prevents DB spam).
 			if cc := c.ContactCollector(); cc != nil {
 				contactName := strings.TrimSpace(user.FirstName + " " + user.LastName)
-				cc.EnsureContact(ctx, c.Type(), c.Name(), senderID, userID, contactName, user.Username, "group", "user")
+				cc.EnsureContact(ctx, c.Type(), c.Name(), senderID, userID, contactName, user.Username, "group", "user", "", "")
 				// Also collect group chat itself as a contact (for group permission / merge).
-				cc.EnsureContact(ctx, c.Type(), c.Name(), chatIDStr, "", message.Chat.Title, "", "group", "group")
+				cc.EnsureContact(ctx, c.Type(), c.Name(), chatIDStr, "", message.Chat.Title, "", "group", "group", "", "")
+				// Collect forum topic as a distinct delivery target (including General).
+				if isForum && messageThreadID > 0 {
+					threadStr := fmt.Sprintf("%d", messageThreadID)
+					cc.EnsureContact(ctx, c.Type(), c.Name(), chatIDStr, "", message.Chat.Title, "", "group", "topic", threadStr, "topic")
+				}
 			}
 
 			slog.Debug("telegram group message recorded (no mention)",
@@ -591,10 +593,15 @@ func (c *Channel) handleMessage(ctx context.Context, update telego.Update) {
 	// Collect contact for processed messages (DM + group-mentioned).
 	if cc := c.ContactCollector(); cc != nil {
 		contactName := strings.TrimSpace(user.FirstName + " " + user.LastName)
-		cc.EnsureContact(ctx, c.Type(), c.Name(), senderID, userID, contactName, user.Username, peerKind, "user")
+		cc.EnsureContact(ctx, c.Type(), c.Name(), senderID, userID, contactName, user.Username, peerKind, "user", "", "")
 		// Also collect group chat itself as a contact (for group permission / merge).
 		if isGroup {
-			cc.EnsureContact(ctx, c.Type(), c.Name(), chatIDStr, "", message.Chat.Title, "", "group", "group")
+			cc.EnsureContact(ctx, c.Type(), c.Name(), chatIDStr, "", message.Chat.Title, "", "group", "group", "", "")
+			// Collect forum topic as a distinct delivery target (including General).
+			if isForum && messageThreadID > 0 {
+				threadStr := fmt.Sprintf("%d", messageThreadID)
+				cc.EnsureContact(ctx, c.Type(), c.Name(), chatIDStr, "", message.Chat.Title, "", "group", "topic", threadStr, "topic")
+			}
 		}
 	}
 

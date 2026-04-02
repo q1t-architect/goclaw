@@ -200,7 +200,7 @@ func (c *Channel) handleMessage(ev *slackevents.MessageEvent) {
 
 			// Collect contact even when bot is not mentioned (cache prevents DB spam).
 			if cc := c.ContactCollector(); cc != nil {
-				cc.EnsureContact(ctx, c.Type(), c.Name(), senderID, senderID, displayName, "", "group", "user")
+				cc.EnsureContact(ctx, c.Type(), c.Name(), senderID, senderID, displayName, "", "group", "user", "", "")
 			}
 
 			slog.Debug("slack group message recorded (no mention)",

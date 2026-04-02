@@ -24,6 +24,8 @@ interface UserCredEntry {
   binary_id: string;
   user_id: string;
   has_env: boolean;
+  /** Env variable names (no values) for display */
+  env_keys?: string[];
   created_at: string;
   updated_at: string;
 }
@@ -103,7 +105,8 @@ export function CLIUserCredentialsDialog({ open, onOpenChange, binary }: CLIUser
   const handleSave = async () => {
     const uid = userId.trim();
     if (!uid) return;
-    if (Object.keys(env).length === 0) {
+    // New entry needs at least one variable; edits may clear all keys (empty object).
+    if (!editEntry && Object.keys(env).length === 0) {
       toast.error(i18next.t("cli-credentials:userCredentials.envRequired"));
       return;
     }
@@ -169,12 +172,19 @@ export function CLIUserCredentialsDialog({ open, onOpenChange, binary }: CLIUser
                     key={entry.id}
                     className="flex items-center justify-between rounded-md border px-3 py-2"
                   >
-                    <div className="flex items-center gap-2 min-w-0">
-                      <span className="font-mono text-sm truncate">{entry.user_id}</span>
-                      {entry.has_env && (
-                        <Badge variant="secondary" className="shrink-0 text-xs">
-                          env
-                        </Badge>
+                    <div className="flex flex-col gap-1 min-w-0">
+                      <div className="flex items-center gap-2 min-w-0">
+                        <span className="font-mono text-sm truncate">{entry.user_id}</span>
+                        {entry.has_env && (
+                          <Badge variant="secondary" className="shrink-0 text-xs">
+                            env
+                          </Badge>
+                        )}
+                      </div>
+                      {entry.env_keys && entry.env_keys.length > 0 && (
+                        <p className="text-xs text-muted-foreground font-mono truncate" title={entry.env_keys.join(", ")}>
+                          {entry.env_keys.join(", ")}
+                        </p>
                       )}
                     </div>
                     <div className="flex items-center gap-1 shrink-0">

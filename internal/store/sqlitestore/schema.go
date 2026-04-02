@@ -14,7 +14,7 @@ var schemaSQL string
 
 // SchemaVersion is the current SQLite schema version.
 // Bump this when adding new migration steps below.
-const SchemaVersion = 4
+const SchemaVersion = 5
 
 // migrations maps version → SQL to apply when upgrading FROM that version.
 // schema.sql always represents the LATEST full schema (for fresh DBs).
@@ -42,6 +42,12 @@ UPDATE cron_jobs SET
   deliver_to = COALESCE(json_extract(payload, '$.to'), ''),
   wake_heartbeat = COALESCE(json_extract(payload, '$.wake_heartbeat'), 0)
 WHERE payload IS NOT NULL;`,
+	// Version 4 → 5: add thread_id, thread_type columns to channel_contacts for forum topic support.
+	4: `ALTER TABLE channel_contacts ADD COLUMN thread_id VARCHAR(100);
+ALTER TABLE channel_contacts ADD COLUMN thread_type VARCHAR(20);
+DROP INDEX IF EXISTS idx_channel_contacts_tenant_type_sender;
+CREATE UNIQUE INDEX idx_channel_contacts_tenant_type_sender
+  ON channel_contacts(tenant_id, channel_type, sender_id, COALESCE(thread_id, ''));`,
 	// Version 3 → 4: add subagent_tasks table for subagent lifecycle persistence.
 	3: `CREATE TABLE IF NOT EXISTS subagent_tasks (
     id                TEXT PRIMARY KEY,

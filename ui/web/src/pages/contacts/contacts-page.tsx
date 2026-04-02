@@ -157,6 +157,7 @@ export function ContactsPage() {
             <SelectItem value="all">{t("filters.allTypes")}</SelectItem>
             <SelectItem value="user">{t("types.user")}</SelectItem>
             <SelectItem value="group">{t("types.group")}</SelectItem>
+            <SelectItem value="topic">{t("types.topic", "Topic")}</SelectItem>
           </SelectContent>
         </Select>
       </div>
@@ -244,13 +245,16 @@ export function ContactsPage() {
                         : <span className="text-muted-foreground">—</span>
                       }
                     </td>
-                    <td className="px-3 py-2.5 font-mono text-xs">{c.sender_id}</td>
+                    <td className="px-3 py-2.5 font-mono text-xs">
+                      {c.sender_id}
+                      {c.thread_id && <span className="text-muted-foreground">:topic:{c.thread_id}</span>}
+                    </td>
                     <td className="px-3 py-2.5">
                       <Badge variant="outline" className="text-[11px]">{c.channel_type}</Badge>
                     </td>
                     <td className="px-3 py-2.5">
-                      <Badge variant={c.contact_type === "user" ? "default" : "secondary"} className="text-[11px]">
-                        {c.contact_type === "user" ? t("types.user") : t("types.group")}
+                      <Badge variant={c.contact_type === "user" ? "default" : c.contact_type === "topic" ? "outline" : "secondary"} className="text-[11px]">
+                        {c.contact_type === "user" ? t("types.user") : c.contact_type === "topic" ? t("types.topic", "Topic") : t("types.group")}
                       </Badge>
                     </td>
                     <td className="px-3 py-2.5 text-muted-foreground text-xs">

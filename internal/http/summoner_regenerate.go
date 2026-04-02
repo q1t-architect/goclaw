@@ -56,7 +56,19 @@ func (s *AgentSummoner) RegenerateAgent(agentID uuid.UUID, tenantID uuid.UUID, p
 		updates["frontmatter"] = fm
 	}
 	if name := extractIdentityName(files[bootstrap.IdentityFile]); name != "" {
-		updates["display_name"] = name
+		agent, _ := s.agents.GetByID(ctx, agentID)
+		if agent != nil && agent.DisplayName != "" {
+			// User already set a custom name — preserve it, sync IDENTITY.md to match
+			if name != agent.DisplayName {
+				updated := bootstrap.UpdateIdentityField(files[bootstrap.IdentityFile], "Name", agent.DisplayName)
+				if updated != files[bootstrap.IdentityFile] {
+					_ = s.agents.SetAgentContextFile(ctx, agentID, bootstrap.IdentityFile, updated)
+				}
+			}
+		} else {
+			// No custom name — use LLM-generated name
+			updates["display_name"] = name
+		}
 	}
 	if len(updates) > 0 {
 		if err := s.agents.Update(ctx, agentID, updates); err != nil {

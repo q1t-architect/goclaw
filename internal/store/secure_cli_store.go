@@ -23,6 +23,8 @@ type SecureCLIBinary struct {
 	Enabled        bool            `json:"enabled"`
 	CreatedBy      string          `json:"created_by"`
 	UserEnv        []byte          `json:"-"` // per-user encrypted env (populated by LookupByBinary LEFT JOIN)
+	// EnvKeys is set by HTTP handlers only (names from decrypted env, no values); not a DB column.
+	EnvKeys []string `json:"env_keys,omitempty"`
 }
 
 // SecureCLIUserCredential holds per-user encrypted env overrides for a binary.
