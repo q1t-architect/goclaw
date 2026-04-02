@@ -39,11 +39,11 @@ jobs:
           git merge --ff-only upstream/main
           git push origin main
 
-      - name: Merge main into custom
+      - name: Merge dev into custom
         id: merge
         run: |
           git checkout custom
-          if git merge origin/main --no-edit; then
+          if git merge upstream/dev --no-edit; then
             echo "status=clean" >> $GITHUB_OUTPUT
           else
             echo "status=conflict" >> $GITHUB_OUTPUT
@@ -69,7 +69,7 @@ jobs:
           claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
           claude_args: "--model claude-opus-4-6"
           direct_prompt: |
-            You are resolving merge conflicts between upstream (main) and our fork (custom).
+            You are resolving merge conflicts between upstream (dev) and our fork (custom).
 
             Rules:
             - Keep ALL our custom changes (anything unique to custom branch)
