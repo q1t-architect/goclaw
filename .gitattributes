@@ -1,3 +1,5 @@
-# Ensure shell scripts always use LF line endings (critical for Docker builds on Windows)
-*.sh text eol=lf
-docker-entrypoint.sh text eol=lf
+# Auto-resolve: always keep ours for purely custom files
+custom-migrations/** merge=ours
+.github/workflows/deploy.yml merge=ours
+.github/workflows/upstream-sync.yml merge=ours
+internal/upgrade/custom_migrate.go merge=ours

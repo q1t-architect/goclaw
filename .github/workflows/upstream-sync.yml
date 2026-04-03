@@ -66,61 +66,86 @@ jobs:
           git remote set-url origin https://x-access-token:${{ secrets.GH_PAT }}@github.com/${{ github.repository }}.git
           git push origin custom
 
+
+      - name: Install Claude CLI
+        if: steps.merge.outputs.status == 'conflict'
+        run: npm install -g @anthropic-ai/claude-code
+
       - name: Resolve conflicts with Claude
         if: steps.merge.outputs.status == 'conflict'
-        uses: anthropics/claude-code-action@v1
-        with:
-          claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
-          claude_args: "--model claude-opus-4-6"
-          allowed_tools: "Bash(git add:*),Bash(git commit:*),Bash(git diff:*),Bash(git status:*)"
-          prompt: |
-            You are resolving merge conflicts between upstream/dev and our fork's custom branch.
+        env:
+          CLAUDE_CODE_OAUTH_TOKEN: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+        run: |
+          CONFLICTED=$(git diff --name-only --diff-filter=U)
+          if [ -z "$CONFLICTED" ]; then
+            echo "All conflicts resolved by git merge strategies"
+            git add -A
+            git commit -m "upstream-sync: merge upstream/dev (auto-resolved via .gitattributes)"
+          else
+            echo "Conflicts requiring Claude resolution:"
+            echo "$CONFLICTED"
 
-            ## Our Custom Architecture (PRESERVE COMPLETELY)
+            claude -p "$(cat <<'EOF'
+          You are resolving merge conflicts between upstream/dev and our fork's custom branch.
 
-            ### Dual Migration System
-            - `migrations/` — upstream migrations (numbered 000030, 000031, ...), tracked in `schema_migrations`
-            - `custom-migrations/` — our independent migrations (numbered 001, 002, ...), tracked in `custom_schema_migrations`
-            - `internal/upgrade/custom_migrate.go` — custom migration runner
-            - `cmd/gateway_stores_pg.go` and `cmd/gateway_stores_sqlite.go` — contain our `RunCustomMigrations()` injection calls
+          ## Our Custom Architecture (PRESERVE COMPLETELY)
 
-            ### Knowledge Graph Extensions (NOT in upstream)
-            - `internal/http/knowledge_graph_types_handlers.go` — custom entity/relation type CRUD
-            - `internal/tools/knowledge_graph_mutate.go` — agent write access tool with permission toggle
-            - `internal/knowledgegraph/extractor_prompt_dynamic.go` — dynamic extraction prompts
-            - `internal/store/pg/knowledge_graph_types.go` — custom types store
-            - `internal/store/pg/knowledge_graph_dedup.go` — KG deduplication
-            - `ui/web/src/pages/builtin-tools/kg-mutate-settings-form.tsx` — mutate settings UI
-            - `ui/web/src/pages/memory/kg-types-tab.tsx`, `kg-type-form-dialog.tsx` — type management UI
-            - `ui/web/src/pages/memory/kg-dedup-dialog.tsx` — dedup dialog
-            - `ui/web/src/pages/memory/kg-entity-form-dialog.tsx`, `kg-relation-form-dialog.tsx` — entity/relation forms
-            - `ui/web/src/pages/memory/hooks/use-kg-types.ts` — types hook
+          ### Dual Migration System
+          - `migrations/` — upstream migrations (numbered 000030, 000031, ...), tracked in `schema_migrations`
+          - `custom-migrations/` — our independent migrations (numbered 001, 002, ...), tracked in `custom_schema_migrations`
+          - `internal/upgrade/custom_migrate.go` — custom migration runner
+          - `cmd/gateway_stores_pg.go` and `cmd/gateway_stores_sqlite.go` — contain our `RunCustomMigrations()` injection calls
 
-            ### Custom Workflows
-            - `.github/workflows/deploy.yml` — our deployment workflow
-            - `.github/workflows/upstream-sync.yml` — this file
+          ### Knowledge Graph Extensions (NOT in upstream)
+          - `internal/http/knowledge_graph_types_handlers.go` — custom entity/relation type CRUD
+          - `internal/tools/knowledge_graph_mutate.go` — agent write access tool with permission toggle
+          - `internal/knowledgegraph/extractor_prompt_dynamic.go` — dynamic extraction prompts
+          - `internal/store/pg/knowledge_graph_types.go` — custom types store
+          - `internal/store/pg/knowledge_graph_dedup.go` — KG deduplication
+          - `ui/web/src/pages/builtin-tools/kg-mutate-settings-form.tsx` — mutate settings UI
+          - `ui/web/src/pages/memory/kg-types-tab.tsx`, `kg-type-form-dialog.tsx` — type management UI
+          - `ui/web/src/pages/memory/kg-dedup-dialog.tsx` — dedup dialog
+          - `ui/web/src/pages/memory/kg-entity-form-dialog.tsx`, `kg-relation-form-dialog.tsx` — entity/relation forms
+          - `ui/web/src/pages/memory/hooks/use-kg-types.ts` — types hook
 
-            ## Conflict Resolution Rules
+          ### Custom Workflows
+          - `.github/workflows/deploy.yml` — our deployment workflow
+          - `.github/workflows/upstream-sync.yml` — this file
 
-            1. **`custom-migrations/` directory** — NEVER rename, renumber, move, or delete files. Our migrations are independent from upstream and never conflict with upstream numbering.
+          ## Conflict Resolution Rules
 
-            2. **`internal/upgrade/version.go` → `RequiredSchemaVersion`** — set to the highest migration number from `migrations/` directory (upstream only). This tracks upstream migrations only. Our custom migrations have their own system and do NOT affect this value.
+          1. **`custom-migrations/` directory** — NEVER rename, renumber, move, or delete files. Our migrations are independent from upstream and never conflict with upstream numbering.
 
-            3. **`cmd/gateway_stores_pg.go` and `cmd/gateway_stores_sqlite.go`** — preserve our `RunCustomMigrations()` calls. Integrate upstream changes around them.
+          2. **`internal/upgrade/version.go` → `RequiredSchemaVersion`** — set to the highest migration number from `migrations/` directory (upstream only). This tracks upstream migrations only. Our custom migrations have their own system and do NOT affect this value.
 
-            4. **KG files** — merge upstream KG improvements WITH our custom extensions. Do NOT drop custom types, mutate tool, dynamic prompts, or dedup. Both sides must be preserved.
+          3. **`cmd/gateway_stores_pg.go` and `cmd/gateway_stores_sqlite.go`** — preserve our `RunCustomMigrations()` calls. Integrate upstream changes around them.
 
-            5. **Custom workflow files** — if upstream adds workflows, keep both. Do not overwrite `deploy.yml` or `upstream-sync.yml`.
+          4. **KG files** — merge upstream KG improvements WITH our custom extensions. Do NOT drop custom types, mutate tool, dynamic prompts, or dedup. Both sides must be preserved.
 
-            6. **i18n files** (`ui/web/src/i18n/locales/`) — preserve our custom translation keys while adding upstream new keys.
+          5. **Custom workflow files** — if upstream adds workflows, keep both. Do not overwrite `deploy.yml` or `upstream-sync.yml`.
 
-            7. **All other conflicts** — keep BOTH sides. Merge logically.
+          6. **i18n files** (`ui/web/src/i18n/locales/`) — preserve our custom translation keys while adding upstream new keys.
 
-            ## Final Steps
-            After resolving ALL conflicts:
-            1. `git diff --check` — must show NO conflict markers
-            2. `git add -A`
-            3. `git commit -m "upstream-sync: merge upstream/dev with conflict resolution"`
+          7. **All other conflicts** — keep BOTH sides. Merge logically.
+
+          For each conflicted file: read it, understand both sides, resolve intelligently, then git add the file.
+          EOF
+          )" \
+              --model claude-opus-4-6 \
+              --allowedTools "Edit,Read,Bash(git add:*),Bash(git diff:*),Bash(git status),Bash(git log:*),Bash(cat:*)" \
+              --max-turns 25 \
+              --verbose
+
+            # Verify no conflict markers remain
+            if grep -rn "<<<<<<< " . --include="*.go" --include="*.tsx" --include="*.ts" --include="*.json" --include="*.sql" --include="*.yml" --include="*.yaml" --include="*.md"; then
+              echo "ERROR: Unresolved conflict markers remain"
+              exit 1
+            else
+              git add -A
+              git commit -m "upstream-sync: merge upstream/dev with conflict resolution"
+            fi
+          fi
+
 
       - name: Push resolved merge
         if: steps.merge.outputs.status == 'conflict'
