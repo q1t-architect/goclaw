@@ -137,7 +137,7 @@ jobs:
               --verbose
 
             # Verify no conflict markers remain
-            if grep -rn "<<<<<<< " . --include="*.go" --include="*.tsx" --include="*.ts" --include="*.json" --include="*.sql" --include="*.yml" --include="*.yaml" --include="*.md"; then
+            if grep -rn "<<<<<<< " . --include="*.go" --include="*.tsx" --include="*.ts" --include="*.json" --include="*.sql" --include="*.yml" --include="*.yaml" --include="*.md" --exclude-dir=.github; then
               echo "ERROR: Unresolved conflict markers remain"
               exit 1
             else
