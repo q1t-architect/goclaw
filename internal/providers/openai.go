@@ -40,6 +40,12 @@ func isOpenAINativeEndpoint(apiBase string) bool {
 	return strings.Contains(lower, "api.openai.com")
 }
 
+// isFireworksEndpoint returns true for Fireworks AI endpoints.
+// Fireworks requires stream=true for max_tokens > 4096.
+func (p *OpenAIProvider) isFireworksEndpoint() bool {
+	return strings.Contains(strings.ToLower(p.apiBase), "fireworks.ai")
+}
+
 func NewOpenAIProvider(name, apiKey, apiBase, defaultModel string) *OpenAIProvider {
 	if apiBase == "" {
 		apiBase = "https://api.openai.com/v1"
@@ -204,10 +210,14 @@ func (p *OpenAIProvider) ChatStream(ctx context.Context, req ChatRequest, onChun
 		}
 
 		delta := chunk.Choices[0].Delta
-		if delta.ReasoningContent != "" {
-			result.Thinking += delta.ReasoningContent
+		reasoning := delta.ReasoningContent
+		if reasoning == "" {
+			reasoning = delta.Reasoning
+		}
+		if reasoning != "" {
+			result.Thinking += reasoning
 			if onChunk != nil {
-				onChunk(StreamChunk{Thinking: delta.ReasoningContent})
+				onChunk(StreamChunk{Thinking: reasoning})
 			}
 		}
 		if delta.Content != "" {
@@ -407,6 +417,15 @@ func (p *OpenAIProvider) buildRequestBody(model string, req ChatRequest, stream 
 	// Merge options
 	capabilityModel := modelFamily(model)
 	if v, ok := req.Options[OptMaxTokens]; ok {
+		// Fireworks requires stream=true for max_tokens > 4096.
+		// Clamp proactively to avoid a 400 round-trip (their error format
+		// doesn't match the generic clampMaxTokensFromError regex).
+		if !stream && p.isFireworksEndpoint() {
+			if maxTokens, isInt := v.(int); isInt && maxTokens > 4096 {
+				v = 4096
+				slog.Debug("max_tokens clamped to 4096 for Fireworks non-streaming request", "provider", p.name, "model", model)
+			}
+		}
 		if strings.HasPrefix(capabilityModel, "gpt-5") || strings.HasPrefix(capabilityModel, "o1") || strings.HasPrefix(capabilityModel, "o3") || strings.HasPrefix(capabilityModel, "o4") {
 			body["max_completion_tokens"] = v
 		} else {
@@ -494,6 +513,9 @@ func (p *OpenAIProvider) parseResponse(resp *openAIResponse) *ChatResponse {
 		msg := resp.Choices[0].Message
 		result.Content = msg.Content
 		result.Thinking = msg.ReasoningContent
+		if result.Thinking == "" {
+			result.Thinking = msg.Reasoning
+		}
 		result.FinishReason = resp.Choices[0].FinishReason
 
 		for _, tc := range msg.ToolCalls {

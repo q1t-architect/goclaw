@@ -13,8 +13,11 @@ import { GitFork, Plus, Trash2 } from "lucide-react";
 import { KGRelationFormDialog } from "./kg-relation-form-dialog";
 import type { KGRelationType } from "@/types/knowledge-graph";
 import { useTranslation } from "react-i18next";
-import { useKGTraversal } from "./hooks/use-knowledge-graph";
+import { useHttp } from "@/hooks/use-ws";
+import { useKGDetailStore } from "@/stores/use-kg-detail-store";
 import { KGGraphView } from "./kg-graph-view";
+import { toast } from "@/stores/use-toast-store";
+import i18n from "@/i18n";
 import type { KGEntity, KGRelation } from "@/types/knowledge-graph";
 
 interface KGEntityDetailDialogProps {
@@ -32,12 +35,47 @@ interface KGEntityDetailDialogProps {
 
 export function KGEntityDetailDialog({ open, onOpenChange, agentId, entity, userId, allEntities, relationTypes, getEntityWithRelations, upsertRelation, deleteRelation }: KGEntityDetailDialogProps) {
   const { t } = useTranslation("memory");
+  const http = useHttp();
   const [relations, setRelations] = useState<KGRelation[]>([]);
   const [loadingRels, setLoadingRels] = useState(false);
   const [addRelOpen, setAddRelOpen] = useState(false);
   const [deleteRelTarget, setDeleteRelTarget] = useState<KGRelation | null>(null);
   const [deleteRelLoading, setDeleteRelLoading] = useState(false);
-  const { results: traversalResults, traversing, traverse } = useKGTraversal(agentId);
+
+  // Dedicated store — isolated from main graph query cache
+  const traversalResults = useKGDetailStore((s) => s.traversalResults);
+  const traversing = useKGDetailStore((s) => s.traversing);
+  const depth = useKGDetailStore((s) => s.depth);
+  const setDepth = useKGDetailStore((s) => s.setDepth);
+  const setTraversalResults = useKGDetailStore((s) => s.setTraversalResults);
+  const setTraversing = useKGDetailStore((s) => s.setTraversing);
+  const resetStore = useKGDetailStore((s) => s.reset);
+
+  // Traverse using dedicated store (bypasses React Query cache)
+  const traverse = useCallback(
+    async (entityId: string, userId?: string, maxDepth?: number) => {
+      setTraversing(true);
+      try {
+        const res = await http.post<import("@/types/knowledge-graph").KGTraversalResult[]>(
+          `/v1/agents/${agentId}/kg/traverse`,
+          { entity_id: entityId, user_id: userId || "", max_depth: maxDepth || depth },
+        );
+        setTraversalResults(res ?? []);
+      } catch (err) {
+        toast.error(i18n.t("memory:toast.traversalFailed"), err instanceof Error ? err.message : "");
+        setTraversalResults([]);
+      } finally {
+        setTraversing(false);
+      }
+    },
+    [http, agentId, depth, setTraversing, setTraversalResults],
+  );
+
+  // Reset store when entity changes
+  useEffect(() => {
+    setRelations([]);
+    resetStore();
+  }, [entity?.id, resetStore]);
 
   const loadRelations = useCallback(async () => {
     if (!entity) return;
@@ -83,13 +121,13 @@ export function KGEntityDetailDialog({ open, onOpenChange, agentId, entity, user
 
   const handleTraverse = useCallback(() => {
     if (!entity) return;
-    traverse(entity.id, entity.user_id, 3);
-  }, [entity, traverse]);
+    traverse(entity.id, entity.user_id, depth);
+  }, [entity, traverse, depth]);
 
   // Auto-traverse on open
   useEffect(() => {
-    if (open && entity && traversalResults.length === 0 && !traversing) {
-      traverse(entity.id, entity.user_id, 3);
+    if (open && entity && !traversing) {
+      traverse(entity.id, entity.user_id, depth);
     }
   }, [open, entity]); // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -167,11 +205,22 @@ export function KGEntityDetailDialog({ open, onOpenChange, agentId, entity, user
           <div>
             <div className="flex items-center justify-between mb-2">
               <h4 className="text-sm font-medium">{t("kg.entity.relations")}</h4>
-              <div className="flex gap-1">
+              <div className="flex items-center gap-2">
                 <Button variant="outline" size="sm" onClick={() => setAddRelOpen(true)} className="gap-1">
                   <Plus className="h-3.5 w-3.5" />
                   {t("kg.entity.addRelation")}
                 </Button>
+                <select
+                  value={depth}
+                  onChange={(e) => setDepth(Number(e.target.value))}
+                  className="h-8 rounded-md border bg-background px-2 text-base md:text-sm"
+                >
+                  {[2, 3, 4, 5].map((d) => (
+                    <option key={d} value={d}>
+                      {t("kg.entity.depthOption", { depth: d })}
+                    </option>
+                  ))}
+                </select>
                 <Button variant="outline" size="sm" onClick={handleTraverse} disabled={traversing} className="gap-1">
                   <GitFork className="h-3.5 w-3.5" />
                   {traversing ? t("kg.entity.traversing") : t("kg.entity.traverse")}

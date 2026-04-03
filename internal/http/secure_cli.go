@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"log/slog"
 	"net/http"
+	"os/exec"
 	"regexp"
 	"sort"
 	"strings"
@@ -18,6 +19,10 @@ import (
 	"github.com/nextlevelbuilder/goclaw/internal/tools"
 	"github.com/nextlevelbuilder/goclaw/pkg/protocol"
 )
+
+// safeBinaryNameRe allows only simple binary names: alphanumeric, hyphens, underscores, dots.
+// No path separators or shell metacharacters — prevents filesystem probing via LookPath.
+var safeBinaryNameRe = regexp.MustCompile(`^[a-zA-Z0-9][a-zA-Z0-9._-]{0,63}$`)
 
 // SecureCLIHandler handles secure CLI binary credential CRUD endpoints.
 type SecureCLIHandler struct {
@@ -35,6 +40,7 @@ func (h *SecureCLIHandler) RegisterRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("GET /v1/cli-credentials", h.auth(h.handleList))
 	mux.HandleFunc("POST /v1/cli-credentials", h.auth(h.handleCreate))
 	mux.HandleFunc("GET /v1/cli-credentials/presets", h.auth(h.handlePresets))
+	mux.HandleFunc("POST /v1/cli-credentials/check-binary", h.auth(h.handleCheckBinary))
 	mux.HandleFunc("GET /v1/cli-credentials/{id}", h.auth(h.handleGet))
 	mux.HandleFunc("PUT /v1/cli-credentials/{id}", h.auth(h.handleUpdate))
 	mux.HandleFunc("DELETE /v1/cli-credentials/{id}", h.auth(h.handleDelete))
@@ -341,6 +347,34 @@ func (h *SecureCLIHandler) handleDelete(w http.ResponseWriter, r *http.Request) 
 
 func (h *SecureCLIHandler) handlePresets(w http.ResponseWriter, _ *http.Request) {
 	writeJSON(w, http.StatusOK, map[string]any{"presets": tools.CLIPresets})
+}
+
+// handleCheckBinary resolves a binary name to its absolute path via exec.LookPath.
+func (h *SecureCLIHandler) handleCheckBinary(w http.ResponseWriter, r *http.Request) {
+	locale := store.LocaleFromContext(r.Context())
+	var req struct {
+		BinaryName string `json:"binary_name"`
+	}
+	if err := json.NewDecoder(http.MaxBytesReader(w, r.Body, 1<<20)).Decode(&req); err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": i18n.T(locale, i18n.MsgInvalidJSON)})
+		return
+	}
+	if req.BinaryName == "" {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": i18n.T(locale, i18n.MsgRequired, "binary_name")})
+		return
+	}
+	// Security: only allow simple binary names (no path separators, no shell metacharacters).
+	// This prevents probing arbitrary filesystem paths via LookPath.
+	if !safeBinaryNameRe.MatchString(req.BinaryName) {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid binary name"})
+		return
+	}
+	absPath, err := exec.LookPath(req.BinaryName)
+	if err != nil {
+		writeJSON(w, http.StatusOK, map[string]any{"found": false, "error": fmt.Sprintf("binary %q not found in PATH", req.BinaryName)})
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"found": true, "path": absPath})
 }
 
 // dryRunRequest tests commands against deny patterns.
