@@ -87,6 +87,7 @@ func setupToolRegistry(
 	toolsReg.Register(tools.NewMemoryGetTool())
 	toolsReg.Register(tools.NewKnowledgeGraphSearchTool())
 	toolsReg.Register(tools.NewKnowledgeGraphMutateTool())
+	toolsReg.Register(tools.NewAgentAdminTool())
 	slog.Info("memory + knowledge graph tools registered (PG-backed)")
 
 	// Browser automation tool
