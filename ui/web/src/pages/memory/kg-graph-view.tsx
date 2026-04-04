@@ -4,7 +4,7 @@ import { Maximize2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useTranslation } from "react-i18next";
 import { useUiStore } from "@/stores/use-ui-store";
-import type { KGEntity, KGRelation, KGEntityType } from "@/types/knowledge-graph";
+import type { KGEntity, KGRelation } from "@/types/knowledge-graph";
 import { buildGraphData, limitEntitiesByDegree } from "@/adapters/kg-graph.adapter";
 import type { GraphNode, GraphLink } from "@/adapters/kg-graph.adapter";
 
@@ -16,11 +16,11 @@ const DOUBLE_CLICK_MS = 280;
 interface KGGraphViewProps {
   entities: KGEntity[];
   relations: KGRelation[];
-  entityTypes?: KGEntityType[];
+
   onEntityClick?: (entity: KGEntity) => void;
 }
 
-export function KGGraphView({ entities: allEntities, relations: allRelations, entityTypes, onEntityClick }: KGGraphViewProps) {
+export function KGGraphView({ entities: allEntities, relations: allRelations, onEntityClick }: KGGraphViewProps) {
   const { t } = useTranslation("memory");
   const theme = useUiStore((s) => s.theme);
   const isDark = theme === "dark" || (theme === "system" && window.matchMedia("(prefers-color-scheme: dark)").matches);
