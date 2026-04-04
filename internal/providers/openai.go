@@ -24,7 +24,6 @@ type OpenAIProvider struct {
 	apiKey       string
 	apiBase      string
 	chatPath     string // defaults to "/chat/completions"
-	authPrefix   string // auth header prefix, defaults to "Bearer " if empty
 	defaultModel string
 	providerType string // DB provider_type (e.g. "gemini_native", "openai", "minimax_native")
 	client       *http.Client
@@ -45,43 +44,6 @@ func isOpenAINativeEndpoint(apiBase string) bool {
 // Fireworks requires stream=true for max_tokens > 4096.
 func (p *OpenAIProvider) isFireworksEndpoint() bool {
 	return strings.Contains(strings.ToLower(p.apiBase), "fireworks.ai")
-}
-
-// isTogetherEndpoint returns true for Together AI inference hosts.
-// Together rejects some OpenAI extensions (e.g. stream_options, reasoning_effort) with HTTP 400.
-// Uses URL, provider_type, and name so reverse-proxied Together endpoints are also detected.
-func (p *OpenAIProvider) isTogetherEndpoint() bool {
-	b := strings.ToLower(p.apiBase)
-	if strings.Contains(b, "together.xyz") || strings.Contains(b, "together.ai") {
-		return true
-	}
-	if strings.Contains(strings.ToLower(strings.TrimSpace(p.providerType)), "together") {
-		return true
-	}
-	if strings.Contains(strings.ToLower(p.name), "together") {
-		return true
-	}
-	return false
-}
-
-// isDashScopeAPIBase returns true for Alibaba DashScope OpenAI-compatible endpoints.
-func isDashScopeAPIBase(apiBase string) bool {
-	return strings.Contains(strings.ToLower(apiBase), "dashscope")
-}
-
-// dashScopePassthroughKeys is true when enable_thinking / thinking_budget may be added to the JSON body.
-// Uses URL, provider_type, and name so httptest DashScope URLs still work in tests.
-func (p *OpenAIProvider) dashScopePassthroughKeys() bool {
-	if isDashScopeAPIBase(p.apiBase) {
-		return true
-	}
-	if strings.Contains(strings.ToLower(strings.TrimSpace(p.providerType)), "dashscope") {
-		return true
-	}
-	if strings.Contains(strings.ToLower(p.name), "dashscope") {
-		return true
-	}
-	return false
 }
 
 func NewOpenAIProvider(name, apiKey, apiBase, defaultModel string) *OpenAIProvider {
@@ -107,19 +69,11 @@ func (p *OpenAIProvider) WithChatPath(path string) *OpenAIProvider {
 	return p
 }
 
-// WithAuthPrefix sets a custom Authorization header prefix for providers with non-standard auth formats.
-// Default is "Bearer " if not set.
-func (p *OpenAIProvider) WithAuthPrefix(prefix string) *OpenAIProvider {
-	p.authPrefix = prefix
-	return p
-}
-
 func (p *OpenAIProvider) Name() string           { return p.name }
 func (p *OpenAIProvider) DefaultModel() string   { return p.defaultModel }
 func (p *OpenAIProvider) SupportsThinking() bool { return true }
 func (p *OpenAIProvider) APIKey() string         { return p.apiKey }
 func (p *OpenAIProvider) APIBase() string        { return p.apiBase }
-func (p *OpenAIProvider) AuthPrefix() string     { return p.authPrefix }
 func (p *OpenAIProvider) ProviderType() string   { return p.providerType }
 
 // schemaProviderName returns the most specific provider identifier for schema normalization.
@@ -371,9 +325,8 @@ func (p *OpenAIProvider) buildRequestBody(model string, req ChatRequest, stream 
 			"role": role,
 		}
 
-		// Echo reasoning_content only for APIs/models that accept it on assistant history.
-		// Together Qwen and many OpenAI-compat gateways reject unknown message fields → HTTP 400.
-		if m.Thinking != "" && m.Role == "assistant" && openAIWireAssistantReasoningContent(model) {
+		// Echo reasoning_content for assistant messages (required by Kimi, DeepSeek when thinking is enabled)
+		if m.Thinking != "" && m.Role == "assistant" {
 			msg["reasoning_content"] = m.Thinking
 		}
 
@@ -381,19 +334,18 @@ func (p *OpenAIProvider) buildRequestBody(model string, req ChatRequest, stream 
 		// (Gemini rejects empty content → "must include at least one parts field").
 		if m.Role == "user" && len(m.Images) > 0 {
 			var parts []map[string]any
-			// Text before images — Together / Qwen vision examples use this order; OpenAI accepts both.
-			if m.Content != "" {
-				parts = append(parts, map[string]any{
-					"type": "text",
-					"text": m.Content,
-				})
-			}
 			for _, img := range m.Images {
 				parts = append(parts, map[string]any{
 					"type": "image_url",
 					"image_url": map[string]any{
 						"url": fmt.Sprintf("data:%s;base64,%s", img.MimeType, img.Data),
 					},
+				})
+			}
+			if m.Content != "" {
+				parts = append(parts, map[string]any{
+					"type": "text",
+					"text": m.Content,
 				})
 			}
 			msg["content"] = parts
@@ -456,8 +408,7 @@ func (p *OpenAIProvider) buildRequestBody(model string, req ChatRequest, stream 
 		body["tool_choice"] = "auto"
 	}
 
-	// Together returns HTTP 400 on some requests when stream_options is present.
-	if stream && !p.isTogetherEndpoint() {
+	if stream {
 		body["stream_options"] = map[string]any{
 			"include_usage": true,
 		}
@@ -492,21 +443,17 @@ func (p *OpenAIProvider) buildRequestBody(model string, req ChatRequest, stream 
 		}
 	}
 
-	// reasoning_effort is OpenAI-specific; do not send to third-party OpenAI-compatible APIs.
+	// Inject reasoning_effort for o-series models (ignored by models that don't support it)
 	if level, ok := req.Options[OptThinkingLevel].(string); ok && level != "" && level != "off" {
-		if openAIModelSupportsReasoningEffort(model) {
-			body[OptReasoningEffort] = level
-		}
+		body[OptReasoningEffort] = level
 	}
 
-	// DashScope-specific passthrough keys — never send to other OpenAI-compat hosts.
-	if p.dashScopePassthroughKeys() {
-		if v, ok := req.Options[OptEnableThinking]; ok {
-			body[OptEnableThinking] = v
-		}
-		if v, ok := req.Options[OptThinkingBudget]; ok {
-			body[OptThinkingBudget] = v
-		}
+	// DashScope-specific passthrough keys
+	if v, ok := req.Options[OptEnableThinking]; ok {
+		body[OptEnableThinking] = v
+	}
+	if v, ok := req.Options[OptThinkingBudget]; ok {
+		body[OptThinkingBudget] = v
 	}
 
 	return body
@@ -519,39 +466,6 @@ func modelFamily(model string) string {
 		return model[idx+1:]
 	}
 	return model
-}
-
-// openAIModelSupportsReasoningEffort is true when the Chat Completions request may include
-// the top-level "reasoning_effort" field (OpenAI o-series / GPT-5 family).
-// Other OpenAI-compatible hosts (Together, Groq, vLLM, etc.) often reject unknown fields with HTTP 400.
-func openAIModelSupportsReasoningEffort(model string) bool {
-	if LookupReasoningCapability(model) != nil {
-		return true
-	}
-	fam := strings.ToLower(modelFamily(model))
-	for _, prefix := range []string{"gpt-5", "o1", "o3", "o4"} {
-		if strings.HasPrefix(fam, prefix) {
-			return true
-		}
-	}
-	return false
-}
-
-// openAIWireAssistantReasoningContent is true when assistant message objects may include
-// "reasoning_content" (thinking replay). Narrow allowlist — most OpenAI-compat hosts reject it.
-func openAIWireAssistantReasoningContent(model string) bool {
-	if openAIModelSupportsReasoningEffort(model) {
-		return true
-	}
-	fam := strings.ToLower(modelFamily(model))
-	full := strings.ToLower(model)
-	if strings.Contains(fam, "deepseek") || strings.Contains(full, "deepseek") {
-		return true
-	}
-	if strings.Contains(fam, "kimi") || strings.Contains(full, "kimi") {
-		return true
-	}
-	return false
 }
 
 func (p *OpenAIProvider) doRequest(ctx context.Context, body any) (io.ReadCloser, error) {
@@ -570,11 +484,7 @@ func (p *OpenAIProvider) doRequest(ctx context.Context, body any) (io.ReadCloser
 	if strings.Contains(strings.ToLower(p.apiBase), "azure.com") {
 		httpReq.Header.Set("api-key", p.apiKey)
 	} else {
-		prefix := p.authPrefix
-		if prefix == "" {
-			prefix = "Bearer "
-		}
-		httpReq.Header.Set("Authorization", prefix+p.apiKey)
+		httpReq.Header.Set("Authorization", "Bearer "+p.apiKey)
 	}
 
 	resp, err := p.client.Do(httpReq)

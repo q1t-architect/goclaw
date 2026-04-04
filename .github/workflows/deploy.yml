@@ -54,7 +54,6 @@ jobs:
 
           PREV_COMMIT=$(git rev-parse HEAD)
 
-          git reset --hard HEAD
           git pull origin custom
 
           go build -o goclaw .
