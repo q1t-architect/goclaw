@@ -24,6 +24,7 @@ type OpenAIProvider struct {
 	apiKey       string
 	apiBase      string
 	chatPath     string // defaults to "/chat/completions"
+	authPrefix   string // auth header prefix, defaults to "Bearer " if empty
 	defaultModel string
 	providerType string // DB provider_type (e.g. "gemini_native", "openai", "minimax_native")
 	client       *http.Client
@@ -106,11 +107,19 @@ func (p *OpenAIProvider) WithChatPath(path string) *OpenAIProvider {
 	return p
 }
 
+// WithAuthPrefix sets a custom Authorization header prefix for providers with non-standard auth formats.
+// Default is "Bearer " if not set.
+func (p *OpenAIProvider) WithAuthPrefix(prefix string) *OpenAIProvider {
+	p.authPrefix = prefix
+	return p
+}
+
 func (p *OpenAIProvider) Name() string           { return p.name }
 func (p *OpenAIProvider) DefaultModel() string   { return p.defaultModel }
 func (p *OpenAIProvider) SupportsThinking() bool { return true }
 func (p *OpenAIProvider) APIKey() string         { return p.apiKey }
 func (p *OpenAIProvider) APIBase() string        { return p.apiBase }
+func (p *OpenAIProvider) AuthPrefix() string     { return p.authPrefix }
 func (p *OpenAIProvider) ProviderType() string   { return p.providerType }
 
 // schemaProviderName returns the most specific provider identifier for schema normalization.
@@ -561,7 +570,11 @@ func (p *OpenAIProvider) doRequest(ctx context.Context, body any) (io.ReadCloser
 	if strings.Contains(strings.ToLower(p.apiBase), "azure.com") {
 		httpReq.Header.Set("api-key", p.apiKey)
 	} else {
-		httpReq.Header.Set("Authorization", "Bearer "+p.apiKey)
+		prefix := p.authPrefix
+		if prefix == "" {
+			prefix = "Bearer "
+		}
+		httpReq.Header.Set("Authorization", prefix+p.apiKey)
 	}
 
 	resp, err := p.client.Do(httpReq)
