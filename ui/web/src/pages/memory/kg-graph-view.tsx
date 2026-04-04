@@ -4,7 +4,7 @@ import { Maximize2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useTranslation } from "react-i18next";
 import { useUiStore } from "@/stores/use-ui-store";
-import type { KGEntity, KGRelation, KGEntityType } from "@/types/knowledge-graph";
+import type { KGEntity, KGRelation } from "@/types/knowledge-graph";
 import { buildGraphData, limitEntitiesByDegree } from "@/adapters/kg-graph.adapter";
 import type { GraphNode, GraphLink } from "@/adapters/kg-graph.adapter";
 
