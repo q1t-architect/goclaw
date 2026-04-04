@@ -311,17 +311,6 @@ func wireExtras(
 		slog.Info("knowledge graph tool wired (Postgres)")
 	}
 
-	// Wire agent admin tool (needs both agent + team stores)
-	if stores.Agents != nil && stores.Teams != nil {
-		if adminTool, ok := toolsReg.Get("agent_admin"); ok {
-			if at, ok := adminTool.(*tools.AgentAdminTool); ok {
-				at.SetAgentStore(stores.Agents)
-				at.SetTeamStore(stores.Teams)
-				}
-		}
-		slog.Info("agent admin tool wired")
-	}
-
 	// --- Cache invalidation event subscribers ---
 
 	// Context file cache: invalidate on agent/context data changes
