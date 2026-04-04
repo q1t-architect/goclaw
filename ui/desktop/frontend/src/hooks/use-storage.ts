@@ -2,27 +2,11 @@
 // Adapted from ui/web/src/pages/storage/hooks/use-storage.ts for desktop edition.
 
 import { useState, useCallback, useEffect, useRef } from 'react'
+import { storageService } from '../services/storage-service'
 import { getApiClient } from '../lib/api'
 
-export interface StorageFile {
-  path: string
-  name: string
-  isDir: boolean
-  size: number
-  hasChildren?: boolean
-  protected: boolean
-}
-
-interface StorageListResponse {
-  files: StorageFile[]
-  baseDir: string
-}
-
-interface StorageFileContent {
-  content: string
-  path: string
-  size: number
-}
+export type { StorageFile, StorageFileContent } from '../services/storage-service'
+import type { StorageFile, StorageFileContent } from '../services/storage-service'
 
 export function useStorage() {
   const [files, setFiles] = useState<StorageFile[]>([])
@@ -32,8 +16,7 @@ export function useStorage() {
   const listFiles = useCallback(async (opts?: { silent?: boolean }) => {
     if (!opts?.silent) setLoading(true)
     try {
-      const api = getApiClient()
-      const res = await api.get<StorageListResponse>('/v1/storage/files')
+      const res = await storageService.listFiles()
       setFiles(res.files ?? [])
       setBaseDir(res.baseDir ?? '')
     } finally {
@@ -41,40 +24,25 @@ export function useStorage() {
     }
   }, [])
 
-  const loadSubtree = useCallback(async (path: string): Promise<StorageFile[]> => {
-    const api = getApiClient()
-    const res = await api.get<StorageListResponse>(
-      `/v1/storage/files?path=${encodeURIComponent(path)}`,
-    )
+  const loadSubtree = useCallback(async (path: string): Promise<import('../services/storage-service').StorageFile[]> => {
+    const res = await storageService.loadSubtree(path)
     return res.files ?? []
   }, [])
 
   const readFile = useCallback(async (path: string): Promise<StorageFileContent> => {
-    const api = getApiClient()
-    return api.get<StorageFileContent>(
-      `/v1/storage/files/${encodeURIComponent(path)}`,
-    )
+    return storageService.readFile(path)
   }, [])
 
   const deleteFile = useCallback(async (path: string) => {
-    const api = getApiClient()
-    await api.delete(`/v1/storage/files/${encodeURIComponent(path)}`)
+    await storageService.deleteFile(path)
   }, [])
 
   const uploadFile = useCallback(async (file: File, folder?: string) => {
-    const api = getApiClient()
-    const params = folder ? `?path=${encodeURIComponent(folder)}` : ''
-    await api.uploadFile(`/v1/storage/files${params}`, file)
+    await storageService.uploadFile(file, folder)
   }, [])
 
-  const moveFile = useCallback(async (fromPath: string, toFolder: string, newName?: string) => {
-    const fileName = newName ?? fromPath.split('/').pop() ?? fromPath
-    const newPath = toFolder ? `${toFolder}/${fileName}` : fileName
-    if (fromPath === newPath) return
-    const api = getApiClient()
-    await api.putRaw(
-      `/v1/storage/move?from=${encodeURIComponent(fromPath)}&to=${encodeURIComponent(newPath)}`,
-    )
+  const moveFile = useCallback(async (fromPath: string, toFolder: string) => {
+    await storageService.moveFile(fromPath, toFolder)
   }, [])
 
   const createFolder = useCallback(async (path: string) => {
@@ -91,10 +59,9 @@ export function useStorage() {
   }, [])
 
   const fetchRawBlob = useCallback((path: string, download?: boolean): Promise<Blob> => {
-    const api = getApiClient()
     const params: Record<string, string> = { raw: 'true' }
     if (download) params.download = 'true'
-    return api.fetchBlob(`/v1/storage/files/${encodeURIComponent(path)}`, params)
+    return storageService.fetchBlob(path, params)
   }, [])
 
   return { files, baseDir, loading, listFiles, loadSubtree, readFile, deleteFile, uploadFile, moveFile, createFolder, saveFile, fetchRawBlob }
@@ -119,8 +86,7 @@ export function useStorageSize() {
     setState((s) => ({ ...s, loading: true, totalSize: 0, fileCount: 0 }))
 
     try {
-      const api = getApiClient()
-      const res = await api.streamFetch('/v1/storage/size', controller.signal)
+      const res = await storageService.streamSize(controller.signal)
       if (!res.body) {
         setState((s) => ({ ...s, loading: false }))
         return

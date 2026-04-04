@@ -371,7 +371,7 @@ func (p *OpenAIProvider) buildRequestBody(model string, req ChatRequest, stream 
 					}
 				}
 				toolCalls[i] = map[string]any{
-					"id":       truncateToolCallID(tc.ID),
+					"id":       p.wireToolCallID(tc.ID),
 					"type":     "function",
 					"function": fn,
 				}
@@ -380,7 +380,7 @@ func (p *OpenAIProvider) buildRequestBody(model string, req ChatRequest, stream 
 		}
 
 		if m.ToolCallID != "" {
-			msg["tool_call_id"] = truncateToolCallID(m.ToolCallID)
+			msg["tool_call_id"] = p.wireToolCallID(m.ToolCallID)
 		}
 
 		msgs = append(msgs, msg)
@@ -604,6 +604,23 @@ func clampedLimit(body map[string]any) any {
 }
 
 const maxToolCallIDLen = 40
+
+// normalizeMistralToolCallID deterministically maps any tool call ID to a
+// 9-character alphanumeric string required by the Mistral API.
+// Uses SHA-256 of the full ID to avoid prefix-dependent collisions.
+func normalizeMistralToolCallID(id string) string {
+	h := sha256.Sum256([]byte(id))
+	return hex.EncodeToString(h[:])[:9]
+}
+
+// wireToolCallID dispatches to Mistral-specific normalization (9-char alnum)
+// or the standard OpenAI truncation (40-char max) based on the provider.
+func (p *OpenAIProvider) wireToolCallID(id string) string {
+	if p.name == "mistral" || p.providerType == "mistral" {
+		return normalizeMistralToolCallID(id)
+	}
+	return truncateToolCallID(id)
+}
 
 // truncateToolCallID deterministically fits tool call IDs into OpenAI's 40-char
 // limit. Prefix truncation can alias distinct legacy IDs that only diverge after

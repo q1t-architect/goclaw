@@ -1,6 +1,7 @@
 package providers
 
 import (
+	"regexp"
 	"strings"
 	"testing"
 )
@@ -256,5 +257,79 @@ func TestBuildRequestBody_LegacyLongToolCallIDsStayUnique(t *testing.T) {
 	}
 	if got := msgs[2]["tool_call_id"].(string); got != assistantID2 {
 		t.Fatalf("second tool result ID = %q, want %q", got, assistantID2)
+	}
+}
+
+var mistralWireIDRe = regexp.MustCompile(`^[0-9a-f]{9}$`)
+
+func TestNormalizeMistralToolCallID_DeterministicNineChars(t *testing.T) {
+	id := "call_85f419357e554e8983a7edb4d2317e93e15"
+	a := normalizeMistralToolCallID(id)
+	b := normalizeMistralToolCallID(id)
+	if a != b {
+		t.Fatalf("normalizeMistralToolCallID not deterministic: %q vs %q", a, b)
+	}
+	if !mistralWireIDRe.MatchString(a) {
+		t.Fatalf("got %q, want exactly 9 hex chars", a)
+	}
+}
+
+func TestNormalizeMistralToolCallID_DistinctIDsStayUnique(t *testing.T) {
+	// IDs sharing a long prefix must not collide after normalization.
+	id1 := "call_a1b2c3d4e5f6a1b2c3d4e5f6_suffix1"
+	id2 := "call_a1b2c3d4e5f6a1b2c3d4e5f6_suffix2"
+	if normalizeMistralToolCallID(id1) == normalizeMistralToolCallID(id2) {
+		t.Fatal("distinct IDs must not collide after normalization")
+	}
+}
+
+func TestBuildRequestBody_MistralToolCallIDsWireFormat(t *testing.T) {
+	p := NewOpenAIProvider("mistral", "key", "https://api.mistral.ai/v1", "mistral-large-latest")
+	longID := "call_85f419357e554e8983a7edb4d2317e93e15"
+
+	req := ChatRequest{
+		Messages: []Message{
+			{
+				Role: "assistant",
+				ToolCalls: []ToolCall{
+					{ID: longID, Name: "test_fn", Arguments: map[string]any{"x": 1}},
+				},
+			},
+			{Role: "tool", ToolCallID: longID, Content: "ok"},
+			{Role: "user", Content: "next"},
+		},
+	}
+
+	body := p.buildRequestBody("mistral-large-latest", req, false)
+	msgs := body["messages"].([]map[string]any)
+
+	var assistantID, toolResultID string
+	for _, msg := range msgs {
+		if tcs, ok := msg["tool_calls"]; ok {
+			toolCalls := tcs.([]map[string]any)
+			assistantID = toolCalls[0]["id"].(string)
+		}
+		if tcid, ok := msg["tool_call_id"]; ok {
+			toolResultID = tcid.(string)
+		}
+	}
+
+	if assistantID != toolResultID {
+		t.Fatalf("IDs must match: tool_calls.id=%q tool_call_id=%q", assistantID, toolResultID)
+	}
+	if !mistralWireIDRe.MatchString(assistantID) {
+		t.Fatalf("mistral wire id %q must be 9 hex chars", assistantID)
+	}
+}
+
+func TestBuildRequestBody_MistralDBProviderTypeDetected(t *testing.T) {
+	// DB-loaded Mistral providers use providerType="mistral" with a user-chosen name.
+	p := NewOpenAIProvider("my-mistral", "key", "https://api.mistral.ai/v1", "mistral-large-latest")
+	p.WithProviderType("mistral")
+
+	id := "call_85f419357e554e8983a7edb4d2317e93e15"
+	got := p.wireToolCallID(id)
+	if !mistralWireIDRe.MatchString(got) {
+		t.Fatalf("DB provider with providerType=mistral: got %q, want 9 hex chars", got)
 	}
 }
