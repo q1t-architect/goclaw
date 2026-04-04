@@ -161,7 +161,6 @@ export function KGEntitiesTab({ agentId, userId }: KGEntitiesTabProps) {
         <KGGraphView
           entities={graphData.entities}
           relations={graphData.relations}
-          entityTypes={kgEntityTypes}
           onEntityClick={setViewEntity}
         />
       ) : showSkeleton ? (
