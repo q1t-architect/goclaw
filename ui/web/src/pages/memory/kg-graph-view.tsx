@@ -16,11 +16,11 @@ const DOUBLE_CLICK_MS = 280;
 interface KGGraphViewProps {
   entities: KGEntity[];
   relations: KGRelation[];
-  entityTypes?: KGEntityType[];
+
   onEntityClick?: (entity: KGEntity) => void;
 }
 
-export function KGGraphView({ entities: allEntities, relations: allRelations, entityTypes, onEntityClick }: KGGraphViewProps) {
+export function KGGraphView({ entities: allEntities, relations: allRelations, onEntityClick }: KGGraphViewProps) {
   const { t } = useTranslation("memory");
   const theme = useUiStore((s) => s.theme);
   const isDark = theme === "dark" || (theme === "system" && window.matchMedia("(prefers-color-scheme: dark)").matches);
