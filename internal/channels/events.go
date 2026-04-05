@@ -373,7 +373,10 @@ var toolStatusMap = map[string]string{
 	"memory_get":             "🧠 Retrieving memory...",
 	"knowledge_graph_search": "🧠 Querying knowledge graph...",
 	"knowledge_graph_mutate": "✏️ Updating knowledge graph...",
-	"agent_admin":              "⚙️ Administering agents and teams...",
+	"agent_team_view":          "👀 Viewing team agents...",
+	"agent_query":              "🔍 Querying agent and team info...",
+	"agent_edit":               "✏️ Modifying agent/team configuration...",
+	"agent_provision":          "🆕 Creating new agents and teams...",
 	// Media
 	"read_image":    "👁 Analyzing image...",
 	"read_document": "📄 Reading document...",
