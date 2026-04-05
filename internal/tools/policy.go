@@ -35,6 +35,7 @@ var toolGroups = map[string][]string{
 		"create_image", "create_video",
 		"skill_search", "mcp_tool_search", "tts",
 		"team_tasks",
+		"agent_team_view", "agent_query", "agent_edit", "agent_provision",
 	},
 }
 
