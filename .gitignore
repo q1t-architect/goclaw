@@ -88,3 +88,7 @@ compose.d/*
 /mise.*.toml
 /mise
 /.mise
+-e 
+# Next.js build artifacts
+ui/web/.next/
+ui/web/next-env.d.ts
