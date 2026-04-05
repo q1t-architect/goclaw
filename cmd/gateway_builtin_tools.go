@@ -101,6 +101,20 @@ func builtinToolSeedData() []store.BuiltinToolDef {
 			Metadata: json.RawMessage(`{"config_hint":"Config → Agents Defaults"}`),
 		},
 
+
+		// agent management (disabled by default — admin enables via dashboard)
+		{Name: "agent_team_view", DisplayName: "Agent Team View", Description: "View agents and context files for teams you lead. Read-only access to team member details.", Category: "agents", Enabled: false,
+			Requires: []string{"admin"},
+		},
+		{Name: "agent_query", DisplayName: "Agent Query", Description: "Query agents, teams, and skill grants. Read-only global access for admin introspection.", Category: "agents", Enabled: false,
+			Requires: []string{"admin"},
+		},
+		{Name: "agent_edit", DisplayName: "Agent Edit", Description: "Modify agent and team configurations, context files, and skill grants. Write access — admin only.", Category: "agents", Enabled: false,
+			Requires: []string{"admin"},
+		},
+		{Name: "agent_provision", DisplayName: "Agent Provision", Description: "Create new agents and teams. Admin-only provisioning with rate limiting.", Category: "agents", Enabled: false,
+			Requires: []string{"admin"},
+		},
 		// skills
 		{Name: "skill_search", DisplayName: "Skill Search", Description: "Search for available skills by keyword or description to find relevant capabilities", Category: "skills", Enabled: true},
 		{Name: "use_skill", DisplayName: "Use Skill", Description: "Activate a skill to use its specialized capabilities (tracing marker)", Category: "skills", Enabled: true},
