@@ -311,13 +311,16 @@ func wireExtras(
 		slog.Info("knowledge graph tool wired (Postgres)")
 	}
 
-	// Wire agent admin tool (needs both agent + team stores)
+	// Wire agent admin tool (needs agent, team, and skill stores)
 	if stores.Agents != nil && stores.Teams != nil {
 		if adminTool, ok := toolsReg.Get("agent_admin"); ok {
 			if at, ok := adminTool.(*tools.AgentAdminTool); ok {
 				at.SetAgentStore(stores.Agents)
 				at.SetTeamStore(stores.Teams)
+				if sms, ok := stores.Skills.(store.SkillManageStore); ok {
+					at.SetSkillManageStore(sms)
 				}
+			}
 		}
 		slog.Info("agent admin tool wired")
 	}
