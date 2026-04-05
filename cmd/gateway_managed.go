@@ -311,18 +311,39 @@ func wireExtras(
 		slog.Info("knowledge graph tool wired (Postgres)")
 	}
 
-	// Wire agent admin tool (needs agent, team, and skill stores)
+	// Wire agent admin tools (4 tools replacing single agent_admin)
 	if stores.Agents != nil && stores.Teams != nil {
-		if adminTool, ok := toolsReg.Get("agent_admin"); ok {
-			if at, ok := adminTool.(*tools.AgentAdminTool); ok {
-				at.SetAgentStore(stores.Agents)
-				at.SetTeamStore(stores.Teams)
+		if t, ok := toolsReg.Get("agent_team_view"); ok {
+			if vt, ok := t.(*tools.AgentTeamViewTool); ok {
+				vt.SetAgentStore(stores.Agents)
+				vt.SetTeamStore(stores.Teams)
+			}
+		}
+		if t, ok := toolsReg.Get("agent_query"); ok {
+			if qt, ok := t.(*tools.AgentQueryTool); ok {
+				qt.SetAgentStore(stores.Agents)
+				qt.SetTeamStore(stores.Teams)
 				if sms, ok := stores.Skills.(store.SkillManageStore); ok {
-					at.SetSkillManageStore(sms)
+					qt.SetSkillManageStore(sms)
 				}
 			}
 		}
-		slog.Info("agent admin tool wired")
+		if t, ok := toolsReg.Get("agent_edit"); ok {
+			if et, ok := t.(*tools.AgentEditTool); ok {
+				et.SetAgentStore(stores.Agents)
+				et.SetTeamStore(stores.Teams)
+				if sms, ok := stores.Skills.(store.SkillManageStore); ok {
+					et.SetSkillManageStore(sms)
+				}
+			}
+		}
+		if t, ok := toolsReg.Get("agent_provision"); ok {
+			if pt, ok := t.(*tools.AgentProvisionTool); ok {
+				pt.SetAgentStore(stores.Agents)
+				pt.SetTeamStore(stores.Teams)
+			}
+		}
+		slog.Info("agent admin tools wired (4 tools)")
 	}
 
 	// --- Cache invalidation event subscribers ---
