@@ -1,7 +1,6 @@
 package providers
 
 import (
-	"bufio"
 	"context"
 	"encoding/json"
 	"fmt"
@@ -10,9 +9,10 @@ import (
 )
 
 func (p *AnthropicProvider) ChatStream(ctx context.Context, req ChatRequest, onChunk func(StreamChunk)) (*ChatResponse, error) {
-	model := resolveAnthropicModel(req.Model, p.defaultModel)
+	model := resolveAnthropicModel(req.Model, p.defaultModel, p.registry)
 
 	body := p.buildRequestBody(model, req, true)
+	body = ApplyMiddlewares(body, p.middlewares, p.middlewareConfig(model, req))
 
 	// Retry only the connection phase; once streaming starts, no retry.
 	respBody, err := RetryDo(ctx, p.retryConfig, func() (io.ReadCloser, error) {
@@ -32,31 +32,16 @@ func (p *AnthropicProvider) ChatStream(ctx context.Context, req ChatRequest, onC
 	var currentBlockType string
 	// Track thinking token count by accumulated chunk size
 	thinkingChars := 0
-	var thinkingSignature string
+	var thinkingSignature strings.Builder
 
-	scanner := bufio.NewScanner(respBody)
-	scanner.Buffer(make([]byte, 0, SSEScanBufInit), SSEScanBufMax)
-	var currentEvent string
-
-	for scanner.Scan() {
+	sse := NewSSEScanner(respBody)
+	for sse.Next() {
 		if ctx.Err() != nil {
 			return nil, ctx.Err()
 		}
-		line := scanner.Text()
+		data := sse.Data()
 
-		// Track event type
-		if after, ok := strings.CutPrefix(line, "event: "); ok {
-			currentEvent = after
-			continue
-		}
-
-		if !strings.HasPrefix(line, "data: ") {
-			continue
-		}
-
-		data := strings.TrimPrefix(line, "data: ")
-
-		switch currentEvent {
+		switch sse.EventType() {
 		case "message_start":
 			var ev anthropicMessageStartEvent
 			if err := json.Unmarshal([]byte(data), &ev); err == nil {
@@ -106,7 +91,7 @@ func (p *AnthropicProvider) ChatStream(ctx context.Context, req ChatRequest, onC
 						toolCallJSON[idx] += ev.Delta.PartialJSON
 					}
 				case "signature_delta":
-					thinkingSignature += ev.Delta.Signature
+					thinkingSignature.WriteString(ev.Delta.Signature)
 				}
 			}
 
@@ -153,7 +138,7 @@ func (p *AnthropicProvider) ChatStream(ctx context.Context, req ChatRequest, onC
 		}
 	}
 
-	if err := scanner.Err(); err != nil {
+	if err := sse.Err(); err != nil {
 		return nil, fmt.Errorf("anthropic stream read error: %w", err)
 	}
 
@@ -183,7 +168,7 @@ func (p *AnthropicProvider) ChatStream(ctx context.Context, req ChatRequest, onC
 		}
 	}
 
-	result.ThinkingSignature = thinkingSignature
+	result.ThinkingSignature = thinkingSignature.String()
 
 	if onChunk != nil {
 		onChunk(StreamChunk{Done: true})

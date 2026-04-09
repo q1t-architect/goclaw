@@ -1,7 +1,6 @@
 package providers
 
 import (
-	"bufio"
 	"context"
 	"encoding/json"
 	"fmt"
@@ -24,6 +23,7 @@ type CodexProvider struct {
 	defaultModel    string
 	client          *http.Client
 	retryConfig     RetryConfig
+	middlewares     RequestMiddleware // composed middleware chain (nil = no-op)
 	tokenSource     TokenSource
 	routingDefaults *CodexRoutingDefaults
 }
@@ -49,9 +49,30 @@ func NewCodexProvider(name string, tokenSource TokenSource, apiBase, defaultMode
 	}
 }
 
+// WithMiddlewares sets the composed request middleware chain.
+func (p *CodexProvider) WithMiddlewares(mws ...RequestMiddleware) *CodexProvider {
+	p.middlewares = ComposeMiddlewares(mws...)
+	return p
+}
+
 func (p *CodexProvider) Name() string           { return p.name }
 func (p *CodexProvider) DefaultModel() string   { return p.defaultModel }
 func (p *CodexProvider) SupportsThinking() bool { return true }
+
+// Capabilities implements CapabilitiesAware for pipeline code-path selection.
+func (p *CodexProvider) Capabilities() ProviderCapabilities {
+	return ProviderCapabilities{
+		Streaming:        true,
+		ToolCalling:      true,
+		StreamWithTools:  true,
+		Thinking:         true,
+		Vision:           true,
+		CacheControl:     false,
+		MaxContextWindow: 1_000_000,
+		TokenizerID:      "o200k_base",
+	}
+}
+
 func (p *CodexProvider) WithRoutingDefaults(strategy string, extraProviderNames []string) *CodexProvider {
 	p.routingDefaults = &CodexRoutingDefaults{
 		Strategy:           strategy,
@@ -80,8 +101,25 @@ func (p *CodexProvider) Chat(ctx context.Context, req ChatRequest) (*ChatRespons
 	return p.ChatStream(ctx, req, nil)
 }
 
+// middlewareConfig builds a MiddlewareConfig for the current request.
+func (p *CodexProvider) middlewareConfig(req ChatRequest) MiddlewareConfig {
+	model := req.Model
+	if model == "" {
+		model = p.defaultModel
+	}
+	return MiddlewareConfig{
+		Provider: p.name,
+		Model:    model,
+		Caps:     p.Capabilities(),
+		AuthType: "oauth",
+		APIBase:  p.apiBase,
+		Options:  req.Options,
+	}
+}
+
 func (p *CodexProvider) ChatStream(ctx context.Context, req ChatRequest, onChunk func(StreamChunk)) (*ChatResponse, error) {
 	body := p.buildRequestBody(req, true)
+	body = ApplyMiddlewares(body, p.middlewares, p.middlewareConfig(req))
 
 	respBody, err := RetryDo(ctx, p.retryConfig, func() (io.ReadCloser, error) {
 		return p.doRequest(ctx, body)
@@ -95,18 +133,9 @@ func (p *CodexProvider) ChatStream(ctx context.Context, req ChatRequest, onChunk
 	toolCalls := make(map[string]*codexToolCallAcc) // keyed by item_id
 	streamState := newCodexMessageStreamState()
 
-	scanner := bufio.NewScanner(respBody)
-	scanner.Buffer(make([]byte, 0, SSEScanBufInit), SSEScanBufMax)
-	for scanner.Scan() {
-		line := scanner.Text()
-		if !strings.HasPrefix(line, "data:") {
-			continue
-		}
-		data := strings.TrimPrefix(line, "data:")
-		data = strings.TrimPrefix(data, " ")
-		if data == "[DONE]" {
-			break
-		}
+	sse := NewSSEScanner(respBody)
+	for sse.Next() {
+		data := sse.Data()
 
 		var event codexSSEEvent
 		if err := json.Unmarshal([]byte(data), &event); err != nil {
@@ -116,7 +145,7 @@ func (p *CodexProvider) ChatStream(ctx context.Context, req ChatRequest, onChunk
 		p.processSSEEvent(&event, result, toolCalls, streamState, onChunk)
 	}
 
-	if err := scanner.Err(); err != nil {
+	if err := sse.Err(); err != nil {
 		return nil, fmt.Errorf("%s: stream read error: %w", p.name, err)
 	}
 

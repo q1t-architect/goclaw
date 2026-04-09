@@ -32,7 +32,58 @@ All notable changes to GoClaw Gateway are documented here. Format follows [Keep 
 
 ## [Unreleased]
 
+### Refactored
+
+#### V3 Architecture Refactor — Phase 6 Completion (2026-04-08)
+- **Store unification**: Created `internal/store/base/` with shared Dialect interface, common helpers (NilStr, BuildMapUpdate, BuildScopeClause, execMapUpdate, etc.). PostgreSQL (`pg/`) and SQLite (`sqlitestore/`) now use base/ abstractions via type aliases, eliminating code duplication
+- **Orchestration module**: New `internal/orchestration/` with orchestration primitives: BatchQueue[T] generic for result aggregation, ChildResult structure for capturing child agent outputs, media conversion helpers
+- **Forced V3 pipeline**: Deleted legacy v2 `runLoop()` (~745 LOC). Removed `v3PipelineEnabled` conditional flag — all agents now always execute the unified 8-stage pipeline (context→history→prompt→think→act→observe→memory→summarize)
+- **Gateway decomposition**: Split monolithic gateway.go (1295 LOC → 476 LOC) into focused modules: gateway_deps.go, gateway_http_wiring.go, gateway_events.go, gateway_lifecycle.go, gateway_tools_wiring.go for better maintainability
+- **SSE extraction**: Created shared SSEScanner in `providers/sse_reader.go` — unified streaming implementation used by OpenAI, Codex, and Anthropic streaming providers, eliminating provider-level duplication
+- **UI cleanup**: Removed v2/v3 toggle from web UI settings since v3 is now the only execution path
+- **Build compatibility**: All builds (PostgreSQL standard + SQLite desktop) compile cleanly. Dual-DB store pattern enables seamless database backend switching
+
 ### Added
+
+#### Knowledge Vault UI/Backend Enhancements (2026-04-09)
+- **Doc type inference**: `vault_link` tool now infers document type from file path instead of hardcoding "note"
+- **Link type parameter**: `vault_link` accepts optional `link_type` param (wikilink or reference, default wikilink)
+- **Pagination support**: `/v1/vault/documents` and `/v1/agents/{id}/vault/documents` return `{documents: [...], total: N}` for pagination
+- **CountDocuments store method**: Added to VaultStore interface with PostgreSQL and SQLite implementations
+- **Frontend pagination UI**: Vault documents table shows 100 items per page with Previous/Next navigation, "Showing X-Y of Z" indicator
+- **Team filter dropdown**: Vault page has team selector alongside agent selector for multi-team document filtering
+- **Graph view upgrade**: Independent graph data fetching (limit 500) with KG-level features:
+  - Node click highlight + neighbor emphasis + dim non-neighbors
+  - Double-click opens document detail dialog
+  - Zoom controls (ZoomIn/ZoomOut buttons + percentage display)
+  - Node limit selector (100/200/300/500 by degree centrality)
+  - Link labels on highlighted links + directional particles
+  - Stats bar showing doc/link counts
+  - Fit-to-view button to auto-center graph
+  - Background click clears selection
+  - Works in all-agents mode (shows nodes without agent-specific links)
+- **VaultDocument type updates**: Added team_id, summary, custom_scope, media type fields for richer metadata
+- **Files modified**:
+  - `internal/tools/vault_link.go` — doc type inference + link_type param
+  - `internal/http/vault_handlers.go` — pagination response wrapper
+  - `internal/store/vault_store.go`, `pg/vault_documents.go`, `sqlitestore/vault_documents.go` — CountDocuments
+  - `ui/web/src/pages/vault/*` — pagination, team filter, graph upgrade
+  - `ui/web/src/adapters/vault-graph-adapter.ts` — degree centrality limiting
+  - `ui/web/src/i18n/locales/{en,vi,zh}/*` — pagination + vault strings
+
+#### Vault Enrich Worker — Auto Summary + Semantic Linking (2026-04-09)
+- **Async document enrichment**: EventBus-driven worker auto-summarizes new/updated vault documents via LLM
+- **Vector embeddings**: Document summaries automatically embedded and indexed for semantic search
+- **Auto-linking**: Vector similarity search (0.7 threshold, top-5 neighbors) auto-creates bidirectional vault links
+- **Efficient batching**: BatchQueue[T] batches documents by tenantID:agentID, bounded dedup map (10K cap) prevents memory leaks
+- **Provider independence**: Separate provider resolution from consolidation pipeline, reuses master tenant provider
+- **Dual-DB support**: PostgreSQL includes full embed+link workflow; SQLite (desktop) summarizes only (no vector ops)
+- **Files added**:
+  - `internal/vault/enrich_worker.go` — BatchQueue-driven worker with bounded dedup
+  - `internal/eventbus/event_types.go` — EventVaultDocUpserted event type
+  - Updated `internal/store/vault_store.go` with UpdateSummaryAndReembed, FindSimilarDocs methods
+  - Updated PostgreSQL and SQLite vault document stores
+
 
 #### WhatsApp Native Protocol Integration (2026-04-06)
 - **Direct protocol migration**: Replaced Node.js Baileys bridge with direct in-process WhatsApp connectivity

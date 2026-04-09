@@ -10,8 +10,10 @@ import (
 	"github.com/nextlevelbuilder/goclaw/internal/bootstrap"
 	"github.com/nextlevelbuilder/goclaw/internal/bus"
 	"github.com/nextlevelbuilder/goclaw/internal/config"
+	"github.com/nextlevelbuilder/goclaw/internal/eventbus"
 	mcpbridge "github.com/nextlevelbuilder/goclaw/internal/mcp"
 	"github.com/nextlevelbuilder/goclaw/internal/media"
+	"github.com/nextlevelbuilder/goclaw/internal/memory"
 	"github.com/nextlevelbuilder/goclaw/internal/providers"
 	"github.com/nextlevelbuilder/goclaw/internal/sandbox"
 	"github.com/nextlevelbuilder/goclaw/internal/skills"
@@ -66,6 +68,7 @@ type CacheInvalidateFunc func(agentID uuid.UUID, userID string)
 // Think → Act → Observe cycle with tool execution.
 type Loop struct {
 	id               string
+	displayName      string
 	agentUUID        uuid.UUID // set for context propagation
 	tenantID         uuid.UUID // agent's owning tenant
 	agentType        string    // "open" or "predefined"
@@ -85,7 +88,12 @@ type Loop struct {
 	memoryCfg    *config.MemoryConfig
 	sandboxCfg   *sandbox.Config
 
+	// v3 memory/retrieval flags removed — always true at runtime.
+	// Memory flush runs if callback != nil; auto-inject runs if AutoInjector != nil.
+	autoInjector memory.AutoInjector // v3 L0 memory auto-inject (nil = disabled)
+
 	eventPub        bus.EventPublisher // currently unused by Loop; kept for future use
+	domainBus       eventbus.DomainEventBus // V3 domain event bus for consolidation pipeline
 	sessions        store.SessionStore
 	tools           tools.ToolExecutor
 	toolPolicy      *tools.PolicyEngine    // optional: filters tools sent to LLM
@@ -151,6 +159,12 @@ type Loop struct {
 	// Requested reasoning config parsed from agent other_config.
 	reasoningConfig store.AgentReasoningConfig
 
+	// Prompt mode from agent other_config (empty = full).
+	promptMode PromptMode
+
+	// Pinned skills from agent other_config (always inline, max 10).
+	pinnedSkills []string
+
 	// Self-evolve: predefined agents can update SOUL.md through chat
 	selfEvolve bool
 
@@ -184,6 +198,13 @@ type Loop struct {
 
 	// Memory store for extractive memory fallback (writes directly when LLM flush fails)
 	memStore store.MemoryStore
+
+	// v3 orchestration mode (spawn/delegate/team) — controls tool visibility
+	orchMode          OrchestrationMode
+	delegateTargets   []DelegateTargetEntry // delegation targets for prompt injection
+
+	// v3 evolution metrics store (nil = disabled)
+	evolutionMetricsStore store.EvolutionMetricsStore
 
 	// User identity resolver: maps channel contacts to merged tenant users for credential lookups.
 	userResolver UserIdentityResolver
@@ -226,6 +247,9 @@ type LoopConfig struct {
 	DataDir          string // global workspace root for team workspace resolution
 	WorkspaceSharing *store.WorkspaceSharingConfig
 
+	// v3 memory/retrieval flags removed — always true at runtime.
+	AutoInjector memory.AutoInjector // v3 L0 memory auto-inject (nil = disabled)
+
 	// Per-agent DB overrides (nil = use global defaults)
 	RestrictToWs *bool
 	SubagentsCfg *config.SubagentsConfig
@@ -233,6 +257,7 @@ type LoopConfig struct {
 	SandboxCfg   *sandbox.Config
 
 	Bus             bus.EventPublisher
+	DomainBus       eventbus.DomainEventBus // V3 domain event bus for consolidation pipeline
 	Sessions        store.SessionStore
 	Tools           *tools.Registry
 	ToolPolicy      *tools.PolicyEngine    // optional: filters tools sent to LLM
@@ -261,9 +286,10 @@ type LoopConfig struct {
 	ShellDenyGroups map[string]bool
 
 	// Agent UUID + tenant for context propagation to tools
-	AgentUUID  uuid.UUID
-	TenantID   uuid.UUID // agent's owning tenant — injected into execution context
-	AgentType  string    // "open" or "predefined"
+	AgentUUID   uuid.UUID
+	TenantID    uuid.UUID // agent's owning tenant — injected into execution context
+	AgentType   string    // "open" or "predefined"
+	DisplayName string    // human-readable agent display name (for runtime section)
 	IsTeamLead bool      // agent leads a team (from resolver detection)
 
 	// Per-user profile + file seeding + dynamic context loading
@@ -290,6 +316,12 @@ type LoopConfig struct {
 
 	// Requested reasoning config parsed from agent other_config.
 	ReasoningConfig store.AgentReasoningConfig
+
+	// Prompt mode from agent other_config ("full", "task", "minimal", "none")
+	PromptMode PromptMode
+
+	// Pinned skills from agent other_config (always inline, max 10)
+	PinnedSkills []string
 
 	// Self-evolve: predefined agents can update SOUL.md (style/tone) through chat
 	SelfEvolve bool
@@ -324,6 +356,13 @@ type LoopConfig struct {
 	MCPStore        store.MCPServerStore  // for credential lookup
 	MCPPool         *mcpbridge.Pool       // user-keyed connection pool
 	MCPUserCredSrvs []store.MCPAccessInfo // servers needing per-user creds
+
+	// V3 orchestration mode (resolved by resolver, controls tool visibility)
+	OrchMode          OrchestrationMode
+	DelegateTargets   []DelegateTargetEntry // delegation targets for prompt injection
+
+	// V3 evolution metrics store for recording tool/retrieval/feedback metrics
+	EvolutionMetricsStore store.EvolutionMetricsStore
 
 	// User identity resolver for credential lookups (maps channel contacts → tenant users)
 	UserResolver UserIdentityResolver
@@ -364,6 +403,7 @@ func NewLoop(cfg LoopConfig) *Loop {
 
 	return &Loop{
 		id:                     cfg.ID,
+		displayName:            cfg.DisplayName,
 		agentUUID:              cfg.AgentUUID,
 		tenantID:               cfg.TenantID,
 		agentType:              cfg.AgentType,
@@ -376,11 +416,13 @@ func NewLoop(cfg LoopConfig) *Loop {
 		workspace:              cfg.Workspace,
 		dataDir:                cfg.DataDir,
 		workspaceSharing:       cfg.WorkspaceSharing,
+		autoInjector:           cfg.AutoInjector,
 		restrictToWs:           cfg.RestrictToWs,
 		subagentsCfg:           cfg.SubagentsCfg,
 		memoryCfg:              cfg.MemoryCfg,
 		sandboxCfg:             cfg.SandboxCfg,
 		eventPub:               cfg.Bus,
+		domainBus:              cfg.DomainBus,
 		sessions:               cfg.Sessions,
 		tools:                  cfg.Tools,
 		toolPolicy:             cfg.ToolPolicy,
@@ -410,6 +452,8 @@ func NewLoop(cfg LoopConfig) *Loop {
 		builtinToolSettings:    cfg.BuiltinToolSettings,
 		disabledTools:          cfg.DisabledTools,
 		reasoningConfig:        cfg.ReasoningConfig,
+		promptMode:             cfg.PromptMode,
+		pinnedSkills:           cfg.PinnedSkills,
 		selfEvolve:             cfg.SelfEvolve,
 		skillEvolve:            cfg.SkillEvolve,
 		skillNudgeInterval:     cfg.SkillNudgeInterval,
@@ -425,6 +469,9 @@ func NewLoop(cfg LoopConfig) *Loop {
 		mcpStore:               cfg.MCPStore,
 		mcpPool:                cfg.MCPPool,
 		mcpUserCredSrvs:        cfg.MCPUserCredSrvs,
+		orchMode:               cfg.OrchMode,
+		delegateTargets:        cfg.DelegateTargets,
+		evolutionMetricsStore:  cfg.EvolutionMetricsStore,
 		userResolver:           cfg.UserResolver,
 	}
 }
@@ -443,6 +490,7 @@ type RunRequest struct {
 	RunID             string             // unique run identifier
 	UserID            string             // external user ID (TEXT, free-form) for multi-tenant scoping
 	SenderID          string             // original individual sender ID (preserved in group chats for permission checks)
+	SenderName        string             // display name from channel metadata (for bootstrap auto-contact)
 	Stream            bool               // whether to stream response chunks
 	ExtraSystemPrompt string             // optional: injected into system prompt (skills, subagent context, etc.)
 	SkillFilter       []string           // per-request skill override: nil=use agent default, []=no skills, ["x","y"]=whitelist
@@ -487,6 +535,7 @@ type RunRequest struct {
 // RunResult is the output of a completed agent run.
 type RunResult struct {
 	Content        string           `json:"content"`
+	Thinking       string           `json:"thinking,omitempty"`       // reasoning content from thinking models (Claude, o3, DeepSeek-R1, Kimi)
 	RunID          string           `json:"runId"`
 	Iterations     int              `json:"iterations"`
 	Usage          *providers.Usage `json:"usage,omitempty"`
@@ -505,7 +554,7 @@ type MediaResult struct {
 	AsVoice     bool   `json:"as_voice,omitempty"`     // send as voice message (Telegram OGG)
 }
 
-// runState encapsulates all mutable state for a single runLoop execution.
+// runState encapsulates all mutable state for a single agent run.
 // Grouping these fields enables extracting loop sub-operations into methods
 // on *runState without passing 20+ individual variables.
 type runState struct {

@@ -77,7 +77,7 @@ func (s *PGKnowledgeGraphStore) ListRelations(ctx context.Context, agentID, user
 		q = `SELECT id, agent_id, user_id, source_entity_id, relation_type, target_entity_id,
 		       confidence, properties, source, created_at, updated_at
 		FROM kg_relations
-		WHERE agent_id = $1
+		WHERE agent_id = $1 AND valid_until IS NULL
 		  AND (source_entity_id = $2 OR target_entity_id = $2)` + tc + `
 		ORDER BY created_at DESC`
 		args = append([]any{aid, eid}, tcArgs...)
@@ -89,18 +89,21 @@ func (s *PGKnowledgeGraphStore) ListRelations(ctx context.Context, agentID, user
 		q = `SELECT id, agent_id, user_id, source_entity_id, relation_type, target_entity_id,
 		       confidence, properties, source, created_at, updated_at
 		FROM kg_relations
-		WHERE agent_id = $1 AND user_id = $2
+		WHERE agent_id = $1 AND user_id = $2 AND valid_until IS NULL
 		  AND (source_entity_id = $3 OR target_entity_id = $3)` + tc + `
 		ORDER BY created_at DESC`
 		args = append([]any{aid, userID, eid}, tcArgs...)
 	}
 
-	rows, err := s.db.QueryContext(ctx, q, args...)
-	if err != nil {
+	var rRows []relationRow
+	if err := pkgSqlxDB.SelectContext(ctx, &rRows, q, args...); err != nil {
 		return nil, err
 	}
-	defer rows.Close()
-	return scanRelations(rows)
+	result := make([]store.Relation, len(rRows))
+	for i := range rRows {
+		result[i] = rRows[i].toRelation()
+	}
+	return result, nil
 }
 
 func (s *PGKnowledgeGraphStore) ListAllRelations(ctx context.Context, agentID, userID string, limit int) ([]store.Relation, error) {
@@ -108,7 +111,7 @@ func (s *PGKnowledgeGraphStore) ListAllRelations(ctx context.Context, agentID, u
 	if limit <= 0 {
 		limit = 200
 	}
-	where := "agent_id = $1"
+	where := "agent_id = $1 AND valid_until IS NULL"
 	args := []any{aid}
 	idx := 2
 	if !store.IsSharedKG(ctx) && userID != "" {
@@ -131,12 +134,15 @@ func (s *PGKnowledgeGraphStore) ListAllRelations(ctx context.Context, agentID, u
 		       confidence, properties, source, created_at, updated_at
 		FROM kg_relations WHERE %s
 		ORDER BY created_at DESC LIMIT $%d`, where, idx)
-	rows, err := s.db.QueryContext(ctx, q, args...)
-	if err != nil {
+	var rRows []relationRow
+	if err = pkgSqlxDB.SelectContext(ctx, &rRows, q, args...); err != nil {
 		return nil, err
 	}
-	defer rows.Close()
-	return scanRelations(rows)
+	result := make([]store.Relation, len(rRows))
+	for i := range rRows {
+		result[i] = rRows[i].toRelation()
+	}
+	return result, nil
 }
 
 func (s *PGKnowledgeGraphStore) IngestExtraction(ctx context.Context, agentID, userID string, entities []store.Entity, relations []store.Relation) ([]string, error) {
@@ -299,18 +305,18 @@ func (s *PGKnowledgeGraphStore) Stats(ctx context.Context, agentID, userID strin
 	args = append(args, tcArgs...)
 
 	if err := s.db.QueryRowContext(ctx,
-		`SELECT COUNT(*) FROM kg_entities WHERE agent_id = $1`+userFilter+tenantFilter, args...,
+		`SELECT COUNT(*) FROM kg_entities WHERE agent_id = $1 AND valid_until IS NULL`+userFilter+tenantFilter, args...,
 	).Scan(&stats.EntityCount); err != nil {
 		return nil, err
 	}
 	if err := s.db.QueryRowContext(ctx,
-		`SELECT COUNT(*) FROM kg_relations WHERE agent_id = $1`+userFilter+tenantFilter, args...,
+		`SELECT COUNT(*) FROM kg_relations WHERE agent_id = $1 AND valid_until IS NULL`+userFilter+tenantFilter, args...,
 	).Scan(&stats.RelationCount); err != nil {
 		return nil, err
 	}
 
 	rows, err := s.db.QueryContext(ctx,
-		`SELECT entity_type, COUNT(*) FROM kg_entities WHERE agent_id = $1`+userFilter+tenantFilter+` GROUP BY entity_type`, args...,
+		`SELECT entity_type, COUNT(*) FROM kg_entities WHERE agent_id = $1 AND valid_until IS NULL`+userFilter+tenantFilter+` GROUP BY entity_type`, args...,
 	)
 	if err != nil {
 		return nil, err
@@ -367,47 +373,4 @@ func scanEntity(row rowScanner) (*store.Entity, error) {
 	e.CreatedAt = createdAt.UnixMilli()
 	e.UpdatedAt = updatedAt.UnixMilli()
 	return &e, nil
-}
-
-func scanEntities(rows *sql.Rows) ([]store.Entity, error) {
-	var result []store.Entity
-	for rows.Next() {
-		var e store.Entity
-		var props []byte
-		var createdAt, updatedAt time.Time
-		if err := rows.Scan(
-			&e.ID, &e.AgentID, &e.UserID, &e.ExternalID, &e.Name, &e.EntityType,
-			&e.Description, &props, &e.SourceID, &e.Confidence, &createdAt, &updatedAt,
-		); err != nil {
-			continue
-		}
-		json.Unmarshal(props, &e.Properties) //nolint:errcheck
-		e.CreatedAt = createdAt.UnixMilli()
-		e.UpdatedAt = updatedAt.UnixMilli()
-		result = append(result, e)
-	}
-	return result, rows.Err()
-}
-
-func scanRelations(rows *sql.Rows) ([]store.Relation, error) {
-	var result []store.Relation
-	for rows.Next() {
-		var r store.Relation
-		var props []byte
-		var createdAt time.Time
-		var updatedAt sql.NullTime
-		if err := rows.Scan(
-			&r.ID, &r.AgentID, &r.UserID, &r.SourceEntityID, &r.RelationType,
-			&r.TargetEntityID, &r.Confidence, &props, &r.Source, &createdAt, &updatedAt,
-		); err != nil {
-			continue
-		}
-		json.Unmarshal(props, &r.Properties) //nolint:errcheck
-		r.CreatedAt = createdAt.UnixMilli()
-		if updatedAt.Valid {
-			r.UpdatedAt = updatedAt.Time.UnixMilli()
-		}
-		result = append(result, r)
-	}
-	return result, rows.Err()
 }
