@@ -157,6 +157,7 @@ func wireExtras(
 		ContextFileLoader:      contextFileLoader,
 		BootstrapCleanup:       buildBootstrapCleanup(stores.Agents),
 		CacheInvalidate:        buildCacheInvalidate(contextFileInterceptor),
+		DefaultTimezone:        appCfg.Cron.DefaultTimezone,
 		InjectionAction:        injectionAction,
 		MaxMessageChars:        appCfg.Gateway.MaxMessageChars,
 		CompactionCfg:          appCfg.Agents.Defaults.Compaction,

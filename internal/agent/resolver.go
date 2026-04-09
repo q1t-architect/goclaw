@@ -45,6 +45,7 @@ type ResolverDeps struct {
 	ContextFileLoader ContextFileLoaderFunc
 	BootstrapCleanup  BootstrapCleanupFunc
 	CacheInvalidate   CacheInvalidateFunc
+	DefaultTimezone   string // system default timezone for bootstrap pre-fill
 
 	// Security
 	InjectionAction string // "log", "warn", "block", "off"
@@ -435,6 +436,7 @@ func NewManagedResolver(deps ResolverDeps) ResolverFunc {
 			ContextFileLoader:      deps.ContextFileLoader,
 			BootstrapCleanup:       deps.BootstrapCleanup,
 			CacheInvalidate:        deps.CacheInvalidate,
+			DefaultTimezone:        deps.DefaultTimezone,
 			OnEvent:                deps.OnEvent,
 			TraceCollector:         deps.TraceCollector,
 			InjectionAction:        deps.InjectionAction,

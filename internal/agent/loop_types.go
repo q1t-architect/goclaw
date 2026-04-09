@@ -45,7 +45,8 @@ type EnsureUserProfileFunc func(ctx context.Context, agentID uuid.UUID, userID, 
 // Called once per user per Loop instance, independent of workspace.
 // isNew indicates whether the profile was just created (seed all) or already existed
 // (only seed if user has zero files — avoids re-seeding after BOOTSTRAP.md cleanup).
-type SeedUserFilesFunc func(ctx context.Context, agentID uuid.UUID, userID, agentType string, isNew bool) error
+// channelMeta carries optional channel-provided contact info for bootstrap skip decisions.
+type SeedUserFilesFunc func(ctx context.Context, agentID uuid.UUID, userID, agentType string, isNew bool, channelMeta *bootstrap.ChannelMeta) error
 
 // EnsureUserFilesFunc is the legacy combined callback (profile + seed + workspace).
 // Deprecated: use EnsureUserProfileFunc + SeedUserFilesFunc separately.
@@ -72,6 +73,7 @@ type Loop struct {
 	agentUUID        uuid.UUID // set for context propagation
 	tenantID         uuid.UUID // agent's owning tenant
 	agentType        string    // "open" or "predefined"
+	defaultTimezone  string    // system default timezone for bootstrap pre-fill
 	provider         providers.Provider
 	model            string
 	contextWindow    int
@@ -299,6 +301,7 @@ type LoopConfig struct {
 	ContextFileLoader ContextFileLoaderFunc
 	BootstrapCleanup  BootstrapCleanupFunc
 	CacheInvalidate   CacheInvalidateFunc // invalidate context file cache after seeding
+	DefaultTimezone   string              // system default timezone for bootstrap pre-fill
 
 	// Tracing collector (nil = no tracing)
 	TraceCollector *tracing.Collector
@@ -433,6 +436,7 @@ func NewLoop(cfg LoopConfig) *Loop {
 		skillAllowList:         cfg.SkillAllowList,
 		hasMemory:              cfg.HasMemory,
 		contextFiles:           cfg.ContextFiles,
+		defaultTimezone:        cfg.DefaultTimezone,
 		ensureUserProfile:      cfg.EnsureUserProfile,
 		seedUserFiles:          cfg.SeedUserFiles,
 		ensureUserFiles:        cfg.EnsureUserFiles,
