@@ -186,6 +186,22 @@ type MemoryConfig struct {
 	VectorWeight      float64 `json:"vector_weight,omitempty"`      // hybrid search vector weight (default 0.7)
 	TextWeight        float64 `json:"text_weight,omitempty"`        // hybrid search FTS weight (default 0.3)
 	MinScore          float64 `json:"min_score,omitempty"`          // minimum relevance score (default 0.35)
+
+	// Dreaming configures the episodic → long-term consolidation worker.
+	// nil = use hardcoded defaults (threshold=5, debounce=10min, enabled).
+	Dreaming *DreamingConfig `json:"dreaming,omitempty"`
+}
+
+// DreamingConfig controls per-agent behaviour of the consolidation dreaming
+// worker (episodic summaries → long-term memory). Pointer fields allow partial
+// overrides from JSONB to merge cleanly with defaults without clobbering
+// unset values (e.g. leaving VerboseLog at its default when only Threshold is
+// overridden).
+type DreamingConfig struct {
+	Enabled    *bool `json:"enabled,omitempty"`     // default true (nil = enabled)
+	DebounceMs int   `json:"debounce_ms,omitempty"` // min interval between runs per agent/user (default 600000 = 10 min)
+	Threshold  int   `json:"threshold,omitempty"`   // min unpromoted entries before running (default 5)
+	VerboseLog *bool `json:"verbose_log,omitempty"` // log debounce/below-threshold skips at info level (default false)
 }
 
 // SandboxConfig configures Docker-based sandbox execution.

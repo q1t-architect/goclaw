@@ -354,9 +354,10 @@ func (h *AgentsHandler) importVault(ctx context.Context, ag *store.AgentData, ar
 		progressFn(ProgressEvent{Phase: "vault_documents", Status: "running", Total: len(arc.vaultDocuments)})
 	}
 	for _, d := range arc.vaultDocuments {
+		agentIDStr := ag.ID.String()
 		doc := &store.VaultDocument{
 			TenantID:    tid.String(),
-			AgentID:     ag.ID.String(),
+			AgentID:     &agentIDStr,
 			TeamID:      nil, // team_id not portable
 			Scope:       d.Scope,
 			CustomScope: d.CustomScope,

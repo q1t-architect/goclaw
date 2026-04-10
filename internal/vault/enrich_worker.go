@@ -12,6 +12,7 @@ import (
 	"github.com/nextlevelbuilder/goclaw/internal/eventbus"
 	"github.com/nextlevelbuilder/goclaw/internal/providers"
 	"github.com/nextlevelbuilder/goclaw/internal/store"
+	"golang.org/x/sync/semaphore"
 )
 
 const (
@@ -20,6 +21,7 @@ const (
 	enrichLLMTimeout      = 5 * time.Minute
 	enrichSimilarityLimit = 10
 	enrichSimilarityMin   = 0.7
+	enrichMaxConcurrent   = 3 // max concurrent LLM summarize calls
 )
 
 // EnrichWorkerDeps bundles dependencies for the vault enrichment worker.
@@ -38,6 +40,7 @@ func RegisterEnrichWorker(deps EnrichWorkerDeps) func() {
 		provider: deps.Provider,
 		model:    deps.Model,
 		dedup:    make(map[string]string),
+		sem:      semaphore.NewWeighted(enrichMaxConcurrent),
 	}
 	return deps.EventBus.Subscribe(eventbus.EventVaultDocUpserted, w.Handle)
 }
@@ -53,6 +56,7 @@ type enrichWorker struct {
 	// Bounded dedup: docID → content_hash. Prevents re-processing unchanged files.
 	dedupMu sync.Mutex
 	dedup   map[string]string
+	sem     *semaphore.Weighted // limits concurrent LLM summarize calls
 }
 
 // Handle is the EventBus handler for vault.doc_upserted events.
@@ -70,7 +74,13 @@ func (w *enrichWorker) Handle(ctx context.Context, event eventbus.DomainEvent) e
 	}
 	w.dedupMu.Unlock()
 
-	key := payload.TenantID + ":" + payload.AgentID
+	// Batch key: tenant + agent for agent-scoped docs. For team/shared docs
+	// (empty AgentID), use tenant + docID to avoid collapsing all into one queue.
+	batchScope := payload.AgentID
+	if batchScope == "" {
+		batchScope = payload.DocID
+	}
+	key := payload.TenantID + ":" + batchScope
 	if !w.queue.Enqueue(key, payload) {
 		return nil // another goroutine already processing this agent's queue
 	}
@@ -96,10 +106,15 @@ func (w *enrichWorker) processBatch(ctx context.Context, key string) {
 			continue
 		}
 
-		var results []enriched
+		// Phase 1 — Summarize (parallel, bounded by semaphore).
+		var (
+			mu      sync.Mutex
+			results []enriched
+			wg      sync.WaitGroup
+		)
 
 		for _, item := range items {
-			// Dedup check.
+			// Pre-check dedup before spawning goroutine (cheap).
 			w.dedupMu.Lock()
 			if prev, exists := w.dedup[item.DocID]; exists && prev == item.ContentHash {
 				w.dedupMu.Unlock()
@@ -107,44 +122,22 @@ func (w *enrichWorker) processBatch(ctx context.Context, key string) {
 			}
 			w.dedupMu.Unlock()
 
-			// Check if doc already has a summary (e.g., media with caption).
-			existing, err := w.vault.GetDocumentByID(ctx, item.TenantID, item.DocID)
-			if err != nil {
-				slog.Warn("vault.enrich: get_doc", "doc", item.DocID, "err", err)
-				continue
-			}
-			if existing != nil && existing.Summary != "" {
-				// Already has summary — skip LLM, still embed+link.
-				results = append(results, enriched{payload: item, summary: existing.Summary})
-				continue
-			}
+			wg.Add(1)
+			go func(it eventbus.VaultDocUpsertedPayload) {
+				defer wg.Done()
+				if err := w.sem.Acquire(ctx, 1); err != nil {
+					return // context cancelled
+				}
+				defer w.sem.Release(1)
 
-			// Read file content from disk.
-			fullPath := filepath.Join(item.Workspace, item.Path)
-			content, err := os.ReadFile(fullPath)
-			if err != nil {
-				slog.Warn("vault.enrich: read_file", "path", item.Path, "err", err)
-				continue // file deleted or moved — don't record in dedup
-			}
-
-			// UTF-8 safe truncation.
-			runes := []rune(string(content))
-			if len(runes) > enrichContentMaxRunes {
-				runes = runes[:enrichContentMaxRunes]
-			}
-			text := string(runes)
-
-			// LLM summarize.
-			sctx, cancel := context.WithTimeout(ctx, enrichLLMTimeout)
-			summary, err := w.summarize(sctx, item.Path, text)
-			cancel()
-			if err != nil {
-				slog.Warn("vault.enrich: summarize", "path", item.Path, "err", err)
-				continue // don't record in dedup — allow retry on next write
-			}
-
-			results = append(results, enriched{payload: item, summary: summary})
+				if r, ok := w.summarizeItem(ctx, it); ok {
+					mu.Lock()
+					results = append(results, r)
+					mu.Unlock()
+				}
+			}(item)
 		}
+		wg.Wait()
 
 		// Phase 2 — Embed: update summary + embed for all results.
 		// Do NOT record dedup here (moved to Phase 4 after classify).
@@ -158,7 +151,6 @@ func (w *enrichWorker) processBatch(ctx context.Context, key string) {
 		}
 
 		// Phase 3 — Classify links (replaces autoLink).
-		// All items share same tenantID:agentID (batch queue key guarantees this).
 		if len(embedded) > 0 {
 			first := embedded[0].payload
 			w.classifyLinks(ctx, first.TenantID, first.AgentID, embedded)
@@ -175,6 +167,58 @@ func (w *enrichWorker) processBatch(ctx context.Context, key string) {
 			return
 		}
 	}
+}
+
+// summarizeItem handles dedup check, file read, and LLM summarize for one item.
+// Returns (enriched, true) on success, (zero, false) on skip/error.
+func (w *enrichWorker) summarizeItem(ctx context.Context, item eventbus.VaultDocUpsertedPayload) (enriched, bool) {
+	// Dedup re-check (another goroutine may have processed same docID).
+	w.dedupMu.Lock()
+	if prev, exists := w.dedup[item.DocID]; exists && prev == item.ContentHash {
+		w.dedupMu.Unlock()
+		return enriched{}, false
+	}
+	w.dedupMu.Unlock()
+
+	// Check if doc already has a summary (e.g., media with caption).
+	existing, err := w.vault.GetDocumentByID(ctx, item.TenantID, item.DocID)
+	if err != nil {
+		slog.Warn("vault.enrich: get_doc", "doc", item.DocID, "err", err)
+		return enriched{}, false
+	}
+	if existing != nil && existing.Summary != "" {
+		return enriched{payload: item, summary: existing.Summary}, true
+	}
+
+	// Media files without summary: skip LLM summarize (binary content is not text).
+	// Still proceed to embed+link using title+path only.
+	if existing != nil && existing.DocType == "media" {
+		return enriched{payload: item, summary: ""}, true
+	}
+
+	// Read file content from disk.
+	fullPath := filepath.Join(item.Workspace, item.Path)
+	content, err := os.ReadFile(fullPath)
+	if err != nil {
+		slog.Warn("vault.enrich: read_file", "path", item.Path, "err", err)
+		return enriched{}, false
+	}
+
+	// UTF-8 safe truncation.
+	runes := []rune(string(content))
+	if len(runes) > enrichContentMaxRunes {
+		runes = runes[:enrichContentMaxRunes]
+	}
+
+	sctx, cancel := context.WithTimeout(ctx, enrichLLMTimeout)
+	summary, err := w.summarize(sctx, item.Path, string(runes))
+	cancel()
+	if err != nil {
+		slog.Warn("vault.enrich: summarize", "path", item.Path, "err", err)
+		return enriched{}, false
+	}
+
+	return enriched{payload: item, summary: summary}, true
 }
 
 const vaultSummarizePrompt = `Summarize this document in 2-3 sentences. Focus on:

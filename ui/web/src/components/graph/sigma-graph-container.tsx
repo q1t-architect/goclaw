@@ -56,6 +56,8 @@ export function SigmaGraphContainer({
 }: SigmaGraphContainerProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const internalSigmaRef = useRef<Sigma | null>(null);
+  // Incremented when sigma instance changes — used to trigger event handler registration.
+  const [sigmaVersion, setSigmaVersion] = useState(0);
   const [hoveredNode, setHoveredNode] = useState<string | null>(null);
   // Pulse phase for animated highlighted edges (0..1, cycles)
   const [pulsePhase, setPulsePhase] = useState(0);
@@ -64,6 +66,7 @@ export function SigmaGraphContainer({
   const setSigmaRef = useCallback(
     (instance: Sigma | null) => {
       internalSigmaRef.current = instance;
+      setSigmaVersion((v) => v + 1);
       onSigmaReady?.(instance);
     },
     [onSigmaReady],
@@ -337,7 +340,15 @@ export function SigmaGraphContainer({
     sigma.refresh({ skipIndexation: true });
   }, [pulsePhase]);
 
-  // --- Event handlers: use Sigma v3 native doubleClickNode (snappier than 280ms timer) ---
+  // --- Event handlers: use refs for values that change frequently to avoid
+  // re-registering Sigma listeners (which drops in-flight double-click events) ---
+  const selectedNodeIdRef = useRef(selectedNodeId);
+  selectedNodeIdRef.current = selectedNodeId;
+  const onNodeSelectRef = useRef(onNodeSelect);
+  onNodeSelectRef.current = onNodeSelect;
+  const onNodeDoubleClickRef = useRef(onNodeDoubleClick);
+  onNodeDoubleClickRef.current = onNodeDoubleClick;
+
   useEffect(() => {
     const sigma = internalSigmaRef.current;
     if (!sigma) return;
@@ -353,17 +364,17 @@ export function SigmaGraphContainer({
     };
 
     const handleClickNode = ({ node }: { node: string }) => {
-      onNodeSelect?.(node === selectedNodeId ? null : node);
+      onNodeSelectRef.current?.(node === selectedNodeIdRef.current ? null : node);
     };
 
     const handleDoubleClickNode = ({ node, event }: { node: string; event: { preventSigmaDefault?: () => void } }) => {
       // Prevent Sigma's default zoom-in behavior on double-click
       event.preventSigmaDefault?.();
-      onNodeDoubleClick?.(node);
+      onNodeDoubleClickRef.current?.(node);
     };
 
     const handleClickStage = () => {
-      onNodeSelect?.(null);
+      onNodeSelectRef.current?.(null);
     };
 
     sigma.on("enterNode", handleEnterNode);
@@ -379,7 +390,7 @@ export function SigmaGraphContainer({
       sigma.off("doubleClickNode", handleDoubleClickNode);
       sigma.off("clickStage", handleClickStage);
     };
-  }, [selectedNodeId, onNodeSelect, onNodeDoubleClick]);
+  }, [sigmaVersion]); // re-register only when sigma instance changes
 
   // NOTE: Click on node NO LONGER moves camera.
   // Camera only animates for explicit user actions (search, fit-to-view, keyboard F).

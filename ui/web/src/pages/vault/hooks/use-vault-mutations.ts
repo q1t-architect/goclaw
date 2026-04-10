@@ -1,9 +1,20 @@
 import { useCallback } from "react";
+import { useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { useHttp } from "@/hooks/use-ws";
 import { toast } from "@/stores/use-toast-store";
 import i18n from "@/i18n";
 import type { VaultDocument, VaultLink } from "@/types/vault";
+
+interface RescanResult {
+  scanned: number;
+  new: number;
+  updated: number;
+  unchanged: number;
+  skipped: number;
+  errors: number;
+  truncated: boolean;
+}
 
 const VAULT_KEY = "vault";
 
@@ -94,6 +105,43 @@ export function useCreateLink(agentId: string) {
   );
 
   return { create };
+}
+
+/** Rescan workspace to sync vault documents from filesystem (tenant-wide). */
+export function useRescanWorkspace() {
+  const http = useHttp();
+  const queryClient = useQueryClient();
+  const [isPending, setIsPending] = useState(false);
+
+  const rescan = useCallback(async () => {
+    setIsPending(true);
+    try {
+      const result = await http.post<RescanResult>(`/v1/vault/rescan`, {});
+      await queryClient.invalidateQueries({ queryKey: [VAULT_KEY] });
+
+      const parts: string[] = [];
+      if (result.new > 0) parts.push(i18n.t("vault:rescanNew", { count: result.new }));
+      if (result.updated > 0) parts.push(i18n.t("vault:rescanUpdated", { count: result.updated }));
+      if (result.unchanged > 0) parts.push(i18n.t("vault:rescanUnchanged", { count: result.unchanged }));
+
+      const title = parts.length > 0 ? parts.join(", ") : i18n.t("vault:rescanNoFiles");
+      const desc = result.truncated ? i18n.t("vault:rescanTruncated") : undefined;
+      toast.success(title, desc);
+      return result;
+    } catch (err) {
+      const status = (err as { status?: number })?.status;
+      if (status === 409) {
+        toast.warning(i18n.t("vault:rescanBusy"));
+      } else {
+        toast.error(i18n.t("vault:rescanError"), err instanceof Error ? err.message : "");
+      }
+      throw err;
+    } finally {
+      setIsPending(false);
+    }
+  }, [http, queryClient]);
+
+  return { rescan, isPending };
 }
 
 /** Delete a vault link. */

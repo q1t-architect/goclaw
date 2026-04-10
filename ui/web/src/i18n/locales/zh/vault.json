@@ -5,6 +5,7 @@
   "searchPlaceholder": "搜索文档...",
   "filterAgent": "智能体",
   "allAgents": "所有智能体",
+  "allTypes": "全部",
   "noDocuments": "知识库中没有文档",
   "noResults": "没有搜索结果",
   "searchFailed": "搜索失败",
@@ -36,7 +37,8 @@
     "noLinks": "无链接",
     "contentPreview": "内容预览",
     "fileNotFound": "文件未找到",
-    "emptyContent": "无内容"
+    "emptyContent": "无内容",
+    "binaryFile": "二进制文件 — 无法预览"
   },
   "fields": {
     "title": "标题",
@@ -62,8 +64,17 @@
     "memory": "记忆",
     "note": "笔记",
     "skill": "技能",
-    "episodic": "情景记忆"
+    "episodic": "情景记忆",
+    "media": "Media"
   },
+  "rescanTooltip": "重新扫描工作区",
+  "rescanNew": "{{count}} 个新文件",
+  "rescanUpdated": "{{count}} 个已更新",
+  "rescanUnchanged": "{{count}} 个未变",
+  "rescanTruncated": "扫描已截断（达到限制）",
+  "rescanNoFiles": "未发现新文件",
+  "rescanBusy": "扫描正在进行中",
+  "rescanError": "扫描失败",
   "toast": {
     "docCreated": "文档已创建",
     "docCreateFailed": "创建文档失败",

@@ -189,6 +189,10 @@ type Loop struct {
 	// Secure CLI store for credentialed exec context injection
 	secureCLIStore store.SecureCLIStore
 
+	// Vault hook: called when a text file is persisted from user upload.
+	// Enables vault registration without agent package importing vault.
+	onTextUploaded func(ctx context.Context, path, content string)
+
 	// Persistent media storage for cross-turn image/document access
 	mediaStore *media.Store
 
@@ -347,6 +351,9 @@ type LoopConfig struct {
 	// Secure CLI store for credentialed exec context injection
 	SecureCLIStore store.SecureCLIStore
 
+	// Vault hook: called asynchronously when a text file is persisted from user upload.
+	OnTextUploaded func(ctx context.Context, path, content string)
+
 	// Persistent media storage for cross-turn image/document access
 	MediaStore *media.Store
 
@@ -471,6 +478,7 @@ func NewLoop(cfg LoopConfig) *Loop {
 		configPermStore:        cfg.ConfigPermStore,
 		teamStore:              cfg.TeamStore,
 		secureCLIStore:         cfg.SecureCLIStore,
+		onTextUploaded:         cfg.OnTextUploaded,
 		mediaStore:             cfg.MediaStore,
 		modelPricing:           cfg.ModelPricing,
 		budgetMonthlyCents:     cfg.BudgetMonthlyCents,

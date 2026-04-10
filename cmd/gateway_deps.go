@@ -6,6 +6,7 @@ import (
 	"github.com/nextlevelbuilder/goclaw/internal/cache"
 	"github.com/nextlevelbuilder/goclaw/internal/channels"
 	"github.com/nextlevelbuilder/goclaw/internal/config"
+	"github.com/nextlevelbuilder/goclaw/internal/eventbus"
 	"github.com/nextlevelbuilder/goclaw/internal/gateway"
 	"github.com/nextlevelbuilder/goclaw/internal/providers"
 	"github.com/nextlevelbuilder/goclaw/internal/skills"
@@ -28,4 +29,5 @@ type gatewayDeps struct {
 	permCache        *cache.PermissionCache // nil if no tenant store; closed on shutdown to stop sweep goroutines
 	workspace        string
 	dataDir          string
+	domainBus        eventbus.DomainEventBus
 }

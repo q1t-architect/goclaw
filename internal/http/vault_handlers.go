@@ -6,9 +6,14 @@ import (
 	"net/http"
 	"strconv"
 	"strings"
+	"sync"
+	"time"
 
 	"github.com/google/uuid"
+	"github.com/nextlevelbuilder/goclaw/internal/config"
+	"github.com/nextlevelbuilder/goclaw/internal/eventbus"
 	"github.com/nextlevelbuilder/goclaw/internal/store"
+	"github.com/nextlevelbuilder/goclaw/internal/vault"
 )
 
 // vaultDocListResponse wraps the document list with total count for pagination.
@@ -17,14 +22,29 @@ type vaultDocListResponse struct {
 	Total     int                   `json:"total"`
 }
 
+// AgentLister is the subset of AgentStore needed by VaultHandler (rescan agent_key→UUID mapping).
+type AgentLister interface {
+	List(ctx context.Context, ownerID string) ([]store.AgentData, error)
+}
+
+// TeamLister is the subset of TeamStore needed by VaultHandler (rescan team validation).
+type TeamLister interface {
+	ListTeams(ctx context.Context) ([]store.TeamData, error)
+}
+
 // VaultHandler serves Knowledge Vault document and link endpoints.
 type VaultHandler struct {
 	store      store.VaultStore
 	teamAccess store.TeamAccessStore // nil = skip team membership validation (e.g. lite edition)
+	agents     AgentLister           // nil = rescan skips agent resolution
+	teams      TeamLister            // nil = rescan skips team resolution
+	workspace  string
+	eventBus   eventbus.DomainEventBus
+	rescanMu   sync.Map // key: tenantID → struct{}, per-tenant concurrency guard
 }
 
-func NewVaultHandler(s store.VaultStore, ta store.TeamAccessStore) *VaultHandler {
-	return &VaultHandler{store: s, teamAccess: ta}
+func NewVaultHandler(s store.VaultStore, ta store.TeamAccessStore, workspace string, bus eventbus.DomainEventBus, agents AgentLister, teams TeamLister) *VaultHandler {
+	return &VaultHandler{store: s, teamAccess: ta, agents: agents, teams: teams, workspace: workspace, eventBus: bus}
 }
 
 // validateTeamMembership checks that the requesting user belongs to the given team.
@@ -91,6 +111,8 @@ func (h *VaultHandler) RegisterRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("POST /v1/agents/{agentID}/vault/documents", h.auth(h.handleCreateDocument))
 	mux.HandleFunc("PUT /v1/agents/{agentID}/vault/documents/{docID}", h.auth(h.handleUpdateDocument))
 	mux.HandleFunc("DELETE /v1/agents/{agentID}/vault/documents/{docID}", h.auth(h.handleDeleteDocument))
+	mux.HandleFunc("POST /v1/vault/rescan", h.auth(h.handleRescan))
+	mux.HandleFunc("POST /v1/vault/search", h.auth(h.handleSearchAll))
 	mux.HandleFunc("POST /v1/agents/{agentID}/vault/search", h.auth(h.handleSearch))
 	mux.HandleFunc("GET /v1/agents/{agentID}/vault/documents/{docID}/links", h.auth(h.handleGetLinks))
 	mux.HandleFunc("POST /v1/agents/{agentID}/vault/links", h.auth(h.handleCreateLink))
@@ -199,7 +221,7 @@ func (h *VaultHandler) handleGetDocument(w http.ResponseWriter, r *http.Request)
 		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
 		return
 	}
-	if doc == nil || doc.AgentID != agentID {
+	if doc == nil || (doc.AgentID != nil && *doc.AgentID != agentID) {
 		writeJSON(w, http.StatusNotFound, map[string]string{"error": "document not found"})
 		return
 	}
@@ -212,14 +234,24 @@ func (h *VaultHandler) handleGetDocument(w http.ResponseWriter, r *http.Request)
 	writeJSON(w, http.StatusOK, doc)
 }
 
-// handleSearch runs hybrid FTS+vector search on vault documents.
+// handleSearchAll runs tenant-wide search (agent_id optional in body).
+func (h *VaultHandler) handleSearchAll(w http.ResponseWriter, r *http.Request) {
+	h.doSearch(w, r, "")
+}
+
+// handleSearch runs hybrid FTS+vector search scoped to a specific agent.
 func (h *VaultHandler) handleSearch(w http.ResponseWriter, r *http.Request) {
+	h.doSearch(w, r, r.PathValue("agentID"))
+}
+
+// doSearch is the shared search implementation for both per-agent and tenant-wide endpoints.
+func (h *VaultHandler) doSearch(w http.ResponseWriter, r *http.Request, agentID string) {
 	locale := extractLocale(r)
 	tenantID := store.TenantIDFromContext(r.Context())
-	agentID := r.PathValue("agentID")
 
 	var body struct {
 		Query      string   `json:"query"`
+		AgentID    string   `json:"agent_id"`
 		Scope      string   `json:"scope"`
 		DocTypes   []string `json:"doc_types"`
 		MaxResults int      `json:"max_results"`
@@ -234,6 +266,10 @@ func (h *VaultHandler) handleSearch(w http.ResponseWriter, r *http.Request) {
 	}
 	if body.MaxResults <= 0 {
 		body.MaxResults = 10
+	}
+	// Body agent_id only used when path doesn't provide one (tenant-wide endpoint).
+	if agentID == "" {
+		agentID = body.AgentID
 	}
 
 	searchOpts := store.VaultSearchOptions{
@@ -364,7 +400,7 @@ func (h *VaultHandler) handleCreateDocument(w http.ResponseWriter, r *http.Reque
 
 	doc := &store.VaultDocument{
 		TenantID: tenantID.String(),
-		AgentID:  agentID,
+		AgentID:  &agentID,
 		Path:     body.Path,
 		Title:    body.Title,
 		DocType:  body.DocType,
@@ -402,7 +438,7 @@ func (h *VaultHandler) handleUpdateDocument(w http.ResponseWriter, r *http.Reque
 	docID := r.PathValue("docID")
 
 	existing, err := h.store.GetDocumentByID(r.Context(), tenantID.String(), docID)
-	if err != nil || existing == nil || existing.AgentID != agentID {
+	if err != nil || existing == nil || (existing.AgentID != nil && *existing.AgentID != agentID) {
 		writeJSON(w, http.StatusNotFound, map[string]string{"error": "document not found"})
 		return
 	}
@@ -465,7 +501,7 @@ func (h *VaultHandler) handleDeleteDocument(w http.ResponseWriter, r *http.Reque
 	docID := r.PathValue("docID")
 
 	existing, err := h.store.GetDocumentByID(r.Context(), tenantID.String(), docID)
-	if err != nil || existing == nil || existing.AgentID != agentID {
+	if err != nil || existing == nil || (existing.AgentID != nil && *existing.AgentID != agentID) {
 		writeJSON(w, http.StatusNotFound, map[string]string{"error": "document not found"})
 		return
 	}
@@ -479,7 +515,12 @@ func (h *VaultHandler) handleDeleteDocument(w http.ResponseWriter, r *http.Reque
 
 	// DeleteDocument without RunContext applies no team_id filter (broad match on tenant+agent+path).
 	// This is safe because we pre-validated team membership above and use server-derived existing.Path.
-	if err := h.store.DeleteDocument(r.Context(), tenantID.String(), agentID, existing.Path); err != nil {
+	// Use the doc's actual agent_id (may be empty for team/shared docs).
+	deleteAgentID := ""
+	if existing.AgentID != nil {
+		deleteAgentID = *existing.AgentID
+	}
+	if err := h.store.DeleteDocument(r.Context(), tenantID.String(), deleteAgentID, existing.Path); err != nil {
 		slog.Warn("vault.delete failed", "error", err)
 		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
 		return
@@ -517,7 +558,7 @@ func (h *VaultHandler) handleCreateLink(w http.ResponseWriter, r *http.Request) 
 		writeJSON(w, http.StatusNotFound, map[string]string{"error": "one or both documents not found"})
 		return
 	}
-	if from.AgentID != agentID {
+	if from.AgentID != nil && *from.AgentID != agentID {
 		writeJSON(w, http.StatusForbidden, map[string]string{"error": "source document does not belong to this agent"})
 		return
 	}
@@ -552,6 +593,79 @@ func (h *VaultHandler) handleDeleteLink(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 	w.WriteHeader(http.StatusNoContent)
+}
+
+// handleRescan walks the entire tenant workspace and registers missing/changed files in vault.
+// Infers agent/team ownership from directory structure: agents/{key}/, teams/{uuid}/, or root shared.
+func (h *VaultHandler) handleRescan(w http.ResponseWriter, r *http.Request) {
+	tenantID := store.TenantIDFromContext(r.Context()).String()
+
+	// Per-tenant concurrency guard.
+	if _, loaded := h.rescanMu.LoadOrStore(tenantID, struct{}{}); loaded {
+		writeJSON(w, http.StatusConflict, map[string]string{"error": "rescan already in progress"})
+		return
+	}
+	defer h.rescanMu.Delete(tenantID)
+
+	wsPath := h.resolveTenantWorkspace(r.Context())
+	if wsPath == "" {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "workspace not available"})
+		return
+	}
+
+	// Build agent_key→UUID map and team UUID set for path inference.
+	agentMap, teamSet := h.buildRescanMaps(r.Context())
+
+	ctx, cancel := context.WithTimeout(r.Context(), 5*time.Minute)
+	defer cancel()
+
+	result, err := vault.RescanWorkspace(ctx, vault.RescanParams{
+		TenantID:  tenantID,
+		Workspace: wsPath,
+		AgentMap:  agentMap,
+		TeamSet:   teamSet,
+	}, h.store, h.eventBus)
+	if err != nil {
+		slog.Warn("vault.rescan failed", "tenant", tenantID, "error", err)
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
+		return
+	}
+
+	writeJSON(w, http.StatusOK, result)
+}
+
+// resolveTenantWorkspace returns the tenant-scoped workspace root.
+func (h *VaultHandler) resolveTenantWorkspace(ctx context.Context) string {
+	if h.workspace == "" {
+		return ""
+	}
+	tenantID := store.TenantIDFromContext(ctx)
+	slug := store.TenantSlugFromContext(ctx)
+	return config.TenantWorkspace(h.workspace, tenantID, slug)
+}
+
+// buildRescanMaps pre-loads agent_key→UUID and team UUID sets for the current tenant.
+func (h *VaultHandler) buildRescanMaps(ctx context.Context) (map[string]string, map[string]bool) {
+	agentMap := make(map[string]string)
+	teamSet := make(map[string]bool)
+
+	if h.agents != nil {
+		agents, err := h.agents.List(ctx, "")
+		if err == nil {
+			for _, a := range agents {
+				agentMap[a.AgentKey] = a.ID.String()
+			}
+		}
+	}
+	if h.teams != nil {
+		teams, err := h.teams.ListTeams(ctx)
+		if err == nil {
+			for _, t := range teams {
+				teamSet[t.ID.String()] = true
+			}
+		}
+	}
+	return agentMap, teamSet
 }
 
 var allowedDocTypes = map[string]bool{"context": true, "memory": true, "note": true, "skill": true, "episodic": true, "media": true}

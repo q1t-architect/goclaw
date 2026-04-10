@@ -9,7 +9,7 @@ import (
 type VaultDocument struct {
 	ID          string         `json:"id" db:"id"`
 	TenantID    string         `json:"tenant_id" db:"tenant_id"`
-	AgentID     string         `json:"agent_id" db:"agent_id"`
+	AgentID     *string        `json:"agent_id,omitempty" db:"agent_id"`
 	TeamID      *string        `json:"team_id,omitempty" db:"team_id"`
 	Scope       string         `json:"scope" db:"scope"`             // personal, team, shared
 	CustomScope *string        `json:"custom_scope,omitempty" db:"custom_scope"`

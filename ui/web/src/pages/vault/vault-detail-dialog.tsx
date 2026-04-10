@@ -1,6 +1,6 @@
-import { useState } from "react";
+import { useState, useMemo } from "react";
 import { useTranslation } from "react-i18next";
-import { Pencil, Plus, FileText, Link2 } from "lucide-react";
+import { Pencil, Plus, FileText, Link2, FileQuestion } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -8,7 +8,7 @@ import {
   Dialog, DialogContent, DialogHeader, DialogTitle,
 } from "@/components/ui/dialog";
 import { MarkdownRenderer } from "@/components/shared/markdown-renderer";
-import { useVaultLinks, useVaultFileContent, useUpdateDocument, useDeleteDocument } from "./hooks/use-vault";
+import { useVaultLinks, useVaultFileContent, useVaultImageUrl, useUpdateDocument, useDeleteDocument } from "./hooks/use-vault";
 import { VaultLinkDialog } from "./vault-link-dialog";
 import {
   VaultEditControls, DocTypeSelect, ScopeSelect, LinkBadge,
@@ -34,10 +34,22 @@ export function VaultDetailDialog({ doc, open, onOpenChange, onDeleted }: Props)
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [linkDialogOpen, setLinkDialogOpen] = useState(false);
 
-  // Content always loaded when dialog is open
+  // Determine if this is an image that can be rendered.
+  const isImage = useMemo(() => {
+    const mime = doc?.metadata?.mime_type as string | undefined;
+    if (mime?.startsWith("image/")) return true;
+    const ext = doc?.path.split(".").pop()?.toLowerCase() ?? "";
+    return ["png", "jpg", "jpeg", "gif", "webp", "svg", "bmp", "ico"].includes(ext);
+  }, [doc?.metadata, doc?.path]);
+
+  const isMedia = doc?.doc_type === "media";
+
+  // Only fetch text content for non-media files (media/binary cannot be rendered as markdown).
   const { content: fileContent, loading: contentLoading, error: contentError } = useVaultFileContent(
-    open && doc ? doc.path : null,
+    open && doc && !isMedia ? doc.path : null,
   );
+  // Fetch image as authenticated blob URL for <img> rendering.
+  const { url: imageUrl, error: imageError } = useVaultImageUrl(open && isMedia && isImage && doc ? doc.path : null);
   const { update } = useUpdateDocument(doc?.agent_id ?? "", doc?.id ?? "");
   const { remove: removeDoc } = useDeleteDocument(doc?.agent_id ?? "", doc?.id ?? "");
 
@@ -149,7 +161,37 @@ export function VaultDetailDialog({ doc, open, onOpenChange, onDeleted }: Props)
 
           {/* Content preview — always visible, scrollable */}
           <div className="flex-1 min-h-0 overflow-y-auto rounded-md border bg-muted/30 p-4">
-            {contentLoading ? (
+            {isMedia ? (
+              isImage ? (
+                <div className="flex items-center justify-center">
+                  {imageUrl ? (
+                    <img
+                      src={imageUrl}
+                      alt={doc.title || doc.path}
+                      className="max-w-full max-h-[60vh] object-contain rounded"
+                    />
+                  ) : imageError ? (
+                    <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                      <FileText className="h-4 w-4" />
+                      <span>{t("detail.fileNotFound")}</span>
+                    </div>
+                  ) : (
+                    <div className="h-32 w-32 animate-pulse rounded bg-muted" />
+                  )}
+                </div>
+              ) : (
+                <div className="flex flex-col items-center justify-center gap-3 py-8 text-muted-foreground">
+                  <FileQuestion className="h-10 w-10" />
+                  <div className="text-center space-y-1">
+                    <p className="text-sm font-medium">{t("detail.binaryFile")}</p>
+                    <p className="text-xs">{(doc.metadata?.mime_type as string) || doc.path.split(".").pop()?.toUpperCase()}</p>
+                  </div>
+                  {doc.summary && (
+                    <p className="text-xs text-center max-w-md mt-2">{doc.summary}</p>
+                  )}
+                </div>
+              )
+            ) : contentLoading ? (
               <div className="space-y-2">
                 <div className="h-4 w-3/4 animate-pulse rounded bg-muted" />
                 <div className="h-4 w-1/2 animate-pulse rounded bg-muted" />

@@ -234,7 +234,16 @@ export function ChatPage() {
         )}
 
         <div className="shrink-0">
-          <ChatTopBar agentId={agentId} isRunning={isRunning} isBusy={isBusy} activity={activity} teamTasks={teamTasks} onToggleTaskPanel={() => setTaskPanelOpen((v) => !v)} taskPanelOpen={taskPanelOpen} />
+          <ChatTopBar
+            agentId={agentId}
+            isRunning={isRunning}
+            isBusy={isBusy}
+            activity={activity}
+            teamTasks={teamTasks}
+            onToggleTaskPanel={() => setTaskPanelOpen((v) => !v)}
+            taskPanelOpen={taskPanelOpen}
+            session={sessions.find((s) => s.key === sessionKey) ?? null}
+          />
         </div>
 
         {sendError && (

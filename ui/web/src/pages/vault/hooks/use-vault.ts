@@ -1,4 +1,4 @@
-import { useCallback, useMemo } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useHttp } from "@/hooks/use-ws";
 import type { VaultDocument, VaultLink, VaultSearchResult } from "@/types/vault";
@@ -70,6 +70,26 @@ export function useVaultSearch(agentId: string) {
   }, [queryClient]);
 
   return { search, invalidate };
+}
+
+/** Tenant-wide vault search (agent_id optional). */
+export function useVaultSearchAll() {
+  const http = useHttp();
+
+  const search = useCallback(
+    async (query: string, opts?: { agentId?: string; docTypes?: string[]; teamId?: string; maxResults?: number }) => {
+      return http.post<VaultSearchResult[]>("/v1/vault/search", {
+        query,
+        agent_id: opts?.agentId || undefined,
+        doc_types: opts?.docTypes,
+        team_id: opts?.teamId || undefined,
+        max_results: opts?.maxResults ?? 20,
+      });
+    },
+    [http],
+  );
+
+  return { search };
 }
 
 /** Fetch all links for a set of vault documents (for graph view). */
@@ -219,6 +239,25 @@ export function useVaultFileContent(path: string | null) {
   return { content: data?.content ?? null, size: data?.size ?? 0, loading: isLoading, error: !!error };
 }
 
+/** Fetch an image file as blob URL for authenticated rendering in <img> tags. */
+export function useVaultImageUrl(path: string | null): { url: string | null; error: boolean } {
+  const http = useHttp();
+  const [url, setUrl] = useState<string | null>(null);
+  const [error, setError] = useState(false);
+
+  useEffect(() => {
+    if (!path) { setUrl(null); setError(false); return; }
+    let revoke: string | null = null;
+    setError(false);
+    http.downloadBlob(`/v1/storage/files/${encodeURIComponent(path)}?raw=true`)
+      .then((blob) => { revoke = URL.createObjectURL(blob); setUrl(revoke); })
+      .catch(() => { setUrl(null); setError(true); });
+    return () => { if (revoke) URL.revokeObjectURL(revoke); };
+  }, [path, http]);
+
+  return { url, error };
+}
+
 // Re-export mutations for convenience — consumers can import from this single file
 export {
   useCreateDocument,
@@ -226,4 +265,5 @@ export {
   useDeleteDocument,
   useCreateLink,
   useDeleteLink,
+  useRescanWorkspace,
 } from "./use-vault-mutations";

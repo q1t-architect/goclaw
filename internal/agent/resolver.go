@@ -117,6 +117,9 @@ type ResolverDeps struct {
 
 	// V3 domain event bus for consolidation pipeline (nil = disabled)
 	DomainBus eventbus.DomainEventBus
+
+	// Vault hook: called when a text file is uploaded by user (nil = no vault registration)
+	OnTextUploaded func(ctx context.Context, path, content string)
 }
 
 // NewManagedResolver creates a ResolverFunc that builds Loops from DB agent data.
@@ -461,6 +464,7 @@ func NewManagedResolver(deps ResolverDeps) ResolverFunc {
 			ConfigPermStore:        deps.ConfigPermStore,
 			TeamStore:              deps.TeamStore,
 			SecureCLIStore:         deps.SecureCLIStore,
+			OnTextUploaded:         deps.OnTextUploaded,
 			MediaStore:             deps.MediaStore,
 			ModelPricing:           deps.ModelPricing,
 			BudgetMonthlyCents:     derefInt(ag.BudgetMonthlyCents),
