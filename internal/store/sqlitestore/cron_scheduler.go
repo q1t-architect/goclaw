@@ -70,6 +70,7 @@ func (s *SQLiteCronStore) InvalidateCache() {
 }
 
 // recomputeStaleJobs fixes enabled jobs on startup:
+//   - Resets any jobs stuck in 'running' state from a previous crash.
 //   - Recomputes next_run_at for jobs where it is NULL (crashed mid-execution).
 //   - Advances past-due jobs (next_run_at < now) to their next future run time,
 //     preventing a flood of all missed jobs firing simultaneously after downtime.
@@ -79,6 +80,15 @@ func (s *SQLiteCronStore) InvalidateCache() {
 // the original schedule anchor is not persisted. After the first execution cycle,
 // anchor-based scheduling in executeOneJob preserves spacing going forward.
 func (s *SQLiteCronStore) recomputeStaleJobs() {
+	// Reset stale 'running' status — jobs that were mid-execution when the app
+	// crashed will never self-recover, so mark them as interrupted on startup.
+	if res, err := s.db.ExecContext(s.baseCtx,
+		`UPDATE cron_jobs SET last_status = 'interrupted' WHERE last_status = 'running'`); err != nil {
+		slog.Warn("cron: failed to reset stale running jobs on startup", "error", err)
+	} else if n, _ := res.RowsAffected(); n > 0 {
+		slog.Info("cron: reset stale running jobs to interrupted", "count", n)
+	}
+
 	now := time.Now()
 	rows, err := s.db.QueryContext(s.baseCtx,
 		`SELECT id, schedule_kind, cron_expression, run_at, timezone, interval_ms

@@ -89,12 +89,13 @@ func ResolveWikilinkTarget(ctx context.Context, vs store.VaultStore, target, ten
 func SyncDocLinks(ctx context.Context, vs store.VaultStore, doc *store.VaultDocument, content, tenantID, agentID string) error {
 	matches := ExtractWikilinks(content)
 	if len(matches) == 0 {
-		// No links — delete existing outbound links
-		return vs.DeleteDocLinks(ctx, tenantID, doc.ID)
+		// No wikilinks — delete existing outbound wikilink-type links only.
+		return vs.DeleteDocLinksByType(ctx, tenantID, doc.ID, "wikilink")
 	}
 
-	// Delete old outbound links first (replace strategy)
-	if err := vs.DeleteDocLinks(ctx, tenantID, doc.ID); err != nil {
+	// Delete old outbound wikilink-type links first (replace strategy).
+	// Preserves semantic links created by auto-linking.
+	if err := vs.DeleteDocLinksByType(ctx, tenantID, doc.ID, "wikilink"); err != nil {
 		return err
 	}
 

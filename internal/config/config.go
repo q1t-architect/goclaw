@@ -301,6 +301,11 @@ type ModelPricing struct {
 	OutputPerMillion      float64 `json:"output_per_million"`
 	CacheReadPerMillion   float64 `json:"cache_read_per_million,omitempty"`
 	CacheCreatePerMillion float64 `json:"cache_create_per_million,omitempty"`
+	// ReasoningPerMillion is the per-million-token rate for reasoning/thinking tokens
+	// (e.g., Claude extended thinking, GPT-5 reasoning, o3/o4-mini CoT). If zero,
+	// reasoning tokens fall back to OutputPerMillion (providers typically charge
+	// reasoning at the same rate as output tokens).
+	ReasoningPerMillion float64 `json:"reasoning_per_million,omitempty"`
 }
 
 // TelemetryConfig configures OpenTelemetry export for traces and spans.

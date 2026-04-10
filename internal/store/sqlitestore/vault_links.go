@@ -6,6 +6,7 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/google/uuid"
@@ -108,6 +109,40 @@ func (s *SQLiteVaultStore) DeleteDocLinks(ctx context.Context, tenantID, docID s
 		WHERE (from_doc_id = ? OR to_doc_id = ?)
 		  AND from_doc_id IN (SELECT id FROM vault_documents WHERE tenant_id = ?)`,
 		docID, docID, tenantID)
+	return err
+}
+
+// DeleteDocLinksByType removes outbound links of a specific type from a document, scoped by tenant.
+func (s *SQLiteVaultStore) DeleteDocLinksByType(ctx context.Context, tenantID, docID, linkType string) error {
+	_, err := s.db.ExecContext(ctx, `
+		DELETE FROM vault_links
+		WHERE from_doc_id = ?
+		  AND link_type = ?
+		  AND from_doc_id IN (SELECT id FROM vault_documents WHERE tenant_id = ?)`,
+		docID, linkType, tenantID)
+	return err
+}
+
+// DeleteDocLinksByTypes removes outbound links matching any of the given types from a document.
+func (s *SQLiteVaultStore) DeleteDocLinksByTypes(ctx context.Context, tenantID, docID string, types []string) error {
+	if len(types) == 0 {
+		return nil
+	}
+	// Build IN clause with ? placeholders.
+	params := []any{docID}
+	placeholders := make([]string, len(types))
+	for i, t := range types {
+		params = append(params, t)
+		placeholders[i] = "?"
+	}
+	params = append(params, tenantID)
+	q := fmt.Sprintf(`
+		DELETE FROM vault_links
+		WHERE from_doc_id = ?
+		  AND link_type IN (%s)
+		  AND from_doc_id IN (SELECT id FROM vault_documents WHERE tenant_id = ?)`,
+		strings.Join(placeholders, ","))
+	_, err := s.db.ExecContext(ctx, q, params...)
 	return err
 }
 

@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/google/uuid"
@@ -129,6 +130,43 @@ func (s *PGVaultStore) DeleteDocLinks(ctx context.Context, tenantID, docID strin
 		USING vault_documents vd
 		WHERE (vl.from_doc_id = $1 OR vl.to_doc_id = $1)
 			AND vd.id = vl.from_doc_id AND vd.tenant_id = $2`, uid, tid)
+	return err
+}
+
+// DeleteDocLinksByType removes outbound links of a specific type from a document.
+func (s *PGVaultStore) DeleteDocLinksByType(ctx context.Context, tenantID, docID, linkType string) error {
+	uid := mustParseUUID(docID)
+	tid := mustParseUUID(tenantID)
+	_, err := s.db.ExecContext(ctx, `
+		DELETE FROM vault_links vl
+		USING vault_documents vd
+		WHERE vl.from_doc_id = $1
+			AND vd.id = vl.from_doc_id AND vd.tenant_id = $2
+			AND vl.link_type = $3`, uid, tid, linkType)
+	return err
+}
+
+// DeleteDocLinksByTypes removes outbound links matching any of the given types from a document.
+func (s *PGVaultStore) DeleteDocLinksByTypes(ctx context.Context, tenantID, docID string, types []string) error {
+	if len(types) == 0 {
+		return nil
+	}
+	uid := mustParseUUID(docID)
+	tid := mustParseUUID(tenantID)
+	// Build IN clause with positional params: $3, $4, ...
+	params := []any{uid, tid}
+	placeholders := make([]string, len(types))
+	for i, t := range types {
+		params = append(params, t)
+		placeholders[i] = fmt.Sprintf("$%d", i+3)
+	}
+	q := fmt.Sprintf(`
+		DELETE FROM vault_links vl
+		USING vault_documents vd
+		WHERE vl.from_doc_id = $1
+			AND vd.id = vl.from_doc_id AND vd.tenant_id = $2
+			AND vl.link_type IN (%s)`, strings.Join(placeholders, ","))
+	_, err := s.db.ExecContext(ctx, q, params...)
 	return err
 }
 

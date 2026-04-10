@@ -2,7 +2,6 @@ package vault
 
 import (
 	"context"
-	"fmt"
 	"log/slog"
 	"os"
 	"path/filepath"
@@ -19,7 +18,7 @@ const (
 	enrichMaxDedupEntries = 10000
 	enrichContentMaxRunes = 8192
 	enrichLLMTimeout      = 5 * time.Minute
-	enrichSimilarityLimit = 5
+	enrichSimilarityLimit = 10
 	enrichSimilarityMin   = 0.7
 )
 
@@ -80,6 +79,12 @@ func (w *enrichWorker) Handle(ctx context.Context, event eventbus.DomainEvent) e
 	return nil
 }
 
+// enriched holds a successfully summarized vault document pending embed+link.
+type enriched struct {
+	payload eventbus.VaultDocUpsertedPayload
+	summary string
+}
+
 // processBatch drains and processes queued vault doc events in a loop.
 func (w *enrichWorker) processBatch(ctx context.Context, key string) {
 	for {
@@ -91,10 +96,6 @@ func (w *enrichWorker) processBatch(ctx context.Context, key string) {
 			continue
 		}
 
-		type enriched struct {
-			payload eventbus.VaultDocUpsertedPayload
-			summary string
-		}
 		var results []enriched
 
 		for _, item := range items {
@@ -145,18 +146,29 @@ func (w *enrichWorker) processBatch(ctx context.Context, key string) {
 			results = append(results, enriched{payload: item, summary: summary})
 		}
 
-		// Update summary + embed + auto-link for each enriched doc.
+		// Phase 2 — Embed: update summary + embed for all results.
+		// Do NOT record dedup here (moved to Phase 4 after classify).
+		var embedded []enriched
 		for _, r := range results {
 			if err := w.vault.UpdateSummaryAndReembed(ctx, r.payload.TenantID, r.payload.DocID, r.summary); err != nil {
 				slog.Warn("vault.enrich: update_summary", "doc", r.payload.DocID, "err", err)
-				continue // don't record in dedup
+				continue
 			}
+			embedded = append(embedded, r)
+		}
 
-			// Record hash only after successful update.
+		// Phase 3 — Classify links (replaces autoLink).
+		// All items share same tenantID:agentID (batch queue key guarantees this).
+		if len(embedded) > 0 {
+			first := embedded[0].payload
+			w.classifyLinks(ctx, first.TenantID, first.AgentID, embedded)
+		}
+
+		// Phase 4 — Record dedup + wikilinks.
+		// Dedup recorded AFTER classify so failed classify allows re-enrichment.
+		for _, r := range embedded {
 			w.recordDedup(r.payload.DocID, r.payload.ContentHash)
-
-			// Auto-link via vector similarity.
-			w.autoLink(ctx, r.payload.TenantID, r.payload.AgentID, r.payload.DocID)
+			w.syncWikilinks(ctx, r.payload)
 		}
 
 		if w.queue.TryFinish(key) {
@@ -188,29 +200,25 @@ func (w *enrichWorker) summarize(ctx context.Context, path, content string) (str
 	return strings.TrimSpace(resp.Content), nil
 }
 
-// autoLink finds similar documents and creates semantic links.
-func (w *enrichWorker) autoLink(ctx context.Context, tenantID, agentID, docID string) {
-	neighbors, err := w.vault.FindSimilarDocs(ctx, tenantID, agentID, docID, enrichSimilarityLimit)
+// syncWikilinks extracts [[wikilinks]] from document content and syncs them as vault links.
+// Only processes text files; binary/media files are silently skipped.
+func (w *enrichWorker) syncWikilinks(ctx context.Context, p eventbus.VaultDocUpsertedPayload) {
+	fullPath := filepath.Join(p.Workspace, p.Path)
+	content, err := os.ReadFile(fullPath)
 	if err != nil {
-		slog.Warn("vault.enrich: find_similar", "doc", docID, "err", err)
+		return // file may be deleted or moved
+	}
+
+	doc, err := w.vault.GetDocumentByID(ctx, p.TenantID, p.DocID)
+	if err != nil || doc == nil {
 		return
 	}
 
-	for _, n := range neighbors {
-		if n.Score < enrichSimilarityMin {
-			continue
-		}
-		link := &store.VaultLink{
-			FromDocID: docID,
-			ToDocID:   n.Document.ID,
-			LinkType:  "semantic",
-			Context:   fmt.Sprintf("auto-linked (score: %.2f)", n.Score),
-		}
-		if err := w.vault.CreateLink(ctx, link); err != nil {
-			slog.Debug("vault.enrich: create_link", "from", docID, "to", n.Document.ID, "err", err)
-		}
+	if err := SyncDocLinks(ctx, w.vault, doc, string(content), p.TenantID, p.AgentID); err != nil {
+		slog.Warn("vault.enrich: sync_wikilinks", "path", p.Path, "err", err)
 	}
 }
+
 
 // recordDedup stores a processed hash and evicts ~25% entries if over capacity.
 func (w *enrichWorker) recordDedup(docID, hash string) {
