@@ -27,7 +27,10 @@ func (s *PGKnowledgeGraphStore) DedupAfterExtraction(ctx context.Context, agentI
 		return 0, 0, nil
 	}
 
-	aid := mustParseUUID(agentID)
+	aid, err := parseUUID(agentID)
+	if err != nil {
+		return 0, 0, fmt.Errorf("kg dedup after extraction: %w", err)
+	}
 	shared := store.IsSharedKG(ctx)
 	var merged, flagged int
 
@@ -161,7 +164,10 @@ func (s *PGKnowledgeGraphStore) insertDedupCandidate(ctx context.Context, agentI
 // a self-join to find duplicate candidates above the given threshold.
 // Inserts results into kg_dedup_candidates. Returns number of candidates found.
 func (s *PGKnowledgeGraphStore) ScanDuplicates(ctx context.Context, agentID, userID string, threshold float64, limit int) (int, error) {
-	aid := mustParseUUID(agentID)
+	aid, err := parseUUID(agentID)
+	if err != nil {
+		return 0, fmt.Errorf("kg scan duplicates: %w", err)
+	}
 	if threshold <= 0 {
 		threshold = dedupCandidateThreshold
 	}
@@ -244,9 +250,18 @@ func (s *PGKnowledgeGraphStore) ScanDuplicates(ctx context.Context, agentID, use
 // source to target, deletes the source entity. Uses advisory lock to prevent
 // concurrent merges on the same agent.
 func (s *PGKnowledgeGraphStore) MergeEntities(ctx context.Context, agentID, userID, targetID, sourceID string) error {
-	aid := mustParseUUID(agentID)
-	tid := mustParseUUID(targetID)
-	sid := mustParseUUID(sourceID)
+	aid, err := parseUUID(agentID)
+	if err != nil {
+		return fmt.Errorf("kg merge entities: agent: %w", err)
+	}
+	tid, err := parseUUID(targetID)
+	if err != nil {
+		return fmt.Errorf("kg merge entities: target: %w", err)
+	}
+	sid, err := parseUUID(sourceID)
+	if err != nil {
+		return fmt.Errorf("kg merge entities: source: %w", err)
+	}
 
 	tx, err := s.db.BeginTx(ctx, nil)
 	if err != nil {
@@ -342,7 +357,10 @@ func (s *PGKnowledgeGraphStore) MergeEntities(ctx context.Context, agentID, user
 
 // ListDedupCandidates returns pending dedup candidates for review.
 func (s *PGKnowledgeGraphStore) ListDedupCandidates(ctx context.Context, agentID, userID string, limit int) ([]store.DedupCandidate, error) {
-	aid := mustParseUUID(agentID)
+	aid, err := parseUUID(agentID)
+	if err != nil {
+		return nil, fmt.Errorf("kg list dedup candidates: %w", err)
+	}
 	if limit <= 0 {
 		limit = 50
 	}
@@ -399,8 +417,14 @@ func (s *PGKnowledgeGraphStore) ListDedupCandidates(ctx context.Context, agentID
 // DismissCandidate marks a dedup candidate as dismissed.
 // Scoped by agent_id + tenant to prevent cross-agent/cross-tenant dismissal.
 func (s *PGKnowledgeGraphStore) DismissCandidate(ctx context.Context, agentID, candidateID string) error {
-	aid := mustParseUUID(agentID)
-	cid := mustParseUUID(candidateID)
+	aid, err := parseUUID(agentID)
+	if err != nil {
+		return fmt.Errorf("kg dismiss candidate: agent: %w", err)
+	}
+	cid, err := parseUUID(candidateID)
+	if err != nil {
+		return fmt.Errorf("kg dismiss candidate: id: %w", err)
+	}
 	tc, tcArgs, _, err := scopeClause(ctx, 3)
 	if err != nil {
 		return err
