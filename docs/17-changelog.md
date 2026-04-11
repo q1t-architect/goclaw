@@ -44,6 +44,15 @@ All notable changes to GoClaw Gateway are documented here. Format follows [Keep 
 
 ### Testing
 
+#### Test Speed-Up + Coverage Ratchet Removal (2026-04-11)
+- **Philosophy shift**: Signal over coverage %. Reject mock-heavy/slow/low-signal tests even if % drops. Coverage ratchet gate removed — was creating pressure to write forced tests instead of fast, valuable ones
+- **`internal/vault` retry tests**: 16.3s → 0.6s. New `fastBackoffsForTest(t)` helper overrides package-level `enrichRetryBackoffs`/`enrichRetryTimeouts` so retry tests don't wait through real exponential backoff (was 6s per all-retry test). Production behavior unchanged
+- **`internal/cron` scheduler tests**: 11.7s → 1.5s. `runLoopTickInterval` extracted as package var (default 1s, unchanged); test-only `setFastTick(t)` helper overrides to 20ms so 6 scheduler tests don't sleep 1.5s each waiting for ticks
+- **`internal/channels/facebook` retry tests**: 6.3s → 3.0s. `graphBackoffBase` extracted as package var (default 1s, unchanged); `newFakeGraph` helper overrides to 1ms so HTTP retry tests don't burn 3+2+1s of real waits
+- **Vault duplicates removed**: `TestCallClassifyWithRetry_FirstAttemptSuccess` (dup of `_Success`) and `_MaxRetriesConstant` (dup of `_RetriesAndBackoffs`)
+- **Total saved**: ~29s wall-clock (3 packages: 34.3s → 5.1s). Full `go test -race ./...` now runs in ~57s (was ≥90s with hangs)
+- **Removed**: `scripts/check_coverage.go` + `scripts/coverage_thresholds.json` + "Coverage ratchet gate" CI step. Coverage profile + `go tool cover -func` summary preserved as informational only
+
 #### Test Coverage Improvement — Wave 1-3 (2026-04-11)
 - **CI ratchet gate**: `scripts/check_coverage.go` parses `coverage.out` per package and fails CI if coverage drops below stored floors in `scripts/coverage_thresholds.json`. `--update` flag ratchets thresholds upward when coverage improves. 61 packages locked.
 - **`-coverpkg=./...`**: CI now runs `go test -race -coverpkg=./...` so integration tests in `tests/integration/` are attributed to the source packages under test.

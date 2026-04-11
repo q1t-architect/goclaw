@@ -23,11 +23,16 @@ func swapGraphBase(t *testing.T, url string) {
 }
 
 // newFakeGraph spins up a test server and returns (client pointed at it, server).
+// Backoff base is reduced to 1ms so retry tests don't burn ~6s on real
+// exponential waits (1s, 2s, 4s). Production behavior is unchanged.
 func newFakeGraph(t *testing.T, handler http.Handler) *GraphClient {
 	t.Helper()
 	srv := httptest.NewServer(handler)
 	t.Cleanup(srv.Close)
 	swapGraphBase(t, srv.URL)
+	savedBackoff := graphBackoffBase
+	graphBackoffBase = time.Millisecond
+	t.Cleanup(func() { graphBackoffBase = savedBackoff })
 	return NewGraphClient("fake-token", "111222333")
 }
 
