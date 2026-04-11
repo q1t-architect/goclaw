@@ -368,6 +368,18 @@ func (h *AgentsHandler) handleUpdate(w http.ResponseWriter, r *http.Request) {
 	allowed := filterAllowedKeys(updates, agentAllowedFields)
 	allowed["restrict_to_workspace"] = true
 
+	// If agent_key is being changed, enforce the slug format. The router
+	// cache uses `tenantID:agentKey` as its canonical key and splits on the
+	// last colon for exact-segment invalidation — a colon inside agent_key
+	// would silently break invalidation. Slug regex already rejects colons
+	// and any other shell/path-unfriendly characters.
+	if newKey, ok := allowed["agent_key"].(string); ok && newKey != "" {
+		if !isValidSlug(newKey) {
+			writeError(w, http.StatusBadRequest, protocol.ErrInvalidRequest, i18n.T(locale, i18n.MsgInvalidSlug, "agent_key"))
+			return
+		}
+	}
+
 	// Validate v3 flag values in other_config (must be boolean).
 	if oc, ok := allowed["other_config"]; ok && oc != nil {
 		switch v := oc.(type) {

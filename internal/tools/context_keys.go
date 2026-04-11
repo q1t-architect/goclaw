@@ -356,6 +356,29 @@ func TeamTaskIDFromCtx(ctx context.Context) string {
 	return ""
 }
 
+// --- Delegation ID propagation (delegate_tool → vault_interceptor) ---
+
+const ctxDelegationID toolContextKey = "tool_delegation_id"
+
+// WithDelegationID injects the delegation identifier into context so vault
+// documents created during the delegated task can be tagged in metadata for
+// Phase 05 auto-linking.
+func WithDelegationID(ctx context.Context, id string) context.Context {
+	return context.WithValue(ctx, ctxDelegationID, id)
+}
+
+// DelegationIDFromCtx returns the active delegation ID. Falls back to
+// RunContext when no explicit context key is present.
+func DelegationIDFromCtx(ctx context.Context) string {
+	if v, _ := ctx.Value(ctxDelegationID).(string); v != "" {
+		return v
+	}
+	if rc := store.RunContextFromCtx(ctx); rc != nil {
+		return rc.DelegationID
+	}
+	return ""
+}
+
 // --- Leader agent ID propagation (team task dispatch → memory interceptor) ---
 
 const ctxLeaderAgentID toolContextKey = "tool_leader_agent_id"

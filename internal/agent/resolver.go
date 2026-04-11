@@ -6,7 +6,6 @@ import (
 	"log/slog"
 	"os"
 	"path/filepath"
-	"strings"
 
 	"github.com/google/uuid"
 	"github.com/nextlevelbuilder/goclaw/internal/bootstrap"
@@ -487,13 +486,13 @@ func NewManagedResolver(deps ResolverDeps) ResolverFunc {
 // InvalidateAgent removes an agent from the router cache, forcing re-resolution.
 // Used when agent config is updated via API.
 // Matches both plain key ("agentKey") and tenant-scoped key ("tenantID:agentKey")
-// because callers only pass the agentKey without tenant context.
+// via exact-segment match (prevents substring collisions like "sub-foo" matching
+// when invalidating "foo"). Empty agentKey is rejected to prevent wildcard wipes.
 func (r *Router) InvalidateAgent(agentKey string) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
-	suffix := ":" + agentKey
 	for key := range r.agents {
-		if key == agentKey || strings.HasSuffix(key, suffix) {
+		if matchAgentCacheKey(key, agentKey) {
 			delete(r.agents, key)
 		}
 	}

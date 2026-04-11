@@ -2,7 +2,7 @@ import { useState, useEffect, useRef, useCallback } from "react";
 import { useTranslation } from "react-i18next";
 import {
   Link2, ChevronLeft, ChevronRight, Search, X, Loader2,
-  FileText, Brain, StickyNote, Sparkles, Clock, Image,
+  FileText, Brain, StickyNote, Sparkles, Clock, Image, FileType,
 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -17,10 +17,11 @@ const DOC_TYPE_CONFIG: Record<string, { color: string; bg: string; icon: typeof 
   skill:    { color: "text-emerald-600 dark:text-emerald-400", bg: "bg-emerald-500/10", icon: Sparkles, dotColor: "bg-emerald-500" },
   episodic: { color: "text-orange-600 dark:text-orange-400", bg: "bg-orange-500/10",  icon: Clock,    dotColor: "bg-orange-500" },
   media:    { color: "text-rose-600 dark:text-rose-400",     bg: "bg-rose-500/10",    icon: Image,    dotColor: "bg-rose-500" },
+  document: { color: "text-cyan-600 dark:text-cyan-400",     bg: "bg-cyan-500/10",    icon: FileType, dotColor: "bg-cyan-500" },
 };
 
 const DEFAULT_CONFIG = { color: "text-muted-foreground", bg: "bg-muted", icon: FileText, dotColor: "bg-muted-foreground" };
-const DOC_TYPES = ["context", "memory", "note", "skill", "episodic", "media"] as const;
+const DOC_TYPES = ["context", "memory", "note", "skill", "episodic", "media", "document"] as const;
 
 interface Props {
   documents: VaultDocument[];

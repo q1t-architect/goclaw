@@ -227,6 +227,7 @@ func runGateway() {
 			Model:      bgModel,
 			EventBus:   domainBus,
 			MsgBus:     msgBus,
+			TeamStore:  pgStores.Teams, // Phase 04 task-based auto-linking
 		})
 		enrichProgress = ep
 		defer cleanupVaultEnrich()

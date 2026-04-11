@@ -63,21 +63,28 @@ func (s *SQLiteVaultStore) UpsertDocument(ctx context.Context, doc *store.VaultD
 	if doc.AgentID != nil && *doc.AgentID != "" {
 		agentIDVal = *doc.AgentID
 	}
+	// SQLite has no GENERATED column equivalent via modernc driver; compute
+	// the basename app-side. PG auto-populates via GENERATED so this is a
+	// no-op on PG callers that share the struct.
+	if doc.PathBasename == "" && doc.Path != "" {
+		doc.PathBasename = ComputeAttachmentBaseName(doc.Path)
+	}
 	err = s.db.QueryRowContext(ctx, `
 		INSERT INTO vault_documents
-			(id, tenant_id, agent_id, team_id, scope, custom_scope, path, title, doc_type, content_hash, summary, metadata, created_at, updated_at)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+			(id, tenant_id, agent_id, team_id, scope, custom_scope, path, path_basename, title, doc_type, content_hash, summary, metadata, created_at, updated_at)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 		ON CONFLICT (tenant_id, COALESCE(agent_id,''), COALESCE(team_id,''), scope, path) DO UPDATE SET
-			title        = excluded.title,
-			doc_type     = excluded.doc_type,
-			content_hash = excluded.content_hash,
-			summary      = excluded.summary,
-			metadata     = excluded.metadata,
-			tenant_id    = excluded.tenant_id,
-			updated_at   = excluded.updated_at
+			path_basename = excluded.path_basename,
+			title         = excluded.title,
+			doc_type      = excluded.doc_type,
+			content_hash  = excluded.content_hash,
+			summary       = excluded.summary,
+			metadata      = excluded.metadata,
+			tenant_id     = excluded.tenant_id,
+			updated_at    = excluded.updated_at
 		RETURNING id`,
 		id, doc.TenantID, agentIDVal, doc.TeamID, doc.Scope, doc.CustomScope,
-		doc.Path, doc.Title, doc.DocType, doc.ContentHash, doc.Summary, string(meta), now, now,
+		doc.Path, doc.PathBasename, doc.Title, doc.DocType, doc.ContentHash, doc.Summary, string(meta), now, now,
 	).Scan(&doc.ID)
 	if err != nil {
 		return fmt.Errorf("vault upsert document: %w", err)
@@ -89,7 +96,7 @@ func (s *SQLiteVaultStore) UpsertDocument(ctx context.Context, doc *store.VaultD
 // Empty agentID means no agent filter.
 // Team scoping via RunContext: present+TeamID → filter; present+empty → personal; nil → any match.
 func (s *SQLiteVaultStore) GetDocument(ctx context.Context, tenantID, agentID, path string) (*store.VaultDocument, error) {
-	q := `SELECT id, tenant_id, agent_id, team_id, scope, custom_scope, path, title, doc_type, content_hash, summary, metadata, created_at, updated_at
+	q := `SELECT id, tenant_id, agent_id, team_id, scope, custom_scope, path, path_basename, title, doc_type, content_hash, summary, metadata, created_at, updated_at
 		FROM vault_documents WHERE tenant_id = ? AND path = ?`
 	args := []any{tenantID, path}
 
@@ -114,7 +121,7 @@ func (s *SQLiteVaultStore) GetDocument(ctx context.Context, tenantID, agentID, p
 // GetDocumentByID retrieves a vault document by ID with tenant isolation.
 func (s *SQLiteVaultStore) GetDocumentByID(ctx context.Context, tenantID, id string) (*store.VaultDocument, error) {
 	row := s.db.QueryRowContext(ctx, `
-		SELECT id, tenant_id, agent_id, team_id, scope, custom_scope, path, title, doc_type, content_hash, summary, metadata, created_at, updated_at
+		SELECT id, tenant_id, agent_id, team_id, scope, custom_scope, path, path_basename, title, doc_type, content_hash, summary, metadata, created_at, updated_at
 		FROM vault_documents WHERE id = ? AND tenant_id = ?`, id, tenantID)
 	return scanVaultDoc(row)
 }
@@ -136,7 +143,7 @@ func (s *SQLiteVaultStore) GetDocumentsByIDs(ctx context.Context, tenantID strin
 			args[i] = id
 		}
 		args = append(args, tenantID)
-		q := `SELECT id, tenant_id, agent_id, team_id, scope, custom_scope, path, title, doc_type, content_hash, summary, metadata, created_at, updated_at
+		q := `SELECT id, tenant_id, agent_id, team_id, scope, custom_scope, path, path_basename, title, doc_type, content_hash, summary, metadata, created_at, updated_at
 			FROM vault_documents WHERE id IN (` + strings.Join(ph, ",") + `) AND tenant_id = ?`
 		rows, err := s.db.QueryContext(ctx, q, args...)
 		if err != nil {
@@ -160,7 +167,7 @@ func (s *SQLiteVaultStore) GetDocumentsByIDs(ctx context.Context, tenantID strin
 
 // GetDocumentByBasename finds a document by path basename (case-insensitive).
 func (s *SQLiteVaultStore) GetDocumentByBasename(ctx context.Context, tenantID, agentID, basename string) (*store.VaultDocument, error) {
-	q := `SELECT id, tenant_id, agent_id, team_id, scope, custom_scope, path, title, doc_type, content_hash, summary, metadata, created_at, updated_at
+	q := `SELECT id, tenant_id, agent_id, team_id, scope, custom_scope, path, path_basename, title, doc_type, content_hash, summary, metadata, created_at, updated_at
 		FROM vault_documents
 		WHERE tenant_id = ? AND lower(replace(path, rtrim(path, replace(path, '/', '')), '')) = lower(?)`
 	args := []any{tenantID, basename}
@@ -200,7 +207,7 @@ func (s *SQLiteVaultStore) DeleteDocument(ctx context.Context, tenantID, agentID
 
 // ListDocuments returns vault documents with optional scope/type filters.
 func (s *SQLiteVaultStore) ListDocuments(ctx context.Context, tenantID, agentID string, opts store.VaultListOptions) ([]store.VaultDocument, error) {
-	q := `SELECT id, tenant_id, agent_id, team_id, scope, custom_scope, path, title, doc_type, content_hash, summary, metadata, created_at, updated_at
+	q := `SELECT id, tenant_id, agent_id, team_id, scope, custom_scope, path, path_basename, title, doc_type, content_hash, summary, metadata, created_at, updated_at
 		FROM vault_documents WHERE tenant_id = ?`
 	args := []any{tenantID}
 
@@ -318,7 +325,7 @@ func (s *SQLiteVaultStore) Search(ctx context.Context, opts store.VaultSearchOpt
 		maxResults = 10
 	}
 
-	q := `SELECT id, tenant_id, agent_id, team_id, scope, custom_scope, path, title, doc_type, content_hash, summary, metadata, created_at, updated_at
+	q := `SELECT id, tenant_id, agent_id, team_id, scope, custom_scope, path, path_basename, title, doc_type, content_hash, summary, metadata, created_at, updated_at
 		FROM vault_documents
 		WHERE tenant_id = ?
 		  AND (title LIKE ? ESCAPE '\' OR path LIKE ? ESCAPE '\')`
@@ -383,7 +390,7 @@ func scanVaultDoc(row *sql.Row) (*store.VaultDocument, error) {
 	var agentID *string
 	ca, ua := &sqliteTime{}, &sqliteTime{}
 	err := row.Scan(&doc.ID, &doc.TenantID, &agentID, &doc.TeamID, &doc.Scope, &doc.CustomScope,
-		&doc.Path, &doc.Title, &doc.DocType, &doc.ContentHash, &doc.Summary, &meta, ca, ua)
+		&doc.Path, &doc.PathBasename, &doc.Title, &doc.DocType, &doc.ContentHash, &doc.Summary, &meta, ca, ua)
 	if err != nil {
 		return nil, err
 	}

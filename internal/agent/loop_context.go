@@ -109,6 +109,9 @@ func (l *Loop) injectContext(ctx context.Context, req *RunRequest) (contextSetup
 	if req.TeamTaskID != "" {
 		ctx = tools.WithTeamTaskID(ctx, req.TeamTaskID)
 	}
+	if req.DelegationID != "" {
+		ctx = tools.WithDelegationID(ctx, req.DelegationID)
+	}
 
 	// --- Per-user setup: file seeding + workspace resolution ---
 	// Uses userSetups sync.Map to track both concerns atomically per user.
@@ -205,16 +208,19 @@ func (l *Loop) injectContext(ctx context.Context, req *RunRequest) (contextSetup
 		}
 		resolver := workspace.NewResolver()
 		wc, wsErr := resolver.Resolve(ctx, workspace.ResolveParams{
-			AgentID:    l.agentUUID.String(),
+			// Filesystem path segment must use agent_key, not UUID — matches
+			// the v2 path in loop_pipeline_callbacks.go and the session_key
+			// anchor. See docs/agent-identity-conventions.md.
+			AgentID:    l.id,
 			AgentType:  l.agentType,
 			UserID:     req.UserID,
 			ChatID:     req.ChatID,
 			TenantID:   store.TenantIDFromContext(ctx).String(),
 			TenantSlug: store.TenantSlugFromContext(ctx),
 			PeerKind:   req.PeerKind,
-			TeamID:    teamIDPtr,
+			TeamID:     teamIDPtr,
 			TeamConfig: teamWSConfig,
-			BaseDir:   l.dataDir,
+			BaseDir:    l.dataDir,
 		})
 		if wsErr != nil {
 			slog.Warn("workspace resolution failed", "err", wsErr)
