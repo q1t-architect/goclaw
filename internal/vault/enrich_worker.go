@@ -125,7 +125,12 @@ func (w *EnrichWorker) EnqueueUnenriched(ctx context.Context, tenantID, workspac
 		return 0, nil
 	}
 
+	count := 0
 	for _, doc := range docs {
+		// Skip auto-generated media files — they create noise links.
+		if strings.HasPrefix(filepath.Base(doc.Path), "goclaw_gen_") {
+			continue
+		}
 		agentID := ""
 		if doc.AgentID != nil {
 			agentID = *doc.AgentID
@@ -147,10 +152,11 @@ func (w *EnrichWorker) EnqueueUnenriched(ctx context.Context, tenantID, workspac
 			},
 		}
 		bus.Publish(event)
+		count++
 	}
 
-	slog.Info("vault.enrich: enqueued unenriched", "tenant", tenantID, "count", len(docs))
-	return len(docs), nil
+	slog.Info("vault.enrich: enqueued unenriched", "tenant", tenantID, "count", count)
+	return count, nil
 }
 
 // enrichTaskSiblingCap bounds the number of auto-linked siblings per
@@ -169,6 +175,13 @@ var enrichTaskSiblingCap = func() int {
 func (w *EnrichWorker) Handle(ctx context.Context, event eventbus.DomainEvent) error {
 	payload, ok := event.Payload.(eventbus.VaultDocUpsertedPayload)
 	if !ok {
+		return nil
+	}
+
+	// Skip auto-generated media files (goclaw_gen_*) — they create excessive
+	// noise links due to similar embeddings. These are typically image outputs
+	// that don't benefit from semantic linking.
+	if basename := filepath.Base(payload.Path); strings.HasPrefix(basename, "goclaw_gen_") {
 		return nil
 	}
 

@@ -1,7 +1,8 @@
 import { useRef, useMemo, useState, useCallback } from "react";
 import type Sigma from "sigma";
 import { useTranslation } from "react-i18next";
-import { buildVaultGraph, limitVaultDocsByDegree, VAULT_TYPE_COLORS } from "@/adapters/vault-graph-adapter";
+import { buildVaultGraph, limitVaultDocsByDegree, VAULT_TYPE_COLORS_LIGHT, VAULT_TYPE_COLORS_DARK } from "@/adapters/vault-graph-adapter";
+import { useUiStore } from "@/stores/use-ui-store";
 import { SigmaGraphContainer } from "@/components/graph/sigma-graph-container";
 import { SigmaGraphControls } from "@/components/graph/sigma-graph-controls";
 import { SigmaGraphSearch } from "@/components/graph/sigma-graph-search";
@@ -30,6 +31,11 @@ export function VaultGraphView({ agentId, teamId, selectedDocId, onNodeSelect, o
   const [nodeLimit, setNodeLimit] = useState(DEFAULT_NODE_LIMIT);
   const [hiddenTypes, setHiddenTypes] = useState<Set<string>>(new Set());
   const [filtersOpen, setFiltersOpen] = useState(false);
+
+  // Theme-aware node colors - subscribe to store for re-render, check DOM for actual state
+  useUiStore((s) => s.theme);
+  const isDark = typeof document !== "undefined" && document.documentElement.classList.contains("dark");
+  const typeColors = isDark ? VAULT_TYPE_COLORS_DARK : VAULT_TYPE_COLORS_LIGHT;
 
   const { documents: allDocs, links, loading } = useVaultGraphData(agentId, { teamId });
 
@@ -71,7 +77,7 @@ export function VaultGraphView({ agentId, teamId, selectedDocId, onNodeSelect, o
       {/* Top bar — responsive: stacks on narrow screens */}
       <div className="flex flex-col sm:flex-row sm:items-center gap-2 px-3 py-1 border-b shrink-0">
         <div className="flex flex-wrap gap-x-3 gap-y-0.5 text-xs text-muted-foreground flex-1 min-w-0">
-          {Object.entries(VAULT_TYPE_COLORS).map(([type, color]) => (
+          {Object.entries(typeColors).map(([type, color]) => (
             <span key={type} className="flex items-center gap-1">
               <span className="inline-block h-2.5 w-2.5 rounded-full" style={{ backgroundColor: color }} />
               {type}
@@ -88,7 +94,7 @@ export function VaultGraphView({ agentId, teamId, selectedDocId, onNodeSelect, o
             />
             <SigmaGraphFilters
               graph={graph}
-              typeColors={VAULT_TYPE_COLORS}
+              typeColors={typeColors}
               hiddenTypes={hiddenTypes}
               onHiddenTypesChange={setHiddenTypes}
               collapsed={!filtersOpen}

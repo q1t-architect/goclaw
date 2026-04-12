@@ -7,6 +7,7 @@ import noverlap from "graphology-layout-noverlap";
 import type Graph from "graphology";
 import { useUiStore } from "@/stores/use-ui-store";
 import { SIGMA_SETTINGS } from "./graph-utils";
+import { getVaultNodeColor } from "@/adapters/vault-graph-adapter";
 
 export type EdgeType = "curvedArrow" | "arrow";
 
@@ -24,22 +25,19 @@ export interface SigmaGraphContainerProps {
   hiddenTypes?: Set<string>;
 }
 
-/** Theme-aware colors */
+/** Theme-aware colors - uses DOM class check for reliability */
 function useThemeColors() {
-  const theme = useUiStore((s) => s.theme);
-  const isDark =
-    theme === "dark" ||
-    (theme === "system" &&
-      window.matchMedia("(prefers-color-scheme: dark)").matches);
+  // Subscribe to store to trigger re-render when theme changes
+  useUiStore((s) => s.theme);
+  // Check DOM class for actual dark state (handles system mode correctly)
+  const isDark = typeof document !== "undefined" && document.documentElement.classList.contains("dark");
   return {
     isDark,
     labelColor: isDark ? "#e2e8f0" : "#1e293b",
-    // Base edge color — subtle, not dominant
-    edgeColor: isDark ? "#47556944" : "#94a3b8aa",
-    // Dim color for non-active edges
-    dimEdgeColor: isDark ? "#47556922" : "#cbd5e155",
+    // Base edge color — subtle gray
+    edgeColor: isDark ? "#71717a" : "#d4d4d8", // zinc-500 dark, zinc-300 light
     // Highlight for active neighborhood edges
-    highlightEdgeColor: isDark ? "#a1a1aa" : "#64748b",
+    highlightEdgeColor: isDark ? "#d4d4d8" : "#3f3f46",
   };
 }
 
@@ -60,7 +58,9 @@ export function SigmaGraphContainer({
   const [hoveredNode, setHoveredNode] = useState<string | null>(null);
   // Pulse phase for animated highlighted edges (0..1, cycles)
   const [pulsePhase, setPulsePhase] = useState(0);
-  const { labelColor, edgeColor, dimEdgeColor, highlightEdgeColor } = useThemeColors();
+  // Camera ratio for edge density control (lower = more zoomed out)
+  const [cameraRatio, setCameraRatio] = useState(1);
+  const { isDark, labelColor, edgeColor, highlightEdgeColor } = useThemeColors();
 
   const setSigmaRef = useCallback(
     (instance: Sigma | null) => {
@@ -147,6 +147,8 @@ export function SigmaGraphContainer({
       zoomingRatio: 1.3,
       // Enable z-index sorting — required for edge/node `zIndex` attr to affect render order
       zIndex: true,
+      // Disable default hover label box (white background) — we use forceLabel instead
+      defaultDrawNodeHover: () => undefined,
     });
 
     setSigmaRef(sigma);
@@ -214,27 +216,32 @@ export function SigmaGraphContainer({
       (attrs.docType || attrs.entityType || "other") as string;
 
     sigma.setSetting("nodeReducer", (node, data) => {
+      // Apply theme-aware color based on docType
+      const docType = getNodeType(data);
+      const themedColor = getVaultNodeColor(docType, isDark);
+      const themedData = { ...data, color: themedColor };
+
       // Filter: hide nodes of hidden types
-      if (hiddenTypes?.size && hiddenTypes.has(getNodeType(data))) {
-        return { ...data, hidden: true };
+      if (hiddenTypes?.size && hiddenTypes.has(docType)) {
+        return { ...themedData, hidden: true };
       }
 
       const activeNode = selectedNodeId || hoveredNode;
-      if (!activeNode) return data;
+      if (!activeNode) return themedData;
 
       const hood = neighborhoodRef.current;
-      if (!hood) return data;
+      if (!hood) return themedData;
 
       if (node === activeNode) {
         // Active node: bring to top, show label
-        return { ...data, zIndex: 3, forceLabel: true };
+        return { ...themedData, zIndex: 3, forceLabel: true };
       }
       if (hood.nodes.has(node)) {
         // Within 2-hop neighborhood: show label, slightly raised z-index
-        return { ...data, zIndex: 2, forceLabel: true };
+        return { ...themedData, zIndex: 2, forceLabel: true };
       }
       // Outside neighborhood: keep color/size, no dimming — just lower z-index
-      return { ...data, zIndex: 0 };
+      return { ...themedData, zIndex: 0 };
     });
 
     sigma.setSetting("edgeReducer", (edge, data) => {
@@ -248,7 +255,23 @@ export function SigmaGraphContainer({
       }
 
       const activeNode = selectedNodeId || hoveredNode;
-      if (!activeNode) return data;
+
+      // Zoom-based edge density: when zoomed out, hide edges from low-degree nodes
+      // cameraRatio < 1 means zoomed out; < 0.5 means very zoomed out
+      if (!activeNode && cameraRatio < 0.6) {
+        const srcDegree = graph.degree(graph.source(edge));
+        const tgtDegree = graph.degree(graph.target(edge));
+        // Progressive threshold: more zoomed out → hide more edges
+        const minDegree = cameraRatio < 0.3 ? 8 : cameraRatio < 0.45 ? 5 : 3;
+        if (srcDegree < minDegree && tgtDegree < minDegree) {
+          return { ...data, hidden: true };
+        }
+      }
+
+      // No active node: use default edge color from graph attributes
+      if (!activeNode) {
+        return { ...data, color: edgeColor, size: 0.5 };
+      }
 
       const hood = neighborhoodRef.current;
       if (!hood) return data;
@@ -265,7 +288,8 @@ export function SigmaGraphContainer({
     });
 
     sigma.refresh();
-  }, [selectedNodeId, hoveredNode, graph, highlightEdgeColor, dimEdgeColor, hiddenTypes]);
+    // sigmaVersion ensures this runs after sigma is created
+  }, [selectedNodeId, hoveredNode, graph, highlightEdgeColor, edgeColor, hiddenTypes, isDark, cameraRatio, sigmaVersion]);
 
   // --- Pulse animation for highlighted edges (only runs when a node is active) ---
   // Respects prefers-reduced-motion — skips animation entirely for accessibility
@@ -333,17 +357,25 @@ export function SigmaGraphContainer({
       onNodeSelectRef.current?.(null);
     };
 
+    // Track camera ratio for edge density control
+    const handleCameraUpdate = () => {
+      const ratio = sigma.getCamera().ratio;
+      setCameraRatio(ratio);
+    };
+
     sigma.on("enterNode", handleEnterNode);
     sigma.on("leaveNode", handleLeaveNode);
     sigma.on("clickNode", handleClickNode);
     sigma.on("doubleClickNode", handleDoubleClickNode);
     sigma.on("clickStage", handleClickStage);
+    sigma.getCamera().on("updated", handleCameraUpdate);
 
     return () => {
       sigma.off("enterNode", handleEnterNode);
       sigma.off("leaveNode", handleLeaveNode);
       sigma.off("clickNode", handleClickNode);
       sigma.off("doubleClickNode", handleDoubleClickNode);
+      sigma.getCamera().off("updated", handleCameraUpdate);
       sigma.off("clickStage", handleClickStage);
     };
   }, [sigmaVersion]); // re-register only when sigma instance changes
