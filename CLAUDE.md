@@ -101,6 +101,12 @@ docker run -d --name pgtest -p 5433:5432 -e POSTGRES_PASSWORD=test -e POSTGRES_D
 TEST_DATABASE_URL="postgres://postgres:test@localhost:5433/goclaw_test?sslmode=disable" \
   go test -v -tags integration ./tests/integration/
 
+# Layered tests
+make test-invariants  # P0 - tenant isolation (blocking)
+make test-contracts   # P1 - API schemas (requires server)
+make test-scenarios   # P2 - user journeys (requires server)
+make test-critical    # P0 + P1 (pre-merge)
+
 cd ui/web && pnpm install && pnpm dev   # Web dashboard (dev)
 
 # Desktop (Wails + SQLite)

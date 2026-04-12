@@ -169,6 +169,10 @@ type Loop struct {
 	// BuiltinToolSettingsFromCtx with global winning at tool-name level.
 	tenantToolSettings tools.BuiltinToolSettings
 
+	// Tenant-specific allowed paths beyond workspace (from system_configs['allowed_paths']).
+	// Filesystem tools (read_file, write_file, edit, list_files) check these at execution time.
+	tenantAllowedPaths []string
+
 	// Per-tenant disabled tools (tool name → true means excluded from LLM)
 	disabledTools map[string]bool
 
@@ -339,6 +343,9 @@ type LoopConfig struct {
 	// Tenant-layer tool settings overlay (from builtin_tool_tenant_configs.settings).
 	TenantToolSettings tools.BuiltinToolSettings
 
+	// Tenant-specific allowed paths beyond workspace (from system_configs['allowed_paths']).
+	TenantAllowedPaths []string
+
 	// Per-tenant disabled tools (tool name → true means excluded)
 	DisabledTools map[string]bool
 
@@ -484,6 +491,7 @@ func NewLoop(cfg LoopConfig) *Loop {
 		maxMessageChars:        cfg.MaxMessageChars,
 		builtinToolSettings:    cfg.BuiltinToolSettings,
 		tenantToolSettings:     cfg.TenantToolSettings,
+		tenantAllowedPaths:     cfg.TenantAllowedPaths,
 		disabledTools:          cfg.DisabledTools,
 		reasoningConfig:        cfg.ReasoningConfig,
 		promptMode:             cfg.PromptMode,

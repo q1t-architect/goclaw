@@ -2,6 +2,7 @@ package agent
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"log/slog"
 	"os"
@@ -108,6 +109,9 @@ type ResolverDeps struct {
 	// Per-tenant tool/skill config overrides
 	BuiltinToolTenantCfgs store.BuiltinToolTenantConfigStore
 	SkillTenantCfgs       store.SkillTenantConfigStore
+
+	// System config store for tenant-scoped settings (allowed_paths, etc.)
+	SystemConfigs store.SystemConfigStore
 
 	// Global workspace root (GOCLAW_WORKSPACE)
 	Workspace string
@@ -368,6 +372,22 @@ func NewManagedResolver(deps ResolverDeps) ResolverFunc {
 			}
 		}
 
+		// Load tenant-specific allowed paths (from system_configs['allowed_paths']).
+		// These extend filesystem tool access beyond the agent's workspace.
+		var tenantAllowedPaths []string
+		if deps.SystemConfigs != nil && ag.TenantID != uuid.Nil {
+			tenantCtx := store.WithTenantID(ctx, ag.TenantID)
+			if raw, err := deps.SystemConfigs.Get(tenantCtx, "allowed_paths"); err == nil && raw != "" {
+				if json.Unmarshal([]byte(raw), &tenantAllowedPaths) == nil && len(tenantAllowedPaths) > 0 {
+					// Expand home directory in paths
+					for i, p := range tenantAllowedPaths {
+						tenantAllowedPaths[i] = config.ExpandHome(p)
+					}
+					slog.Debug("tenant allowed paths loaded", "agent", agentKey, "tenant", ag.TenantID, "paths", len(tenantAllowedPaths))
+				}
+			}
+		}
+
 		// Filter skills by visibility + agent grants.
 		// Only public skills and explicitly granted internal skills appear in the system prompt.
 		var skillAllowList []string
@@ -467,6 +487,7 @@ func NewManagedResolver(deps ResolverDeps) ResolverFunc {
 			SandboxWorkspaceAccess: sandboxWorkspaceAccess,
 			BuiltinToolSettings:    builtinSettings,
 			TenantToolSettings:     tenantToolSettings,
+			TenantAllowedPaths:     tenantAllowedPaths,
 			DisabledTools:          disabledTools,
 			ReasoningConfig:        store.ResolveEffectiveReasoningConfig(providerReasoningDefaults, ag.ParseReasoningConfig()),
 			PromptMode:             PromptMode(ag.ParsePromptMode()),

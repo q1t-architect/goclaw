@@ -710,3 +710,26 @@ func SandboxConfigFromCtx(ctx context.Context) *sandbox.Config {
 	}
 	return nil
 }
+
+// --- Per-tenant allowed paths (filesystem tool access beyond workspace) ---
+
+const ctxTenantAllowedPaths toolContextKey = "tool_tenant_allowed_paths"
+
+// WithTenantAllowedPaths injects tenant-specific allowed path prefixes into context.
+// These paths extend filesystem tool access beyond the agent's workspace.
+// Loaded from system_configs['allowed_paths'] per tenant.
+func WithTenantAllowedPaths(ctx context.Context, paths []string) context.Context {
+	return context.WithValue(ctx, ctxTenantAllowedPaths, paths)
+}
+
+// TenantAllowedPathsFromCtx returns tenant-specific allowed paths from context.
+// Falls back to RunContext for subagent inheritance.
+func TenantAllowedPathsFromCtx(ctx context.Context) []string {
+	if v, _ := ctx.Value(ctxTenantAllowedPaths).([]string); len(v) > 0 {
+		return v
+	}
+	if rc := store.RunContextFromCtx(ctx); rc != nil {
+		return rc.TenantAllowedPaths
+	}
+	return nil
+}

@@ -77,6 +77,10 @@ func (l *Loop) injectContext(ctx context.Context, req *RunRequest) (contextSetup
 	if l.tenantToolSettings != nil {
 		ctx = tools.WithTenantToolSettings(ctx, l.tenantToolSettings)
 	}
+	// Inject tenant-specific allowed paths for filesystem tools.
+	if len(l.tenantAllowedPaths) > 0 {
+		ctx = tools.WithTenantAllowedPaths(ctx, l.tenantAllowedPaths)
+	}
 	// Inject channel type into context for tools (e.g. message tool needs it for Zalo group routing)
 	if req.ChannelType != "" {
 		ctx = tools.WithToolChannelType(ctx, req.ChannelType)
@@ -327,6 +331,7 @@ func (l *Loop) injectContext(ctx context.Context, req *RunRequest) (contextSetup
 		TeamTaskID:          req.TeamTaskID,
 		LeaderAgentID:       tools.LeaderAgentIDFromCtx(ctx),
 		AgentToolKey:        l.id,
+		TenantAllowedPaths:  l.tenantAllowedPaths,
 	}
 	ctx = store.WithRunContext(ctx, rc)
 
