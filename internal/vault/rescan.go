@@ -30,6 +30,11 @@ type RescanResult struct {
 	Skipped   int  `json:"skipped"`
 	Errors    int  `json:"errors"`
 	Truncated bool `json:"truncated"`
+
+	// PendingEvents holds enrichment events collected during scan.
+	// Caller must publish these AFTER calling progress.Start(total)
+	// to avoid race between event workers and progress tracking.
+	PendingEvents []eventbus.DomainEvent `json:"-"`
 }
 
 // RescanWorkspace walks the tenant workspace and registers missing or changed
@@ -107,9 +112,10 @@ func RescanWorkspace(ctx context.Context, params RescanParams, vs store.VaultSto
 			result.New++
 		}
 
-		// Publish enrichment event. AgentID in payload stays string for serialization.
+		// Collect enrichment events — published AFTER the loop so the caller
+		// can call progress.Start(total) before workers receive events.
 		if bus != nil {
-			bus.Publish(eventbus.DomainEvent{
+			result.PendingEvents = append(result.PendingEvents, eventbus.DomainEvent{
 				ID:        uuid.Must(uuid.NewV7()).String(),
 				Type:      eventbus.EventVaultDocUpserted,
 				SourceID:  doc.ID + ":" + hash,
@@ -141,44 +147,56 @@ func RescanWorkspace(ctx context.Context, params RescanParams, vs store.VaultSto
 // inferOwnerFromPath parses a tenant-relative path to determine ownership.
 // Returns: agentID (*string), teamID (*string), scope (string), strippedPath (string).
 //
-// Path patterns:
+// Path patterns (checked in order):
 //
-//	agents/{agent_key}/rest/of/path → agentID=lookup(key), scope="personal", path="rest/of/path"
-//	teams/{team_uuid}/rest/of/path  → teamID=uuid, scope="team", path="rest/of/path"
+//	teams/{team_uuid}/rest/of/path   → teamID=uuid, scope="team", path=full relPath
+//	agents/{agent_key}/rest/of/path  → agentID=lookup(key), scope="personal", path=full relPath  (legacy)
+//	{agent_key}/rest/of/path         → agentID=lookup(key), scope="personal", path=full relPath  (workspace layout)
 //	anything/else                    → scope="shared", path unchanged
 //
+// The full relPath is always preserved in strippedPath for DB storage so enrichment
+// workers can locate files via filepath.Join(workspace, path).
 // Returns scope="" to signal the file should be skipped (unknown agent or invalid team).
 func inferOwnerFromPath(relPath string, agentMap map[string]string, teamSet map[string]bool) (agentID *string, teamID *string, scope string, strippedPath string) {
-	switch {
-	case strings.HasPrefix(relPath, "agents/"):
-		rest := relPath[len("agents/"):]
-		key, remainder, hasSlash := strings.Cut(rest, "/")
-		if !hasSlash || key == "" || strings.Contains(remainder, "..") {
-			return nil, nil, "", relPath // malformed or path traversal
-		}
-		agentUUID, ok := agentMap[key]
-		if !ok {
-			return nil, nil, "", relPath // unknown agent key → skip
-		}
-		return &agentUUID, nil, "personal", remainder
-
-	case strings.HasPrefix(relPath, "teams/"):
+	// Team paths: teams/{uuid}/...
+	if strings.HasPrefix(relPath, "teams/") {
 		rest := relPath[len("teams/"):]
 		id, remainder, hasSlash := strings.Cut(rest, "/")
 		if !hasSlash || id == "" || strings.Contains(remainder, "..") {
-			return nil, nil, "", relPath // malformed or path traversal
+			return nil, nil, "", relPath
 		}
 		if _, parseErr := uuid.Parse(id); parseErr != nil {
-			return nil, nil, "", relPath // not a valid UUID → skip
+			return nil, nil, "", relPath
 		}
 		if !teamSet[id] {
-			return nil, nil, "", relPath // team not found → skip
+			return nil, nil, "", relPath
 		}
-		return nil, &id, "team", remainder
-
-	default:
-		return nil, nil, "shared", relPath
+		return nil, &id, "team", relPath
 	}
+
+	// Agent paths: agents/{key}/... (legacy prefix) or {key}/... (actual workspace layout)
+	if strings.HasPrefix(relPath, "agents/") {
+		rest := relPath[len("agents/"):]
+		key, _, hasSlash := strings.Cut(rest, "/")
+		if hasSlash && key != "" && !strings.Contains(relPath, "..") {
+			if agentUUID, ok := agentMap[key]; ok {
+				return &agentUUID, nil, "personal", relPath
+			}
+		}
+		return nil, nil, "", relPath
+	}
+
+	// Root-level agent_key match: {agent_key}/...
+	// Workspace resolver uses agent_key as folder name directly.
+	firstSeg, _, hasSlash := strings.Cut(relPath, "/")
+	if hasSlash && firstSeg != "" {
+		if agentUUID, ok := agentMap[firstSeg]; ok {
+			return &agentUUID, nil, "personal", relPath
+		}
+	}
+
+	// Everything else is shared (root-level files, unknown folders)
+	return nil, nil, "shared", relPath
 }
 
 // InferDocType guesses doc_type from path conventions.
