@@ -139,6 +139,9 @@ type VaultStore interface {
 	DeleteLinksBySource(ctx context.Context, tenantID, source string) (int64, error)
 
 	// Enrichment
+	// ListUnenrichedDocs returns documents with empty summary for re-enrichment.
+	// Used after rescan to retry failed enrichments.
+	ListUnenrichedDocs(ctx context.Context, tenantID string, limit int) ([]VaultDocument, error)
 	// UpdateSummaryAndReembed updates summary text and re-generates embedding from title+path+summary.
 	UpdateSummaryAndReembed(ctx context.Context, tenantID, docID, summary string) error
 	// FindSimilarDocs finds documents with similar embeddings to the given docID.

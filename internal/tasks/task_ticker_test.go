@@ -13,6 +13,7 @@ import (
 
 	"github.com/nextlevelbuilder/goclaw/internal/bus"
 	"github.com/nextlevelbuilder/goclaw/internal/store"
+	"github.com/nextlevelbuilder/goclaw/internal/tools"
 )
 
 // ─── minimal stub stores ───────────────────────────────────────────────────
@@ -458,5 +459,35 @@ func TestProcessFollowups_NoTasksIsNoop(t *testing.T) {
 
 	if ts.incrementCalls.Load() != 0 {
 		t.Errorf("IncrementFollowupCount calls = %d, want 0", ts.incrementCalls.Load())
+	}
+}
+
+func TestFollowupOutboundMessage_UsesLocalKey(t *testing.T) {
+	task := &store.TeamTaskData{
+		FollowupChannel: "telegram",
+		FollowupChatID:  "-100123456",
+		Metadata: map[string]any{
+			tools.TaskMetaLocalKey: "-100123456:topic:47",
+		},
+	}
+
+	got := followupOutboundMessage(task, "Reminder (1): ping")
+	if got.Metadata == nil {
+		t.Fatal("expected metadata to be populated")
+	}
+	if got.Metadata["local_key"] != "-100123456:topic:47" {
+		t.Fatalf("local_key = %q, want %q", got.Metadata["local_key"], "-100123456:topic:47")
+	}
+}
+
+func TestFollowupOutboundMessage_OmitsLocalKeyWhenMissing(t *testing.T) {
+	task := &store.TeamTaskData{
+		FollowupChannel: "telegram",
+		FollowupChatID:  "-100123456",
+	}
+
+	got := followupOutboundMessage(task, "Reminder (1): ping")
+	if got.Metadata != nil {
+		t.Fatalf("expected metadata to be nil, got %#v", got.Metadata)
 	}
 }

@@ -11,7 +11,7 @@ import {
 } from "@/components/ui/tooltip";
 import type { BuiltinToolData } from "./hooks/use-builtin-tools";
 
-/* eslint-disable @typescript-eslint/no-explicit-any */
+ 
 
 // Tools with dedicated settings forms always show the Settings button,
 // even when settings is empty (the form lets the user create settings).

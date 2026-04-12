@@ -73,4 +73,5 @@ jobs:
           cache: pnpm
           cache-dependency-path: ui/web/pnpm-lock.yaml
       - run: pnpm install --frozen-lockfile
+      - run: pnpm lint
       - run: pnpm build

@@ -113,6 +113,46 @@ func (w *EnrichWorker) IsRunning(tenantID string) bool {
 	return ok
 }
 
+// EnqueueUnenriched fetches documents with empty summary and emits enrichment events.
+// Called after rescan when all files are unchanged but some still need enrichment.
+// Returns the number of documents enqueued.
+func (w *EnrichWorker) EnqueueUnenriched(ctx context.Context, tenantID, workspace string, bus eventbus.DomainEventBus, limit int) (int, error) {
+	docs, err := w.vault.ListUnenrichedDocs(ctx, tenantID, limit)
+	if err != nil {
+		return 0, err
+	}
+	if len(docs) == 0 {
+		return 0, nil
+	}
+
+	for _, doc := range docs {
+		agentID := ""
+		if doc.AgentID != nil {
+			agentID = *doc.AgentID
+		}
+		event := eventbus.DomainEvent{
+			ID:        uuid.Must(uuid.NewV7()).String(),
+			Type:      eventbus.EventVaultDocUpserted,
+			SourceID:  doc.ID + ":" + doc.ContentHash,
+			TenantID:  tenantID,
+			AgentID:   agentID,
+			Timestamp: time.Now(),
+			Payload: eventbus.VaultDocUpsertedPayload{
+				DocID:       doc.ID,
+				TenantID:    tenantID,
+				AgentID:     agentID,
+				Path:        doc.Path,
+				ContentHash: doc.ContentHash,
+				Workspace:   workspace,
+			},
+		}
+		bus.Publish(event)
+	}
+
+	slog.Info("vault.enrich: enqueued unenriched", "tenant", tenantID, "count", len(docs))
+	return len(docs), nil
+}
+
 // enrichTaskSiblingCap bounds the number of auto-linked siblings per
 // (source_doc × task) pair. Tunable via VAULT_TASK_SIBLING_CAP env var so
 // operators can raise/lower without a rebuild.

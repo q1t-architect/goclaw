@@ -59,6 +59,15 @@ func (r *vaultDocRow) toVaultDocument() store.VaultDocument {
 	return doc
 }
 
+// vaultDocRowsToDocs converts a slice of vaultDocRow to store.VaultDocument.
+func vaultDocRowsToDocs(rows []vaultDocRow) []store.VaultDocument {
+	docs := make([]store.VaultDocument, len(rows))
+	for i := range rows {
+		docs[i] = rows[i].toVaultDocument()
+	}
+	return docs
+}
+
 // vaultSearchRow extends vaultDocRow with a computed score column for search queries.
 type vaultSearchRow struct {
 	vaultDocRow

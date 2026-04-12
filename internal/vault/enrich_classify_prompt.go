@@ -24,19 +24,14 @@ const classifySystemPrompt = `You classify relationships between documents in a 
 - contradicts: A conflicts with or opposes B's content
 
 ## Rules
-- Respond with EXACTLY one JSON entry per candidate, no markdown fences, no explanation
-- Use SKIP when documents are similar but have no meaningful relationship
-- Prefer specific types (reference, depends_on) over generic (related)
-- Keep ctx under 30 words
+- Respond with EXACTLY one JSON entry per candidate
+- Output ONLY raw JSON array, no markdown, no explanation
+- Use SKIP when no meaningful relationship exists
+- Prefer specific types over "related"
+- ctx MUST be under 50 characters (5-8 words max)
 
 ## Output Format
-[
-  {"idx":1,"type":"reference","ctx":"mentions OAuth config"},
-  {"idx":2,"type":"SKIP"},
-  {"idx":3,"type":"extends","ctx":"adds error handling details"},
-  {"idx":4,"type":"SKIP"},
-  {"idx":5,"type":"depends_on","ctx":"requires auth middleware"}
-]`
+[{"idx":1,"type":"reference","ctx":"cites OAuth spec"},{"idx":2,"type":"SKIP"},{"idx":3,"type":"extends","ctx":"adds error handling"},{"idx":4,"type":"SKIP"},{"idx":5,"type":"depends_on","ctx":"needs auth module"}]`
 
 // buildClassifyPrompt formats the system and user prompts for classify LLM call.
 func buildClassifyPrompt(source classifyDoc, candidates []classifyDoc) (system, user string) {

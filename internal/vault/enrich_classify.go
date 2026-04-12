@@ -12,7 +12,7 @@ import (
 )
 
 const (
-	classifyMaxTokens       = 2048
+	classifyMaxTokens       = 4096
 	classifyTemperature     = 0.1
 	classifyCtxMaxLen       = 256 // max context string length stored in DB
 	classifySummaryMaxChars = 300 // max summary chars in prompt (validated: 300 for accuracy)

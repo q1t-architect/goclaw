@@ -14,6 +14,7 @@ import { toast } from "@/stores/use-toast-store";
 import { VaultDocumentSidebar } from "./vault-document-sidebar";
 import { VaultSearchDialog } from "./vault-search-dialog";
 import { VaultCreateDialog } from "./vault-create-dialog";
+import { ConfirmDialog } from "@/components/shared/confirm-dialog";
 import type { VaultDocument } from "@/types/vault";
 
 const VaultGraphView = lazy(() =>
@@ -41,6 +42,7 @@ export function VaultPage() {
   const [searchOpen, setSearchOpen] = useState(false);
   const [createOpen, setCreateOpen] = useState(false);
   const [sidebarOpen, setSidebarOpen] = useState(false);
+  const [stopConfirmOpen, setStopConfirmOpen] = useState(false);
 
   const { rescan, isPending: rescanPending } = useRescanWorkspace();
   const { stop: stopEnrich, isPending: stopPending } = useStopEnrichment();
@@ -152,25 +154,24 @@ export function VaultPage() {
           <TooltipProvider>
             <Tooltip>
               <TooltipTrigger asChild>
-                <Button size="sm" variant="outline" onClick={async () => { await rescan(); loadRoot(); }} disabled={rescanPending || enriching}>
-                  {(rescanPending || enriching) ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <FolderSync className="h-3.5 w-3.5" />}
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={enriching ? () => setStopConfirmOpen(true) : async () => { await rescan(); loadRoot(); }}
+                  disabled={rescanPending || stopPending}
+                >
+                  {rescanPending || stopPending ? (
+                    <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                  ) : enriching ? (
+                    <StopCircle className="h-3.5 w-3.5 text-destructive" />
+                  ) : (
+                    <FolderSync className="h-3.5 w-3.5" />
+                  )}
                 </Button>
               </TooltipTrigger>
-              <TooltipContent>{enriching ? t("enriching", "Enriching documents...") : t("rescanTooltip", "Rescan workspace")}</TooltipContent>
+              <TooltipContent>{enriching ? t("stopEnrich", "Stop enrichment") : t("rescanTooltip", "Rescan workspace")}</TooltipContent>
             </Tooltip>
           </TooltipProvider>
-          {enriching && (
-            <TooltipProvider>
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  <Button size="sm" variant="outline" onClick={stopEnrich} disabled={stopPending}>
-                    {stopPending ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <StopCircle className="h-3.5 w-3.5 text-destructive" />}
-                  </Button>
-                </TooltipTrigger>
-                <TooltipContent>{t("stopEnrich", "Stop enrichment")}</TooltipContent>
-              </Tooltip>
-            </TooltipProvider>
-          )}
           <TooltipProvider>
             <Tooltip>
               <TooltipTrigger asChild>
@@ -223,6 +224,16 @@ export function VaultPage() {
         />
       )}
       <VaultCreateDialog open={createOpen} onOpenChange={setCreateOpen} defaultAgentId={selectedAgent} defaultTeamId={selectedTeam} />
+      <ConfirmDialog
+        open={stopConfirmOpen}
+        onOpenChange={setStopConfirmOpen}
+        title={t("stopEnrich", "Stop enrichment")}
+        description={t("stopEnrichConfirm", "Are you sure you want to stop the enrichment process? Documents already processed will keep their summaries.")}
+        confirmLabel={t("stop", "Stop")}
+        variant="destructive"
+        onConfirm={() => { stopEnrich(); setStopConfirmOpen(false); }}
+        loading={stopPending}
+      />
 
       <Suspense fallback={null}>
         <VaultDetailDialog
