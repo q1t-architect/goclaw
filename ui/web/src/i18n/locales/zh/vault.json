@@ -78,6 +78,7 @@
   "errors": "错误",
   "rescanNew": "{{count}} 个新文件",
   "rescanUpdated": "{{count}} 个已更新",
+  "rescanReenqueued": "{{count}} 个重新处理",
   "rescanUnchanged": "{{count}} 个未变",
   "rescanTruncated": "扫描已截断（达到限制）",
   "rescanNoFiles": "未发现新文件",

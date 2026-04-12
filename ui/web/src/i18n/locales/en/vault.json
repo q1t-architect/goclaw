@@ -78,6 +78,7 @@
   "errors": "errors",
   "rescanNew": "{{count}} new",
   "rescanUpdated": "{{count}} updated",
+  "rescanReenqueued": "{{count}} re-queued for enrichment",
   "rescanUnchanged": "{{count}} unchanged",
   "rescanTruncated": "scan truncated (limit reached)",
   "rescanNoFiles": "No new files found",

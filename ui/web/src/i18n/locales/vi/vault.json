@@ -78,6 +78,7 @@
   "errors": "lỗi",
   "rescanNew": "{{count}} mới",
   "rescanUpdated": "{{count}} cập nhật",
+  "rescanReenqueued": "{{count}} đang xử lý lại",
   "rescanUnchanged": "{{count}} không đổi",
   "rescanTruncated": "quét bị cắt (đạt giới hạn)",
   "rescanNoFiles": "Không tìm thấy file mới",

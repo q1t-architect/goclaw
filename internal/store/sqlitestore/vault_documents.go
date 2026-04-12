@@ -295,6 +295,36 @@ func (s *SQLiteVaultStore) UpdateHash(ctx context.Context, tenantID, id, newHash
 	return err
 }
 
+// ListUnenrichedDocs returns documents with empty summary for re-enrichment.
+// limit=0 means no limit.
+func (s *SQLiteVaultStore) ListUnenrichedDocs(ctx context.Context, tenantID string, limit int) ([]store.VaultDocument, error) {
+	q := `SELECT id, tenant_id, agent_id, team_id, scope, custom_scope, path, path_basename, title, doc_type, content_hash, summary, metadata, created_at, updated_at
+		FROM vault_documents
+		WHERE tenant_id = ? AND (summary IS NULL OR summary = '')
+		ORDER BY created_at ASC`
+	args := []any{tenantID}
+
+	if limit > 0 {
+		q += " LIMIT ?"
+		args = append(args, limit)
+	}
+
+	rows, err := s.db.QueryContext(ctx, q, args...)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var docs []store.VaultDocument
+	for rows.Next() {
+		doc, scanErr := scanVaultDocRow(rows)
+		if scanErr != nil {
+			return nil, scanErr
+		}
+		docs = append(docs, *doc)
+	}
+	return docs, rows.Err()
+}
+
 // UpdateSummaryAndReembed updates summary (no embedding in SQLite).
 func (s *SQLiteVaultStore) UpdateSummaryAndReembed(ctx context.Context, tenantID, docID, summary string) error {
 	now := time.Now().UTC().Format(time.RFC3339Nano)

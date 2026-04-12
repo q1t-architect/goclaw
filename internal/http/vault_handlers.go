@@ -203,6 +203,20 @@ func (h *VaultHandler) handleRescan(w http.ResponseWriter, r *http.Request) {
 	// Start progress BEFORE publishing events so workers see running=true
 	// and AddDone calls are not dropped by the !running guard.
 	total := result.New + result.Updated
+
+	// If no new/updated files, check for unenriched docs and re-enqueue them.
+	// This handles the case where previous enrichment failed (e.g. provider timeout).
+	if total == 0 && h.enrichWorker != nil {
+		enqueued, err := h.enrichWorker.EnqueueUnenriched(ctx, tenantID, wsPath, h.eventBus, 0)
+		if err != nil {
+			slog.Warn("vault.rescan: enqueue_unenriched failed", "tenant", tenantID, "error", err)
+		} else if enqueued > 0 {
+			total = enqueued
+			result.Reenqueued = enqueued
+			slog.Info("vault.rescan: re-enqueued unenriched docs", "tenant", tenantID, "count", enqueued)
+		}
+	}
+
 	if h.enrichProgress != nil && total > 0 {
 		h.enrichProgress.Start(total, store.TenantIDFromContext(r.Context()))
 	}

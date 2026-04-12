@@ -23,13 +23,14 @@ type RescanParams struct {
 
 // RescanResult holds the outcome of a workspace rescan.
 type RescanResult struct {
-	Scanned   int  `json:"scanned"`
-	New       int  `json:"new"`
-	Updated   int  `json:"updated"`
-	Unchanged int  `json:"unchanged"`
-	Skipped   int  `json:"skipped"`
-	Errors    int  `json:"errors"`
-	Truncated bool `json:"truncated"`
+	Scanned    int  `json:"scanned"`
+	New        int  `json:"new"`
+	Updated    int  `json:"updated"`
+	Unchanged  int  `json:"unchanged"`
+	Reenqueued int  `json:"reenqueued"` // docs re-enqueued for failed enrichment retry
+	Skipped    int  `json:"skipped"`
+	Errors     int  `json:"errors"`
+	Truncated  bool `json:"truncated"`
 
 	// PendingEvents holds enrichment events collected during scan.
 	// Caller must publish these AFTER calling progress.Start(total)
