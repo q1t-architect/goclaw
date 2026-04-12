@@ -382,6 +382,109 @@ func (s *SQLiteVaultStore) Search(ctx context.Context, opts store.VaultSearchOpt
 	return results, nil
 }
 
+// ListTreeEntries returns immediate children (files + virtual folders) under the given path prefix.
+func (s *SQLiteVaultStore) ListTreeEntries(ctx context.Context, tenantID string, opts store.VaultTreeOptions) ([]store.VaultTreeEntry, error) {
+	prefix := opts.Path
+	if prefix != "" && !strings.HasSuffix(prefix, "/") {
+		prefix += "/"
+	}
+	fileQ := `SELECT id, path, title, doc_type, scope, updated_at FROM vault_documents WHERE tenant_id = ?`
+	fileArgs := []any{tenantID}
+	if prefix == "" {
+		fileQ += " AND path NOT LIKE '%/%'"
+	} else {
+		fileQ += " AND path LIKE ? AND path NOT LIKE ?"
+		fileArgs = append(fileArgs, prefix+"%", prefix+"%/%")
+	}
+	fileQ, fileArgs = sqliteAppendTreeFilters(fileQ, fileArgs, opts)
+	fileQ += " ORDER BY path"
+
+	deepQ := `SELECT DISTINCT path FROM vault_documents WHERE tenant_id = ?`
+	deepArgs := []any{tenantID}
+	if prefix == "" {
+		deepQ += " AND path LIKE '%/%'"
+	} else {
+		deepQ += " AND path LIKE ?"
+		deepArgs = append(deepArgs, prefix+"%/%")
+	}
+	deepQ, deepArgs = sqliteAppendTreeFilters(deepQ, deepArgs, opts)
+	deepQ += " LIMIT 50000"
+
+	fileRows, err := s.db.QueryContext(ctx, fileQ, fileArgs...)
+	if err != nil {
+		return nil, fmt.Errorf("vault tree files: %w", err)
+	}
+	defer fileRows.Close()
+	var entries []store.VaultTreeEntry
+	for fileRows.Next() {
+		var id, path, title, docType, scope string
+		var ua sqliteTime
+		if err := fileRows.Scan(&id, &path, &title, &docType, &scope, &ua); err != nil {
+			return nil, fmt.Errorf("vault tree scan: %w", err)
+		}
+		name := path
+		if idx := strings.LastIndex(path, "/"); idx >= 0 {
+			name = path[idx+1:]
+		}
+		t := ua.Time
+		entries = append(entries, store.VaultTreeEntry{
+			Name: name, Path: path, DocID: id, DocType: docType, Scope: scope, Title: title, UpdatedAt: &t,
+		})
+	}
+	if err := fileRows.Err(); err != nil {
+		return nil, fmt.Errorf("vault tree files: %w", err)
+	}
+
+	deepRows, err := s.db.QueryContext(ctx, deepQ, deepArgs...)
+	if err != nil {
+		return nil, fmt.Errorf("vault tree deep: %w", err)
+	}
+	defer deepRows.Close()
+	seen := make(map[string]bool)
+	for deepRows.Next() {
+		var p string
+		if err := deepRows.Scan(&p); err != nil {
+			return nil, fmt.Errorf("vault tree deep scan: %w", err)
+		}
+		rest := strings.TrimPrefix(p, prefix)
+		if idx := strings.Index(rest, "/"); idx > 0 {
+			seg := rest[:idx]
+			if !seen[seg] {
+				seen[seg] = true
+				entries = append(entries, store.VaultTreeEntry{
+					Name: seg, Path: prefix + seg, IsDir: true, HasChildren: true,
+				})
+			}
+		}
+	}
+	if err := deepRows.Err(); err != nil {
+		return nil, fmt.Errorf("vault tree deep: %w", err)
+	}
+	sort.Slice(entries, func(i, j int) bool {
+		if entries[i].IsDir != entries[j].IsDir {
+			return entries[i].IsDir
+		}
+		return entries[i].Name < entries[j].Name
+	})
+	return entries, nil
+}
+
+func sqliteAppendTreeFilters(q string, args []any, opts store.VaultTreeOptions) (string, []any) {
+	q, args = sqliteAppendTeamFilter(q, args, opts.TeamID, opts.TeamIDs)
+	if opts.Scope != "" {
+		q += " AND scope = ?"
+		args = append(args, opts.Scope)
+	}
+	if len(opts.DocTypes) > 0 {
+		ph := strings.Repeat("?,", len(opts.DocTypes)-1) + "?"
+		q += " AND doc_type IN (" + ph + ")"
+		for _, dt := range opts.DocTypes {
+			args = append(args, dt)
+		}
+	}
+	return q, args
+}
+
 // --- scan helpers ---
 
 func scanVaultDoc(row *sql.Row) (*store.VaultDocument, error) {
@@ -409,7 +512,7 @@ func scanVaultDocRow(rows *sql.Rows) (*store.VaultDocument, error) {
 	var agentID *string
 	ca, ua := &sqliteTime{}, &sqliteTime{}
 	err := rows.Scan(&doc.ID, &doc.TenantID, &agentID, &doc.TeamID, &doc.Scope, &doc.CustomScope,
-		&doc.Path, &doc.Title, &doc.DocType, &doc.ContentHash, &doc.Summary, &meta, ca, ua)
+		&doc.Path, &doc.PathBasename, &doc.Title, &doc.DocType, &doc.ContentHash, &doc.Summary, &meta, ca, ua)
 	if err != nil {
 		return nil, err
 	}

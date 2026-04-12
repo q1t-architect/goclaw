@@ -1542,6 +1542,7 @@ CREATE INDEX IF NOT EXISTS idx_vault_docs_type ON vault_documents(agent_id, doc_
 CREATE INDEX IF NOT EXISTS idx_vault_docs_hash ON vault_documents(content_hash);
 CREATE INDEX IF NOT EXISTS idx_vault_docs_team ON vault_documents(team_id);
 CREATE INDEX IF NOT EXISTS idx_vault_docs_basename ON vault_documents(tenant_id, path_basename);
+CREATE INDEX IF NOT EXISTS idx_vault_docs_path_prefix ON vault_documents(tenant_id, path);
 CREATE INDEX IF NOT EXISTS idx_vault_docs_delegation
     ON vault_documents(json_extract(metadata, '$.delegation_id'))
     WHERE json_extract(metadata, '$.delegation_id') IS NOT NULL;

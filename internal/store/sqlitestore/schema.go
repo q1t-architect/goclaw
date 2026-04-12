@@ -16,7 +16,7 @@ var schemaSQL string
 
 // SchemaVersion is the current SQLite schema version.
 // Bump this when adding new migration steps below.
-const SchemaVersion = 16
+const SchemaVersion = 17
 
 // migrations maps version → SQL to apply when upgrading FROM that version.
 // schema.sql always represents the LATEST full schema (for fresh DBs).
@@ -435,6 +435,9 @@ CREATE INDEX IF NOT EXISTS idx_vault_links_source
 CREATE INDEX IF NOT EXISTS idx_vault_docs_delegation
   ON vault_documents(json_extract(metadata, '$.delegation_id'))
   WHERE json_extract(metadata, '$.delegation_id') IS NOT NULL;`,
+
+	// Version 16 → 17: path prefix index for vault tree lazy-load queries.
+	16: `CREATE INDEX IF NOT EXISTS idx_vault_docs_path_prefix ON vault_documents(tenant_id, path);`,
 }
 
 // backfillV16 populates base_name / path_basename for rows that existed

@@ -67,9 +67,15 @@ func (l *Loop) injectContext(ctx context.Context, req *RunRequest) (contextSetup
 	if req.SenderName != "" {
 		ctx = store.WithSenderName(ctx, req.SenderName)
 	}
-	// Inject global builtin tool settings for media tools (provider chain)
+	// Inject global + per-agent builtin tool settings (tier 1+3).
+	// Media/provider-chain tools read the merged view via BuiltinToolSettingsFromCtx.
 	if l.builtinToolSettings != nil {
 		ctx = tools.WithBuiltinToolSettings(ctx, l.builtinToolSettings)
+	}
+	// Inject tenant-layer tool settings (tier 2). Merge with per-agent happens
+	// at read time — per-agent still wins at tool-name level.
+	if l.tenantToolSettings != nil {
+		ctx = tools.WithTenantToolSettings(ctx, l.tenantToolSettings)
 	}
 	// Inject channel type into context for tools (e.g. message tool needs it for Zalo group routing)
 	if req.ChannelType != "" {

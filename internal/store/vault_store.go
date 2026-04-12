@@ -74,6 +74,28 @@ type VaultListOptions struct {
 	Offset   int
 }
 
+// VaultTreeEntry represents a file or virtual folder in the vault tree.
+type VaultTreeEntry struct {
+	Name        string     `json:"name"`
+	Path        string     `json:"path"`
+	IsDir       bool       `json:"isDir"`
+	HasChildren bool       `json:"hasChildren,omitempty"`
+	DocID       string     `json:"docId,omitempty"`
+	DocType     string     `json:"docType,omitempty"`
+	Scope       string     `json:"scope,omitempty"`
+	Title       string     `json:"title,omitempty"`
+	UpdatedAt   *time.Time `json:"updatedAt,omitempty"`
+}
+
+// VaultTreeOptions configures a vault tree listing query.
+type VaultTreeOptions struct {
+	Path     string
+	TeamID   *string
+	TeamIDs  []string
+	Scope    string
+	DocTypes []string
+}
+
 // VaultStore manages the Knowledge Vault document registry and links.
 type VaultStore interface {
 	// Document CRUD
@@ -84,6 +106,9 @@ type VaultStore interface {
 	ListDocuments(ctx context.Context, tenantID, agentID string, opts VaultListOptions) ([]VaultDocument, error)
 	CountDocuments(ctx context.Context, tenantID, agentID string, opts VaultListOptions) (int, error)
 	UpdateHash(ctx context.Context, tenantID, id, newHash string) error
+
+	// ListTreeEntries returns immediate children (files + virtual folders) under the given path prefix.
+	ListTreeEntries(ctx context.Context, tenantID string, opts VaultTreeOptions) ([]VaultTreeEntry, error)
 
 	// GetDocumentsByIDs returns documents matching the given IDs with tenant isolation.
 	GetDocumentsByIDs(ctx context.Context, tenantID string, docIDs []string) ([]VaultDocument, error)

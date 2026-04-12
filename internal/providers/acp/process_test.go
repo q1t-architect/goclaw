@@ -118,9 +118,16 @@ func TestProcessPool_Close_WithFakeProcesses(t *testing.T) {
 }
 
 func TestProcessPool_Close_TimesOutSlowProcess(t *testing.T) {
+	// Override the per-process close timeout so the test doesn't burn 5s
+	// of wall time just to exercise the "fake process never exits" path.
+	// Production behavior is unchanged — only this test sees 20ms.
+	saved := processCloseTimeout
+	processCloseTimeout = 20 * time.Millisecond
+	t.Cleanup(func() { processCloseTimeout = saved })
+
 	pp := NewProcessPool("x", nil, "", time.Minute)
 
-	// Insert a fake process that never exits (simulates slow shutdown)
+	// Insert a fake process that never exits (simulates slow shutdown).
 	neverExit := make(chan struct{}) // never closed
 	proc := &ACPProcess{
 		exited: neverExit,
@@ -130,23 +137,18 @@ func TestProcessPool_Close_TimesOutSlowProcess(t *testing.T) {
 	proc.conn = &Conn{done: make(chan struct{})}
 	pp.processes.Store("slow", proc)
 
-	// Override the 5s timeout by closing pp.done directly to trigger Close fast.
-	// We test that Close() returns even when a process doesn't exit.
-	// Use a very short real test — Close() internally waits up to 5s per process.
-	// Instead, verify that Close does not block indefinitely by checking it finishes
-	// within a reasonable window (the pool's internal 5s + buffer).
+	// Close must return promptly even though the fake process never exits,
+	// because the timeout branch fires after processCloseTimeout elapses.
 	done := make(chan error, 1)
 	go func() { done <- pp.Close() }()
 
-	// The test just needs to complete; the real 5s wait happens internally.
-	// Use a long timeout to avoid flakiness on slow CI.
 	select {
 	case err := <-done:
 		if err != nil {
 			t.Fatalf("Close returned error: %v", err)
 		}
-	case <-time.After(10 * time.Second):
-		t.Fatal("Close did not return within 10 seconds for slow process")
+	case <-time.After(1 * time.Second):
+		t.Fatal("Close did not return within 1 second even with fast timeout override")
 	}
 }
 

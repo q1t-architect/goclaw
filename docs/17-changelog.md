@@ -32,6 +32,33 @@ All notable changes to GoClaw Gateway are documented here. Format follows [Keep 
 
 ## [Unreleased]
 
+### Security
+
+#### Tenant-Scope Hotfix (2026-04-12)
+
+3 privilege-escalation vulnerabilities closed, same class as `b419f352` (Phase 1 `config.*` hotfix):
+
+- **CRITICAL** `PUT /v1/tools/builtin/{name}` — non-master admin could corrupt global tool defaults
+- **CRITICAL** `POST /v1/packages/install|uninstall` — non-master admin could run `pip`/`npm`/`apk` server-wide
+- **HIGH** `POST /v1/api-keys/{id}/revoke` (HTTP + WS) — tenant admin could revoke NULL-tenant system keys
+
+Fix adds shared `store.IsMasterScope(ctx)` predicate + `http.requireMasterScope` guard on all three endpoints. `APIKeyStore.Delete` dropped (YAGNI + dormant same-class vuln). WS router now injects role into ctx. Tests: 17 new unit tests. Audit: `plans/reports/debugger-260412-0922-tenant-scope-audit.md`.
+
+### Added
+
+#### Per-Tenant Tool Configuration — 4-Tier Overlay (2026-04-12)
+
+Tenant admins can override tool configuration without affecting other tenants. Overlay: `per-agent > tenant > global > hardcoded`, resolved at Execute time via `tools.BuiltinToolSettingsFromCtx(ctx)` — no Tool interface changes. See `docs/03-tools-system.md` § 14. Applies to `web_search`, `web_fetch`, `tts`. Web UI dialog is tenant-scope aware.
+- **Phase 5** (1e5e84d5): Builtin tools settings editor on web UI
+- **Phase 7 rest** (30a40bbe): Exa + Tavily web search providers with ranked ordering via `provider_order` config. Credit: @kaitranntt for original PR 825 work, ported to tenant settings storage pattern
+  - New files: `internal/tools/{web_search_exa,web_search_tavily,web_search_config}.go`
+  - 11 new unit tests for provider chain + normalization
+  - Provider-selection helper: `NormalizeWebSearchProviderOrder(order []string) → []string` (DuckDuckGo always last as free fallback)
+- **Phase 8** (def1712f, 43ee918b): Tenant-aware singleton pool pattern for stateful tools
+  - `web_fetch`: Domain policy override via `resolvePolicy(ctx)` reads tenant config; 6 new unit tests
+  - `tts`: Primary provider override via `resolvePrimary(ctx, mgr)` reads tenant config; 5 new unit tests
+  - Feature flag: `config.Tools.TenantScopedSingletons` (default: false) gates per-tenant pool instances with LRU eviction (64 tenants) + 30 min idle timeout
+
 ### Fixed
 
 #### Feishu/Lark Writer Management Commands — Issue #818 Closed (2026-04-11)

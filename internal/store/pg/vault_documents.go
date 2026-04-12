@@ -174,9 +174,11 @@ func (s *PGVaultStore) GetDocument(ctx context.Context, tenantID, agentID, path 
 	}
 
 	var row vaultDocRow
+	// Scan order MUST match SELECT order above: 15 columns including
+	// path_basename (generated column added in migration 000047).
 	err = s.db.QueryRowContext(ctx, q, args...).Scan(
 		&row.ID, &row.TenantID, &row.AgentID, &row.TeamID, &row.Scope, &row.CustomScope,
-		&row.Path, &row.Title, &row.DocType, &row.ContentHash, &row.Summary,
+		&row.Path, &row.PathBasename, &row.Title, &row.DocType, &row.ContentHash, &row.Summary,
 		&row.MetaJSON, &row.CreatedAt, &row.UpdatedAt)
 	if err != nil {
 		return nil, err
@@ -259,9 +261,11 @@ func (s *PGVaultStore) GetDocumentByBasename(ctx context.Context, tenantID, agen
 	}
 	q += " LIMIT 1"
 	var row vaultDocRow
+	// Scan order MUST match SELECT order above: 15 columns including
+	// path_basename (generated column added in migration 000047).
 	err = s.db.QueryRowContext(ctx, q, args...).Scan(
 		&row.ID, &row.TenantID, &row.AgentID, &row.TeamID, &row.Scope, &row.CustomScope,
-		&row.Path, &row.Title, &row.DocType, &row.ContentHash, &row.Summary,
+		&row.Path, &row.PathBasename, &row.Title, &row.DocType, &row.ContentHash, &row.Summary,
 		&row.MetaJSON, &row.CreatedAt, &row.UpdatedAt)
 	if err != nil {
 		return nil, err
@@ -668,5 +672,130 @@ func (s *PGVaultStore) mergeResults(fts, vec []store.VaultSearchResult, ftsW, ve
 		results = results[:maxResults]
 	}
 	return results
+}
+
+// ListTreeEntries returns immediate children (files + virtual folders) under the given path prefix.
+func (s *PGVaultStore) ListTreeEntries(ctx context.Context, tenantID string, opts store.VaultTreeOptions) ([]store.VaultTreeEntry, error) {
+	tid, err := parseUUID(tenantID)
+	if err != nil {
+		return nil, fmt.Errorf("vault tree: tenant: %w", err)
+	}
+	prefix := opts.Path
+	if prefix != "" && !strings.HasSuffix(prefix, "/") {
+		prefix += "/"
+	}
+
+	fileQ := `SELECT id, path, title, doc_type, scope, updated_at FROM vault_documents WHERE tenant_id = $1`
+	fileArgs := []any{tid}
+	fp := 2
+	if prefix == "" {
+		fileQ += " AND path NOT LIKE '%/%'"
+	} else {
+		fileQ += fmt.Sprintf(" AND path LIKE $%d AND path NOT LIKE $%d", fp, fp+1)
+		fileArgs = append(fileArgs, prefix+"%", prefix+"%/%")
+		fp += 2
+	}
+	fileQ, fileArgs, fp = appendTreeFilters(fileQ, fileArgs, fp, opts)
+	fileQ += " ORDER BY path"
+
+	deepQ := `SELECT DISTINCT path FROM vault_documents WHERE tenant_id = $1`
+	deepArgs := []any{tid}
+	dp := 2
+	if prefix == "" {
+		deepQ += " AND path LIKE '%/%'"
+	} else {
+		deepQ += fmt.Sprintf(" AND path LIKE $%d", dp)
+		deepArgs = append(deepArgs, prefix+"%/%")
+		dp++
+	}
+	deepQ, deepArgs, _ = appendTreeFilters(deepQ, deepArgs, dp, opts)
+	deepQ += " LIMIT 50000"
+
+	fileRows, err := s.db.QueryContext(ctx, fileQ, fileArgs...)
+	if err != nil {
+		return nil, fmt.Errorf("vault tree files: %w", err)
+	}
+	defer fileRows.Close()
+	var entries []store.VaultTreeEntry
+	for fileRows.Next() {
+		var id, path, title, docType, scope string
+		var updatedAt time.Time
+		if err := fileRows.Scan(&id, &path, &title, &docType, &scope, &updatedAt); err != nil {
+			return nil, fmt.Errorf("vault tree scan: %w", err)
+		}
+		name := path
+		if idx := strings.LastIndex(path, "/"); idx >= 0 {
+			name = path[idx+1:]
+		}
+		ua := updatedAt
+		entries = append(entries, store.VaultTreeEntry{
+			Name: name, Path: path, DocID: id, DocType: docType, Scope: scope, Title: title, UpdatedAt: &ua,
+		})
+	}
+	if err := fileRows.Err(); err != nil {
+		return nil, fmt.Errorf("vault tree files: %w", err)
+	}
+
+	deepRows, err := s.db.QueryContext(ctx, deepQ, deepArgs...)
+	if err != nil {
+		return nil, fmt.Errorf("vault tree deep: %w", err)
+	}
+	defer deepRows.Close()
+	var deepPaths []string
+	for deepRows.Next() {
+		var p string
+		if err := deepRows.Scan(&p); err != nil {
+			return nil, fmt.Errorf("vault tree deep scan: %w", err)
+		}
+		deepPaths = append(deepPaths, p)
+	}
+	if err := deepRows.Err(); err != nil {
+		return nil, fmt.Errorf("vault tree deep: %w", err)
+	}
+
+	for _, fname := range extractFolderNames(prefix, deepPaths) {
+		entries = append(entries, store.VaultTreeEntry{
+			Name: fname, Path: prefix + fname, IsDir: true, HasChildren: true,
+		})
+	}
+	sort.Slice(entries, func(i, j int) bool {
+		if entries[i].IsDir != entries[j].IsDir {
+			return entries[i].IsDir
+		}
+		return entries[i].Name < entries[j].Name
+	})
+	return entries, nil
+}
+
+func appendTreeFilters(q string, args []any, p int, opts store.VaultTreeOptions) (string, []any, int) {
+	q, args, p = appendTeamFilter(q, args, p, opts.TeamID, opts.TeamIDs)
+	if opts.Scope != "" {
+		q += fmt.Sprintf(" AND scope = $%d", p)
+		args = append(args, opts.Scope)
+		p++
+	}
+	if len(opts.DocTypes) > 0 {
+		q += fmt.Sprintf(" AND doc_type = ANY($%d)", p)
+		args = append(args, pqStringArray(opts.DocTypes))
+		p++
+	}
+	return q, args, p
+}
+
+func extractFolderNames(prefix string, deepPaths []string) []string {
+	seen := make(map[string]bool)
+	var folders []string
+	for _, p := range deepPaths {
+		rest := strings.TrimPrefix(p, prefix)
+		if idx := strings.Index(rest, "/"); idx > 0 {
+			seg := rest[:idx]
+			if !seen[seg] {
+				seen[seg] = true
+				folders = append(folders, seg)
+			}
+		}
+	}
+	sort.Strings(folders)
+	return folders
 }
 
