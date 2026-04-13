@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/nextlevelbuilder/goclaw/internal/bgalert"
 	"github.com/nextlevelbuilder/goclaw/internal/bus"
 	"github.com/nextlevelbuilder/goclaw/internal/eventbus"
 	"github.com/nextlevelbuilder/goclaw/internal/providers"
@@ -45,6 +46,7 @@ type EnrichWorkerDeps struct {
 	EventBus      eventbus.DomainEventBus
 	MsgBus        bus.EventPublisher        // for WS event broadcast
 	TeamStore     store.TaskCommentStore    // for Phase 2.5 task-based auto-linking (nil-safe)
+	AlertDeps     bgalert.AlertDeps         // for reporting non-retryable LLM errors
 }
 
 // RegisterEnrichWorker subscribes the enrichment worker to vault doc events.
@@ -57,6 +59,7 @@ func RegisterEnrichWorker(deps EnrichWorkerDeps) (func(), *EnrichProgress, *Enri
 		systemConfigs: deps.SystemConfigs,
 		registry:      deps.Registry,
 		msgBus:        deps.MsgBus,
+		alertDeps:     deps.AlertDeps,
 		dedup:         make(map[string]string),
 		sem:           semaphore.NewWeighted(enrichMaxConcurrent),
 		progress:      progress,
@@ -75,6 +78,7 @@ type EnrichWorker struct {
 	systemConfigs store.SystemConfigStore     // per-tenant provider config
 	registry      *providers.Registry         // provider resolution
 	msgBus        bus.EventPublisher          // for error event broadcast
+	alertDeps     bgalert.AlertDeps           // for reporting non-retryable LLM errors
 	queue         enrichBatchQueue
 	progress      *EnrichProgress
 
@@ -199,6 +203,11 @@ func (w *EnrichWorker) Handle(ctx context.Context, event eventbus.DomainEvent) e
 	key := payload.TenantID
 	if !w.queue.Enqueue(key, payload) {
 		return nil // another goroutine already processing this agent's queue
+	}
+
+	// Inject tenant context so store queries and bgalert scope correctly.
+	if tid, parseErr := uuid.Parse(payload.TenantID); parseErr == nil {
+		ctx = store.WithTenantID(ctx, tid)
 	}
 
 	// Create per-tenant cancel context for stop capability.
@@ -451,7 +460,8 @@ func (w *EnrichWorker) batchSummarize(ctx context.Context, provider providers.Pr
 	})
 	if err != nil {
 		slog.Warn("vault.enrich: batch_summarize", "count", len(paths), "err", err)
-		if w.progress != nil {
+		// Don't report context cancellation as enrichment error — expected during stop.
+		if w.progress != nil && ctx.Err() == nil {
 			w.progress.AddError(fmt.Sprintf("batch summarize failed: %v", err))
 		}
 		return nil
@@ -517,6 +527,7 @@ func (w *EnrichWorker) chatWithRetry(ctx context.Context, provider providers.Pro
 		}
 		return strings.TrimSpace(resp.Content), nil
 	}
+	bgalert.ReportProviderError(ctx, w.alertDeps, "vault_enrich", lastErr)
 	return "", fmt.Errorf("%s exhausted %d retries: %w", logPrefix, enrichMaxRetries, lastErr)
 }
 

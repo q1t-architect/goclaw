@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/nextlevelbuilder/goclaw/internal/agent"
+	"github.com/nextlevelbuilder/goclaw/internal/bgalert"
 	"github.com/nextlevelbuilder/goclaw/internal/bootstrap"
 	"github.com/nextlevelbuilder/goclaw/internal/bus"
 	"github.com/nextlevelbuilder/goclaw/internal/cache"
@@ -209,6 +210,7 @@ func runGateway() {
 				SystemConfigs: pgStores.SystemConfigs,
 				Registry:      providerRegistry,
 				Extractor:     kgExtractor,
+				AlertDeps:     bgalert.AlertDeps{SystemConfigs: pgStores.SystemConfigs, MsgBus: msgBus},
 				AgentStore:    pgStores.Agents,
 			})
 			defer cleanupConsolidation()
@@ -230,6 +232,7 @@ func runGateway() {
 			EventBus:      domainBus,
 			MsgBus:        msgBus,
 			TeamStore:     pgStores.Teams,
+			AlertDeps:     bgalert.AlertDeps{SystemConfigs: pgStores.SystemConfigs, MsgBus: msgBus},
 		})
 		enrichProgress = ep
 		enrichWorker = ew
