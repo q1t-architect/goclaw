@@ -175,7 +175,7 @@ func (t *CreateAudioTool) Execute(ctx context.Context, args map[string]any) *Res
 	}
 
 	result := &Result{ForLLM: fmt.Sprintf("MEDIA:%s\nUse the EXACT filename when referencing: %s", audioPath, filepath.Base(audioPath))}
-	result.Media = []bus.MediaFile{{Path: audioPath, MimeType: "audio/mpeg"}}
+	result.Media = []bus.MediaFile{{Path: audioPath, MimeType: "audio/mpeg", Filename: filepath.Base(audioPath)}}
 	result.Deliverable = fmt.Sprintf("[Generated audio: %s]\nPrompt: %s", filepath.Base(audioPath), prompt)
 	if t.vaultIntc != nil {
 		go t.vaultIntc.AfterWriteMedia(context.WithoutCancel(ctx), audioPath, prompt, "audio/mpeg")

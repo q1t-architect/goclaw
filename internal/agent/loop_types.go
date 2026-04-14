@@ -566,6 +566,11 @@ type RunRequest struct {
 	// user follow-up messages into the running conversation.
 	InjectCh <-chan InjectedMessage
 
+	// OnTraceCreated is called once the trace UUID is determined for this run.
+	// Used by the gateway to associate the trace ID with the active run entry
+	// so force-abort can mark the correct trace as cancelled. Nil = no-op.
+	OnTraceCreated func(traceID uuid.UUID)
+
 	// Delegation context (set when running as a delegate agent)
 	DelegationID  string // delegation ID for event correlation
 	TeamID        string // team ID (if delegation is team-scoped)

@@ -727,6 +727,7 @@ The server pushes events to connected clients via event frames. Key event types:
 | `chunk` | Streaming text chunk |
 | `tool.call` | Tool invocation started |
 | `tool.result` | Tool invocation completed |
+| `trace.status` | Trace status changed (cancelled, completed, error) |
 | `session.updated` | Session metadata changed |
 | `agent.updated` | Agent config changed |
 | `cron.fired` | Cron job triggered |
@@ -737,6 +738,7 @@ The server pushes events to connected clients via event frames. Key event types:
 
 | Event | Description | Payload |
 |-------|-------------|---------|
+| `trace.status` | Trace status changed (real-time stop/abort visibility) | `{traceId, status, endedAt?}` |
 | `evolution.metrics.updated` | New evolution metrics recorded | `{agentId, metricType, toolName, value}` |
 | `evolution.suggestion` | New evolution suggestion generated | `{agentId, suggestionId, type, title}` |
 | `episodic.summary` | New episodic summary created/updated | `{agentId, summaryId, userId}` |
@@ -744,6 +746,25 @@ The server pushes events to connected clients via event frames. Key event types:
 | `vault.document.updated` | Vault document updated | `{agentId, docId, title}` |
 | `orchestration.mode.changed` | Agent orchestration mode changed | `{agentId, newMode}` |
 | `v3flags.changed` | V3 feature flags updated | `{agentId, flags}` |
+
+#### `trace.status` Event
+
+Emitted whenever a trace status changes (e.g., `running` → `cancelled`, `running` → `completed`). Allows UI to update trace state in real-time without polling, particularly critical for stop/abort operations.
+
+**Payload:**
+```json
+{
+  "traceId": "uuid",
+  "status": "cancelled",
+  "endedAt": "2026-04-14T12:34:56.789Z"
+}
+```
+
+**Status values:**
+- `cancelled` — User stopped the trace via `chat.abort`
+- `completed` — Trace finished successfully
+- `error` — Trace failed with an error
+- `running` — Emitted when trace transitions from another state (rare; mostly informational)
 
 ---
 

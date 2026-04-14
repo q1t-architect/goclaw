@@ -31,6 +31,14 @@ func init() {
 		MsgUserIDRequired:    "user_id is required",
 		MsgMsgRequired:       "message is required",
 
+		// Abort
+		MsgAbortStopped:         "run stopped",
+		MsgAbortForced:          "run force-aborted (3s grace exceeded)",
+		MsgAbortAlreadyAborting: "abort already in progress",
+		MsgAbortNotFound:        "run not found or already finished",
+		MsgAbortUnauthorized:    "not authorized to abort this run",
+		MsgAbortFailed:          "failed to abort run: %s",
+
 		// Channel instances
 		MsgInvalidChannelType: "invalid channel_type",
 		MsgInstanceNotFound:   "instance not found",

@@ -302,6 +302,14 @@ func wireTracingAndCron(
 				Payload: map[string]any{"trace_ids": ids},
 			})
 		}
+		// Immediate status broadcast on every successful status write (bypasses 5s flush).
+		traceCollector.SetStatusBroadcaster(func(p tracing.TraceStatusPayload, tid uuid.UUID) {
+			msgBus.Broadcast(bus.Event{
+				Name:     protocol.EventTraceStatusChanged,
+				Payload:  p,
+				TenantID: tid,
+			})
+		})
 		traceCollector.Start()
 		slog.Info("LLM tracing enabled")
 	}

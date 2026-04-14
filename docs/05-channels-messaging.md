@@ -350,6 +350,8 @@ Each update increments a sequence number for ordering. Updates are throttled at 
 | Video | `.mp4` |
 | Sticker | `.png` |
 
+**Filename preservation**: When a user uploads or shares a file with a recognizable name, the channel adapter populates `bus.MediaFile.Filename` with the original filename (e.g., Feishu file display name, Telegram `file_name`). This filename is then sanitized and persisted to disk in the format `{stem}-{8hex}{ext}` (e.g., `báo-cáo-2024-a1b2c3d4.pdf` → `bao-cao-2024-a1b2c3d4.pdf`). The sanitizer supports Vietnamese diacritics, CJK scripts, and filesystem safety. Media without a user-provided filename (voice notes, clipboard pastes) fall back to UUID-only names. Disk names with semantic stems enable vault enrichment to process documents contextually. See `internal/agent/media_filename.go` for sanitization rules.
+
 **Send (outbound)**: Files are uploaded to Feishu with automatic type detection (opus, mp4, pdf, doc, xls, ppt, or generic stream).
 
 ### Mention Resolution

@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
+	"path/filepath"
 	"strings"
 	"time"
 
@@ -137,6 +138,7 @@ func (c *Channel) handleMessage(_ *discordgo.Session, m *discordgo.MessageCreate
 				mediaFiles = append(mediaFiles, bus.MediaFile{
 					Path:     mi.FilePath,
 					MimeType: mi.ContentType,
+					Filename: mi.FileName,
 				})
 			}
 		}
@@ -253,9 +255,11 @@ func (c *Channel) handleMessage(_ *discordgo.Session, m *discordgo.MessageCreate
 			finalContent = annotated
 		}
 		// Collect media from pending history entries (sent before this @mention).
+		// Original filename not retained by CollectMedia; use disk basename so
+		// persistMedia's sanitizer gets a meaningful stem instead of UUID fallback.
 		if histMediaPaths := c.GroupHistory().CollectMedia(channelID); len(histMediaPaths) > 0 {
 			for _, p := range histMediaPaths {
-				mediaFiles = append(mediaFiles, bus.MediaFile{Path: p})
+				mediaFiles = append(mediaFiles, bus.MediaFile{Path: p, Filename: filepath.Base(p)})
 			}
 		}
 	}

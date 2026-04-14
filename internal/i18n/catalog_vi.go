@@ -31,6 +31,14 @@ func init() {
 		MsgUserIDRequired:    "user_id là bắt buộc",
 		MsgMsgRequired:       "tin nhắn là bắt buộc",
 
+		// Abort
+		MsgAbortStopped:         "đã dừng tác vụ",
+		MsgAbortForced:          "buộc dừng tác vụ (vượt quá thời gian chờ 3s)",
+		MsgAbortAlreadyAborting: "đang dừng tác vụ",
+		MsgAbortNotFound:        "không tìm thấy tác vụ hoặc đã kết thúc",
+		MsgAbortUnauthorized:    "không có quyền dừng tác vụ này",
+		MsgAbortFailed:          "không thể dừng tác vụ: %s",
+
 		// Channel instances
 		MsgInvalidChannelType: "loại channel không hợp lệ",
 		MsgInstanceNotFound:   "không tìm thấy phiên bản",

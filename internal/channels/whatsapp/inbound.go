@@ -125,7 +125,7 @@ func (c *Channel) handleIncomingMessage(evt *events.Message) {
 		for _, m := range mediaList {
 			if m.FilePath != "" {
 				mediaFiles = append(mediaFiles, bus.MediaFile{
-					Path: m.FilePath, MimeType: m.ContentType,
+					Path: m.FilePath, MimeType: m.ContentType, Filename: m.FileName,
 				})
 			}
 		}

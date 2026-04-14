@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
+	"path/filepath"
 	"time"
 
 	"github.com/nextlevelbuilder/goclaw/internal/bus"
@@ -251,7 +252,8 @@ func (c *Channel) handleMessageEvent(ctx context.Context, event *MessageEvent) {
 	if mc.ChatType == "group" && c.HistoryLimit() > 0 {
 		if histMediaPaths := c.GroupHistory().CollectMedia(chatID); len(histMediaPaths) > 0 {
 			for _, p := range histMediaPaths {
-				mediaFiles = append(mediaFiles, bus.MediaFile{Path: p}) // cannot use append(slice, other...) — different types
+				// Original filename not retained in pending-history paths; fall back to basename.
+				mediaFiles = append(mediaFiles, bus.MediaFile{Path: p, Filename: filepath.Base(p)}) // cannot use append(slice, other...) — different types
 			}
 		}
 	}
@@ -288,6 +290,7 @@ func (c *Channel) handleMessageEvent(ctx context.Context, event *MessageEvent) {
 				mediaFiles = append(mediaFiles, bus.MediaFile{
 					Path:     m.FilePath,
 					MimeType: m.ContentType,
+					Filename: m.FileName,
 				})
 			}
 		}

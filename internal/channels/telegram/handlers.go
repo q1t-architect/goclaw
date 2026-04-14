@@ -430,6 +430,7 @@ func (c *Channel) handleMessage(ctx context.Context, update telego.Update) {
 				mediaFiles = append(mediaFiles, bus.MediaFile{
 					Path:     m.FilePath,
 					MimeType: m.ContentType,
+					Filename: m.FileName,
 				})
 			}
 		}
@@ -495,6 +496,7 @@ func (c *Channel) handleMessage(ctx context.Context, update telego.Update) {
 					mediaFiles = append(mediaFiles, bus.MediaFile{
 						Path:     m.FilePath,
 						MimeType: m.ContentType,
+						Filename: m.FileName,
 					})
 				}
 				if len(histMedia) > 0 {

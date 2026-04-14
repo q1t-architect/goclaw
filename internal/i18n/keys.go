@@ -32,6 +32,14 @@ const (
 	MsgUserIDRequired    = "error.user_id_required"    // "user_id is required"
 	MsgMsgRequired       = "error.message_required"    // "message is required"
 
+	// --- Abort ---
+	MsgAbortStopped         = "abort.stopped"          // "run stopped"
+	MsgAbortForced          = "abort.forced"           // "run force-aborted (3s grace exceeded)"
+	MsgAbortAlreadyAborting = "abort.already_aborting" // "abort already in progress"
+	MsgAbortNotFound        = "abort.not_found"        // "run not found or already finished"
+	MsgAbortUnauthorized    = "abort.unauthorized"     // "not authorized to abort this run"
+	MsgAbortFailed          = "abort.failed"           // "failed to abort run: %s"
+
 	// --- Channel instances ---
 	MsgInvalidChannelType = "error.invalid_channel_type" // "invalid channel_type"
 	MsgInstanceNotFound   = "error.instance_not_found"   // "instance not found"

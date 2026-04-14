@@ -271,6 +271,9 @@ func runGateway() {
 
 	// Create all agents — resolved lazily from database by the managed resolver.
 	agentRouter := agent.NewRouter()
+	if traceCollector != nil {
+		agentRouter.SetTraceCollector(traceCollector)
+	}
 	slog.Info("agents will be resolved lazily from database")
 
 	// Create gateway server and wire enforcement

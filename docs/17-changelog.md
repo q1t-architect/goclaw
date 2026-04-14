@@ -32,6 +32,42 @@ All notable changes to GoClaw Gateway are documented here. Format follows [Keep 
 
 ## [Unreleased]
 
+### Added
+
+#### Trace Stop/Abort Redesign — Cascading 4-Layer Fix (2026-04-14)
+
+The Stop button on the traces page now reliably aborts running traces. Previous implementation had independent race conditions across HTTP streaming, agent router, trace persistence, and UI polling; this redesign fixes all four layers atomically.
+
+**What changed:**
+- **HTTP streaming ctx-aware**: Provider clients use transport-level `ResponseHeaderTimeout` + `IdleConnTimeout` instead of socket-level `Client.Timeout`. SSE body closes immediately on ctx cancel via goroutine-based wrapper (prevents 5-minute socket block).
+- **Router 2-phase abort**: `AbortRun()` atomically transitions to aborting state, waits 3s for goroutine exit via `Done` channel, then force-marks trace `cancelled` if timeout. No orphaned goroutines, no "not found" race.
+- **Trace status persistence**: `SetTraceStatus()` detached from request context with 5s timeout, 3-try exponential backoff, and bounded in-memory retry queue (10 max tries). Stale recovery worker runs every 30s, catches zombie traces in 2 minutes instead of 30.
+- **Real-time UI updates**: New WS event `trace.status` broadcasts status changes immediately after persist succeeds. UI drops 60s polling interval, subscribes to events instead.
+- **Tool execution audit**: Shell commands use process-group kill (`SIGTERM`→3s→`SIGKILL`). Browser automation (Rod) closes pages on ctx cancel. MCP delegates timeout after 5s.
+- **i18n**: 6 abort toast variants (success/timeout/not-found/already-done/db-error/unknown) + translations for en/vi/zh.
+
+**Impact**: Existing traces and sessions unaffected. UI now reflects backend state accurately. Zero breaking changes.
+
+#### Preserve User-Provided Filenames for Media Uploads (2026-04-14)
+
+Filenames provided by users for chat media uploads now survive the channel adapter → agent → disk persistence round trip, enabling vault enrichment to process human-readable document names instead of falling back to generic UUID-only storage.
+
+**Why**: Vault enrichment was skipping UUID-only disk names (design safety to avoid noisy auto-generated files), causing documents with Vietnamese or CJK stems to remain unenriched and lose semantic context.
+
+**What changed**:
+- **`bus.MediaFile.Filename` field**: Channel adapters now populate this field when source provides original filename (e.g., user-selected file upload, Telegram file_name, WhatsApp display_name)
+- **Sanitizer** (`internal/agent/media_filename.go`): Derives safe stems via `sanitizeFilename()` with:
+  - **Vietnamese pre-NFD map**: `đ/Đ → d` (Unicode NFD does not decompose these precomposed letters)
+  - **CJK passthrough**: Dominant-script heuristic detects Vietnamese/CJK inputs and preserves original runes (no ASCII slugification)
+  - **Filesystem safety**: Removes control chars, path traversal markers (`..`, `/`, `\\`), and reserved names
+  - **Max length**: 60 runes (script-aware, not byte-based) to avoid platform path limits
+- **Disk naming scheme**: `{sanitized-stem}-{8hex}{ext}` (e.g., `bao-cao-q4-a1b2c3d4.pdf`) when sanitizer returns non-empty stem; UUID fallback `{uuid}{ext}` for empty stems (voice notes, clipboard pastes, tool-generated media)
+- **Vault enrichment gating** (`internal/vault/enrich_skip_filter.go`): Now skips UUID-only filenames (matching `^[0-9a-f]{8}-...$` pattern) while processing named stems
+- **6 channel adapters wired**: Telegram, Slack, Discord, Feishu/Lark, Zalo OA, WhatsApp all set `MediaFile.Filename` when available
+- **Tools + orchestration**: `web_search` tool (PDF downloads), delegate/subagent media propagation, all preserve filenames end-to-end
+
+**Impact**: Existing flows with empty `Filename` are unaffected (UUID-named as before). New flows with filenames produce human-readable, enrichable disk names. Zero breaking changes.
+
 ### Security
 
 #### Tenant-Scope Hotfix (2026-04-12)
