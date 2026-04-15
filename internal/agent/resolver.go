@@ -14,6 +14,7 @@ import (
 	"github.com/nextlevelbuilder/goclaw/internal/bus"
 	"github.com/nextlevelbuilder/goclaw/internal/config"
 	"github.com/nextlevelbuilder/goclaw/internal/eventbus"
+	"github.com/nextlevelbuilder/goclaw/internal/hooks"
 	"github.com/nextlevelbuilder/goclaw/internal/memory"
 	mcpbridge "github.com/nextlevelbuilder/goclaw/internal/mcp"
 	"github.com/nextlevelbuilder/goclaw/internal/media"
@@ -121,6 +122,9 @@ type ResolverDeps struct {
 
 	// V3 domain event bus for consolidation pipeline (nil = disabled)
 	DomainBus eventbus.DomainEventBus
+
+	// HookDispatcher fires lifecycle hook events (Issue #875). Nil = noop.
+	HookDispatcher hooks.Dispatcher
 
 	// Vault hook: called when a text file is uploaded by user (nil = no vault registration)
 	OnTextUploaded func(ctx context.Context, path, content string)
@@ -469,6 +473,7 @@ func NewManagedResolver(deps ResolverDeps) ResolverFunc {
 			SandboxCfg:             sandboxCfgOverride,
 			Bus:                    deps.Bus,
 			DomainBus:              deps.DomainBus,
+			HookDispatcher:         deps.HookDispatcher,
 			Sessions:               deps.Sessions,
 			Tools:                  toolsReg,
 			ToolPolicy:             deps.ToolPolicy,

@@ -7,6 +7,7 @@ import (
 	"github.com/nextlevelbuilder/goclaw/internal/bootstrap"
 	"github.com/nextlevelbuilder/goclaw/internal/config"
 	"github.com/nextlevelbuilder/goclaw/internal/eventbus"
+	"github.com/nextlevelbuilder/goclaw/internal/hooks"
 	"github.com/nextlevelbuilder/goclaw/internal/providers"
 	"github.com/nextlevelbuilder/goclaw/internal/tokencount"
 	"github.com/nextlevelbuilder/goclaw/internal/workspace"
@@ -26,6 +27,8 @@ type PipelineDeps struct {
 	TokenCounter tokencount.TokenCounter
 	EventBus     eventbus.DomainEventBus
 	Config       PipelineConfig
+	// Hooks is the hook dispatcher. nil = no hooks (zero-overhead fast path).
+	Hooks hooks.Dispatcher
 
 	// ResolveContextWindow returns the effective context window (in tokens) for
 	// a given provider/model pair. Nil = always use Config.ContextWindow.
@@ -105,6 +108,15 @@ type PipelineDeps struct {
 	UpdateMetadata         func(ctx context.Context, sessionKey string, usage providers.Usage) error
 	BootstrapCleanup       func(ctx context.Context, state *RunState) error
 	MaybeSummarize         func(ctx context.Context, sessionKey string)
+}
+
+// FireHook is nil-safe. Returns DecisionAllow when no dispatcher is wired.
+// Callers on blocking events should abort the stage on DecisionBlock.
+func (d *PipelineDeps) FireHook(ctx context.Context, ev hooks.Event) (hooks.Decision, error) {
+	if d == nil || d.Hooks == nil {
+		return hooks.DecisionAllow, nil
+	}
+	return d.Hooks.Fire(ctx, ev)
 }
 
 // PipelineConfig holds pipeline-level settings.

@@ -59,6 +59,15 @@ func depthFromCtx(ctx context.Context) int {
 	return 0
 }
 
+// DepthFrom returns the current hook loop depth from ctx (0 if unset).
+func DepthFrom(ctx context.Context) int { return depthFromCtx(ctx) }
+
+// IncDepth returns a new ctx with depth incremented by 1.
+// Callers wrapping sub-agent invocations must call this before re-entering.
+func IncDepth(ctx context.Context) context.Context {
+	return WithDepth(ctx, depthFromCtx(ctx)+1)
+}
+
 // StdDispatcherOpts configures the production dispatcher. Unset fields fall
 // back to the default* constants above.
 type StdDispatcherOpts struct {

@@ -11,6 +11,7 @@ import (
 
 	"github.com/nextlevelbuilder/goclaw/internal/bus"
 	"github.com/nextlevelbuilder/goclaw/internal/eventbus"
+	"github.com/nextlevelbuilder/goclaw/internal/hooks"
 	"github.com/nextlevelbuilder/goclaw/internal/store"
 )
 
@@ -43,15 +44,19 @@ type DelegateRequest struct {
 // DelegateTool implements the `delegate` tool for inter-agent task delegation.
 // Uses existing agent_links infrastructure for permission checks.
 type DelegateTool struct {
-	links    store.AgentLinkStore
-	agents   store.AgentCRUDStore
-	eventBus eventbus.DomainEventBus
-	runFn    DelegateRunFunc
-	msgBus   *bus.MessageBus // for async announce back to parent
+	links          store.AgentLinkStore
+	agents         store.AgentCRUDStore
+	eventBus       eventbus.DomainEventBus
+	runFn          DelegateRunFunc
+	msgBus         *bus.MessageBus  // for async announce back to parent
+	hookDispatcher hooks.Dispatcher // optional; nil-safe
 }
 
 // SetMsgBus sets the message bus for async result delivery to parent agent.
 func (t *DelegateTool) SetMsgBus(mb *bus.MessageBus) { t.msgBus = mb }
+
+// SetHookDispatcher sets the hook dispatcher for SubagentStart/Stop events.
+func (t *DelegateTool) SetHookDispatcher(d hooks.Dispatcher) { t.hookDispatcher = d }
 
 // NewDelegateTool creates a delegate tool.
 func NewDelegateTool(links store.AgentLinkStore, agents store.AgentCRUDStore, eb eventbus.DomainEventBus, runFn DelegateRunFunc) *DelegateTool {
@@ -157,6 +162,39 @@ func (t *DelegateTool) Execute(ctx context.Context, args map[string]any) *Result
 		Mode:         mode,
 	})
 
+	// Fire SubagentStart hook (blocking). Nil-safe: skip if no dispatcher.
+	if t.hookDispatcher != nil {
+		evt := hooks.Event{
+			EventID:   uuid.NewString(),
+			SessionID: req.SessionKey,
+			TenantID:  parseUUIDOrNil(req.TenantID),
+			AgentID:   req.FromAgentID,
+			HookEvent: hooks.EventSubagentStart,
+			Depth:     hooks.DepthFrom(ctx),
+		}
+		dec, err := t.hookDispatcher.Fire(ctx, evt)
+		if err != nil {
+			t.emitEvent(ctx, eventbus.EventDelegateFailed, eventbus.DelegateFailedPayload{
+				DelegationID: req.DelegationID,
+				FromAgent:    req.FromAgentKey,
+				ToAgent:      req.ToAgentKey,
+				Error:        fmt.Sprintf("subagent_start hook error: %v", err),
+			})
+			return ErrorResult(fmt.Sprintf("subagent_start hook error: %v", err))
+		}
+		if dec == hooks.DecisionBlock {
+			t.emitEvent(ctx, eventbus.EventDelegateFailed, eventbus.DelegateFailedPayload{
+				DelegationID: req.DelegationID,
+				FromAgent:    req.FromAgentKey,
+				ToAgent:      req.ToAgentKey,
+				Error:        "blocked by subagent_start hook",
+			})
+			return ErrorResult(fmt.Sprintf("delegation to %q blocked by hook policy", req.ToAgentKey))
+		}
+		// Increment depth so nested delegate calls honor MaxLoopDepth.
+		ctx = hooks.IncDepth(ctx)
+	}
+
 	if mode == "sync" {
 		return t.executeSyncMode(ctx, req, timeoutSec)
 	}
@@ -261,6 +299,15 @@ func (t *DelegateTool) announceToParent(req DelegateRequest, content string, med
 			MetaParentAgent:      req.FromAgentKey,
 		},
 	})
+}
+
+// parseUUIDOrNil parses s as a UUID; returns uuid.Nil on failure.
+func parseUUIDOrNil(s string) uuid.UUID {
+	id, err := uuid.Parse(s)
+	if err != nil {
+		return uuid.Nil
+	}
+	return id
 }
 
 func (t *DelegateTool) emitEvent(ctx context.Context, eventType eventbus.EventType, payload any) {

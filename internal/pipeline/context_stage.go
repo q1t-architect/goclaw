@@ -5,8 +5,11 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/google/uuid"
 	"github.com/nextlevelbuilder/goclaw/internal/bootstrap"
+	"github.com/nextlevelbuilder/goclaw/internal/hooks"
 	"github.com/nextlevelbuilder/goclaw/internal/providers"
+	"github.com/nextlevelbuilder/goclaw/internal/store"
 )
 
 // ContextStage runs once in setup. Resolves workspace, loads context files,
@@ -24,6 +27,31 @@ func (s *ContextStage) Name() string { return "context" }
 
 // Execute populates RunState with workspace, context files, system prompt, and overhead tokens.
 func (s *ContextStage) Execute(ctx context.Context, state *RunState) error {
+	// Hook: async SessionStart — best-effort, fires every execute call.
+	// TODO: add first-iteration-only gate once RunState.Iteration tracking is confirmed stable.
+	if s.deps != nil && s.deps.Hooks != nil {
+		go s.deps.FireHook(ctx, hooks.Event{ //nolint:errcheck
+			EventID:   uuid.NewString(),
+			SessionID: state.Input.SessionKey,
+			TenantID:  store.TenantIDFromContext(ctx),
+			AgentID:   store.AgentIDFromContext(ctx),
+			RawInput:  state.Input.Message,
+			HookEvent: hooks.EventSessionStart,
+		})
+	}
+
+	// Hook: sync UserPromptSubmit — blocking; abort if blocked.
+	if dec, _ := s.deps.FireHook(ctx, hooks.Event{
+		EventID:   uuid.NewString(),
+		SessionID: state.Input.SessionKey,
+		TenantID:  store.TenantIDFromContext(ctx),
+		AgentID:   store.AgentIDFromContext(ctx),
+		RawInput:  state.Input.Message,
+		HookEvent: hooks.EventUserPromptSubmit,
+	}); dec == hooks.DecisionBlock {
+		return fmt.Errorf("hook blocked user_prompt_submit")
+	}
+
 	// 0. Inject context values (agent/tenant/user/workspace scoping, input guard, truncation).
 	// Wraps injectContext() for v3 pipeline — called once before all other context setup.
 	if s.deps.InjectContext != nil {
@@ -181,4 +209,3 @@ func toAnySlice(files []bootstrap.ContextFile) []any {
 	}
 	return out
 }
-

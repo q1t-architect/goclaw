@@ -26,12 +26,35 @@ Lifecycle hook infrastructure: event dispatcher (sync/async paths), audit loggin
 ### Testing
 - **Integration test suite**: `tests/integration/v3_hooks_store_test.go` covers multi-tenant isolation, dedup key uniqueness, schema migration up/down for both PG + SQLite
 
-### Deferred to Phase 2+
-- Handler implementations (command/http/prompt)
-- Pipeline wiring (ContextStage, ToolStage, FinalizeStage, delegate integration)
+### Deferred to Phase 3+
+- Prompt handler (modifies input/context dynamically)
 - Web UI (CRUD, test panel, history)
 - Tracing integration
 - i18n keys (en/vi/zh)
+
+---
+
+#### Agent Hooks System — Phase 2: Handlers + Pipeline Integration (2026-04-15)
+
+Concrete handler implementations + pipeline wiring. Command handler (shell, Lite-only), HTTP handler (SSRF-hardened), synced at ContextStage/ToolStage/FinalizeStage, async at SessionStart/PostToolUse/Stop, delegate bridging (SubagentStart/SubagentStop).
+
+### Added
+- **`internal/hooks/handlers/` package**: `CommandHandler` (exec wrapper, JSON I/O, env allowlist, edition policy recheck), `HTTPHandler` (SSRF-hardened HTTP client, retry-once on 5xx, 4xx error no-retry, response parsing for decision/context/updatedInput)
+- **Pipeline dispatcher integration**: `PipelineDeps.HookDispatcher` field (nil-safe noop fallback); stages call `deps.Hooks.Fire(ctx, evt)` at: ContextStage (SessionStart async + UserPromptSubmit sync), ToolStage (PreToolUse sync before exec + PostToolUse async), FinalizeStage (Stop async)
+- **Copy-on-write staging**: UserPromptSubmit + PreToolUse updatedInput buffered per-call; commit only when ALL sync hooks succeed; rejection/timeout discards buffer (H2)
+- **Delegate event bridge**: `delegate_bridge.go` subscribes DelegateCompleted/DelegateFailed events from domain bus, fires SubagentStop async; SubagentStart sync fired directly in delegate_tool pre-call
+- **Command handler edition gating**: Re-checks `HookEditionPolicy` at dispatch (defense-in-depth); Lite-only with master-scope block on Standard tenant
+- **HTTP handler SSRF hardening**: Uses caller-supplied net.Dialer that pins resolved IP, blocks loopback/link-local/private ranges; auth headers (e.g. Authorization) encrypted at rest in cfg.Config["headers"], decrypted only at send-time; no redirects allowed (CheckRedirect returns ErrUseLastResponse)
+- **Server wiring**: `cmd/gateway_managed.go` constructs `hooks.NewStdDispatcher` with both handlers registered; passes dispatcher through `agent.ResolverDeps.HookDispatcher` and `delegateTool.SetHookDispatcher(...)`; falls back to `hooks.NewNoopDispatcher()` when `stores.Hooks` is nil
+- **Encryption key handling**: Reads `GOCLAW_ENCRYPTION_KEY` env for HTTP handler header decryption; optional (empty → no decryption)
+
+### Testing
+- **Unit tests**: `internal/hooks/handlers/command_test.go` (8 tests — exit codes, timeout, env allowlist, edition gate, ctx cancel), `http_test.go` (9 tests — response parsing, retry logic, SSRF blocking pre+post DNS, no redirects, auth header security)
+- **Integration tests**: `tests/integration/hooks_pipeline_test.go` (4 tests — SessionStart async, UserPromptSubmit block + context + updatedInput COW, PreToolUse block + args mutation, PostToolUse async, zero-overhead no-hooks path); `tests/integration/hooks_delegate_test.go` — SubagentStart/Stop with loop-depth guard M5
+
+### Changed
+- **Pipeline architecture**: 8-stage loop now fires hooks via `PipelineDeps.Dispatcher`; stage callbacks support nil-safe dispatcher (noop when not configured)
+- **Delegate tool**: `delegateTool.SetHookDispatcher(...)` enables async SubagentStop via existing domain events
 
 ---
 

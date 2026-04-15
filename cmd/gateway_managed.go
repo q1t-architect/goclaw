@@ -5,7 +5,9 @@ import (
 	"encoding/json"
 	"fmt"
 	"log/slog"
+	"os"
 	"path/filepath"
+	"time"
 
 	"github.com/google/uuid"
 
@@ -14,9 +16,11 @@ import (
 	"github.com/nextlevelbuilder/goclaw/internal/agent"
 	"github.com/nextlevelbuilder/goclaw/internal/bus"
 	"github.com/nextlevelbuilder/goclaw/internal/config"
-	"github.com/nextlevelbuilder/goclaw/internal/orchestration"
 	"github.com/nextlevelbuilder/goclaw/internal/edition"
 	"github.com/nextlevelbuilder/goclaw/internal/eventbus"
+	"github.com/nextlevelbuilder/goclaw/internal/hooks"
+	hookhandlers "github.com/nextlevelbuilder/goclaw/internal/hooks/handlers"
+	"github.com/nextlevelbuilder/goclaw/internal/orchestration"
 	httpapi "github.com/nextlevelbuilder/goclaw/internal/http"
 	kg "github.com/nextlevelbuilder/goclaw/internal/knowledgegraph"
 	mcpbridge "github.com/nextlevelbuilder/goclaw/internal/mcp"
@@ -24,6 +28,7 @@ import (
 	memorypkg "github.com/nextlevelbuilder/goclaw/internal/memory"
 	"github.com/nextlevelbuilder/goclaw/internal/providers"
 	"github.com/nextlevelbuilder/goclaw/internal/sandbox"
+	"github.com/nextlevelbuilder/goclaw/internal/security"
 	"github.com/nextlevelbuilder/goclaw/internal/skills"
 	"github.com/nextlevelbuilder/goclaw/internal/store"
 	"github.com/nextlevelbuilder/goclaw/internal/store/pg"
@@ -144,6 +149,26 @@ func wireExtras(
 	// vaultIntc is set later by wireVault but captured by closure in OnTextUploaded.
 	var vaultIntc *tools.VaultInterceptor
 
+	// Agent Hooks (Issue #875) — lifecycle dispatcher + handlers.
+	var hookDispatcher hooks.Dispatcher = hooks.NewNoopDispatcher()
+	if hs, ok := stores.Hooks.(hooks.HookStore); ok && hs != nil {
+		encryptKey := os.Getenv("GOCLAW_ENCRYPTION_KEY")
+		stdOpts := hooks.StdDispatcherOpts{
+			Store: hs,
+			Audit: hooks.NewAuditWriter(hs, ""),
+			Handlers: map[hooks.HandlerType]hooks.Handler{
+				hooks.HandlerCommand: &hookhandlers.CommandHandler{Edition: edition.Current()},
+				hooks.HandlerHTTP: &hookhandlers.HTTPHandler{
+					EncryptKey: encryptKey,
+					Client:     security.NewSafeClient(10 * time.Second),
+				},
+			},
+		}
+		hookDispatcher = hooks.NewStdDispatcher(stdOpts)
+		hooks.SubscribeDelegateEvents(domainBus, hookDispatcher)
+		slog.Info("agent hooks dispatcher wired", "handlers", "command,http")
+	}
+
 	resolver := agent.NewManagedResolver(agent.ResolverDeps{
 		AgentStore:             stores.Agents,
 		ProviderStore:          stores.Providers,
@@ -191,6 +216,7 @@ func wireExtras(
 		AutoInjector:           autoInjector,
 		EvolutionMetricsStore:  stores.EvolutionMetrics,
 		DomainBus:              domainBus,
+		HookDispatcher:         hookDispatcher,
 		OnTextUploaded: func(ctx context.Context, path, content string) {
 			if vaultIntc != nil {
 				vaultIntc.AfterWrite(ctx, path, content)
@@ -426,6 +452,7 @@ func wireExtras(
 		}
 		delegateTool := tools.NewDelegateTool(stores.AgentLinks, stores.Agents, domainBus, delegateRunFn)
 		delegateTool.SetMsgBus(msgBus)
+		delegateTool.SetHookDispatcher(hookDispatcher)
 		toolsReg.Register(delegateTool)
 		slog.Info("delegate tool wired")
 	}

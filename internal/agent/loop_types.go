@@ -12,6 +12,7 @@ import (
 	"github.com/nextlevelbuilder/goclaw/internal/bus"
 	"github.com/nextlevelbuilder/goclaw/internal/config"
 	"github.com/nextlevelbuilder/goclaw/internal/eventbus"
+	"github.com/nextlevelbuilder/goclaw/internal/hooks"
 	mcpbridge "github.com/nextlevelbuilder/goclaw/internal/mcp"
 	"github.com/nextlevelbuilder/goclaw/internal/media"
 	"github.com/nextlevelbuilder/goclaw/internal/memory"
@@ -249,6 +250,11 @@ type Loop struct {
 	// Note: in-memory only — timestamps reset on process restart (one extra prune
 	// per session on restart, then steady-state resumes).
 	cacheTouchBySession sync.Map
+
+	// hookDispatcher fires lifecycle hook events (Issue #875). Nil-safe: when
+	// nil the pipeline fast-path skips all hook overhead. Populated from
+	// LoopConfig.HookDispatcher during startup wiring.
+	hookDispatcher hooks.Dispatcher
 }
 
 // AgentEvent is emitted during agent execution for WS broadcasting.
@@ -303,6 +309,7 @@ type LoopConfig struct {
 
 	Bus             bus.EventPublisher
 	DomainBus       eventbus.DomainEventBus // V3 domain event bus for consolidation pipeline
+	HookDispatcher  hooks.Dispatcher        // lifecycle hook dispatcher (nil = noop)
 	Sessions        store.SessionStore
 	Tools           *tools.Registry
 	ToolPolicy      *tools.PolicyEngine    // optional: filters tools sent to LLM
@@ -481,6 +488,7 @@ func NewLoop(cfg LoopConfig) *Loop {
 		sandboxCfg:             cfg.SandboxCfg,
 		eventPub:               cfg.Bus,
 		domainBus:              cfg.DomainBus,
+		hookDispatcher:         cfg.HookDispatcher,
 		sessions:               cfg.Sessions,
 		tools:                  cfg.Tools,
 		toolPolicy:             cfg.ToolPolicy,

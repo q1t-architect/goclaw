@@ -184,6 +184,13 @@ func (ch *Channel) Send(ctx context.Context, msg bus.OutboundMessage) error {
 		return fmt.Errorf("pancake: chat_id (conversation_id) is required for outbound message")
 	}
 
+	// NO_REPLY / suppressed-error path: empty content with no media means the
+	// caller wants downstream cleanup only. Pancake API rejects empty payloads,
+	// so short-circuit before dispatch.
+	if msg.Content == "" && len(msg.Media) == 0 {
+		return nil
+	}
+
 	switch msg.Metadata["pancake_mode"] {
 	case "comment":
 		return ch.sendCommentReply(ctx, msg)

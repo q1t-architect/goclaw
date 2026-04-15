@@ -51,6 +51,7 @@ func (l *Loop) buildPipelineDeps(req *RunRequest, bridgeRS *runState) pipeline.P
 	return pipeline.PipelineDeps{
 		TokenCounter: tokencount.NewTiktokenCounter(),
 		EventBus:     l.domainBus,
+		Hooks:        l.hookDispatcher,
 		Config: pipeline.PipelineConfig{
 			MaxIterations:      maxIter,
 			MaxToolCalls:       l.maxToolCalls,

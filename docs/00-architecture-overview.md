@@ -144,7 +144,67 @@ flowchart TD
 | `internal/workspace/` | Workspace context resolver: 6 scenarios (agent default, team lead, team member, dispatch, subagent, cron) |
 | `internal/vault/` | Knowledge Vault: wikilinks (semantic mesh), hybrid search (BM25+vector), filesystem sync, L0 auto-injection |
 | `internal/channels/whatsapp/` | Native WhatsApp channel via whatsmeow (replaces WhatsApp API), QR auth, media handling |
-| `internal/hooks/` | Agent lifecycle hooks: event dispatcher (sync/async), handlers (command/http/prompt), matchers (regex + CEL), audit logging, edition gating, cost safeguards |
+| `internal/hooks/` | Agent lifecycle hooks: event dispatcher (sync/async), concrete handlers (command/http), matchers (regex + CEL), audit logging, edition gating, cost safeguards. Events: SessionStart, UserPromptSubmit, PreToolUse, PostToolUse, Stop, SubagentStart/Stop. Handlers: CommandHandler (shell, Lite-only), HTTPHandler (SSRF-hardened, auth decrypt) |
+| `internal/hooks/handlers/` | Concrete hook handler implementations: `CommandHandler` (exec wrapper, JSON I/O, env allowlist, edition recheck), `HTTPHandler` (SSRF-hardened HTTP client, retry-once on 5xx, no redirects, encrypted auth headers) |
+
+---
+
+## 3.5 Agent Hooks System
+
+**Lifecycle hooks** allow agents to perform custom logic at key execution points. The system is event-driven (sync/async), integrated into the 8-stage pipeline, and includes audit logging, edition gating, and security safeguards.
+
+### Event Types
+
+| Event | Stage | Sync/Async | Purpose |
+|-------|-------|-----------|---------|
+| **SessionStart** | ContextStage | Async | Fires once per session (first turn); before history loading |
+| **UserPromptSubmit** | ContextStage | Sync | Fires on user message arrival; blocks with hook reason or mutates input |
+| **PreToolUse** | ToolStage | Sync | Fires before each tool execution; blocks tool or mutates arguments |
+| **PostToolUse** | ToolStage | Async | Fires after tool result is processed; non-blocking |
+| **Stop** | FinalizeStage | Async | Fires when session terminates (stop/complete/error) |
+| **SubagentStart** | (Delegate tool) | Sync | Fires before delegated task spawns; blocks delegation |
+| **SubagentStop** | (Domain events) | Async | Fires on delegation completion/failure; non-blocking |
+
+### Handler Types
+
+| Handler | Edition | Config | Semantics |
+|---------|---------|--------|-----------|
+| **Command** | Lite only | `cmd`, `allowedEnvVars` | Exec shell command; stdin=event JSON; stdout=decision JSON; exit 0→allow, exit 2→block; timeout→block (fail-closed) |
+| **HTTP** | All | `url`, `headers` | POST event JSON to webhook URL; parse response for decision, additionalContext, updatedInput; 5xx retry once; 4xx error no-retry; SSRF-hardened with pinned IP |
+| **Prompt** | Phase 3+ | TBD | Integrates custom prompting logic (deferred) |
+
+### Sync vs Async
+
+**Sync hooks** (UserPromptSubmit, PreToolUse, SubagentStart):
+- Block pipeline until decision received
+- Support Copy-on-Write (COW) staged mutations: `updatedInput` buffered, committed only if ALL sync hooks succeed
+- Timeout ≤5s per hook; chain total ≤10s wall-time
+- Rejection blocks the step (e.g., tool not executed, user message not processed)
+
+**Async hooks** (SessionStart, PostToolUse, Stop, SubagentStop):
+- Fire-and-forget via worker pool (default 16 workers, bounded queue 512)
+- Non-blocking (pipeline continues immediately)
+- Timeout per hook; chain budget enforced but no blocking
+
+### Security Model
+
+- **Edition gating**: `CommandHandler` only on Lite edition; attempts on Standard/other editions rejected (defense-in-depth)
+- **SSRF hardening (HTTPHandler)**: Caller supplies net.Dialer pinning resolved IP, blocking loopback/link-local/private ranges; no HTTP redirects (CheckRedirect returns ErrUseLastResponse)
+- **Auth header encryption**: `Authorization` + other sensitive fields in cfg.Config["headers"] encrypted at rest via AES-256-GCM; decrypted only at HTTP send-time
+- **Audit logging**: All hook invocations logged to `hook_executions` table (encrypted, PII-redacted) with dedup_key for idempotency
+- **Loop-depth guard (M5)**: SubagentStart checks recursion depth; max 3 levels prevents infinite delegation chains
+- **Circuit breaker**: Auto-disables hook after 3 consecutive failures in recent window (C4 mitigation)
+
+### Pipeline Integration
+
+Dispatcher wired into `PipelineDeps.HookDispatcher` (nil-safe noop fallback). All 8 stages support hook firing with zero overhead when dispatcher not configured. Example sync hook flow:
+
+```
+1. ContextStage: UserPromptSubmit → Hooks.Fire(sync)
+2. Sync hooks buffer mutations (updatedInput)
+3. All hooks succeed? → Commit mutations, proceed
+4. Any hook rejects? → Discard buffer, abort pipeline, user sees reason
+```
 
 ---
 
