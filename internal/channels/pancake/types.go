@@ -14,8 +14,11 @@ type pancakeCreds struct {
 
 // pancakeInstanceConfig holds non-secret config from channel_instances.config JSONB.
 type pancakeInstanceConfig struct {
-	PageID   string `json:"page_id"`
-	Platform string `json:"platform,omitempty"` // auto-detected at Start(): facebook/zalo/instagram/tiktok/whatsapp/line
+	PageID        string `json:"page_id"`
+	WebhookPageID string `json:"webhook_page_id,omitempty"` // native platform page ID sent in webhooks (e.g. Facebook page ID vs Pancake internal ID)
+	Platform      string `json:"platform,omitempty"` // set explicitly via UI; auto-detected at Start() as fallback for existing channels
+	// Known values: facebook/instagram/threads/tiktok/youtube/shopee/line/google/chat_plugin/lazada/tokopedia
+	// Excluded (have native channel implementations): telegram/zalo/whatsapp
 	Features struct {
 		InboxReply   bool `json:"inbox_reply"`
 		CommentReply bool `json:"comment_reply"`
@@ -92,7 +95,7 @@ type MessagingData struct {
 	ConversationID string
 	PostID         string // present for COMMENT events; empty for INBOX
 	Type           string // "INBOX" or "COMMENT"
-	Platform       string // "facebook", "zalo", "instagram", "tiktok", "whatsapp", "line"
+	Platform       string // platform identifier from Pancake: facebook/instagram/tiktok/line/etc. See pancakeInstanceConfig.Platform for full list.
 	AssigneeIDs    []string
 	Message        MessagingMessage
 }
@@ -120,6 +123,7 @@ type PageInfo struct {
 type SendMessageRequest struct {
 	Action     string   `json:"action"`
 	Message    string   `json:"message,omitempty"`
+	MessageID  string   `json:"message_id,omitempty"`  // required for reply_comment: ID of the comment being replied to
 	ContentIDs []string `json:"content_ids,omitempty"`
 }
 
