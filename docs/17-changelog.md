@@ -6,37 +6,47 @@ All notable changes to GoClaw Gateway are documented here. Format follows [Keep 
 
 ## [Unreleased] — 2026-04-15
 
-#### ElevenLabs Audio Manager Refactor — Phase 6 (2026-04-15)
+#### Agent Hooks System — Phase 1: Foundation (2026-04-15)
 
-Desktop UI parity: voice picker + STT admin form ported from web to Wails desktop frontend. Completes 6-phase plan; all audio surfaces (TTS/STT/Music/SFX) now manageable from both web and desktop Lite editions.
+Lifecycle hook infrastructure: event dispatcher (sync/async paths), audit logging, database schema (PostgreSQL + SQLite), store interface, config validation, edition gating. Handlers + pipeline integration deferred to Phase 2.
 
 ### Added
-- **Desktop voice picker**: `ui/desktop/frontend/src/components/agents/voice-picker.tsx` — uses desktop's native Combobox primitive; embedded in `AgentDetailPanel` with `other_config.tts_voice_id` persistence via spread-merge pattern
-- **Desktop voice preview button**: `ui/desktop/frontend/src/components/agents/voice-preview-button.tsx` — singleton `<audio>` (module-level `currentAudio` ref); hidden when `preview_url` absent (resolves P6-L)
-- **Desktop STT admin form**: `ui/desktop/frontend/src/components/builtin-tools/stt-provider-form.tsx` — mirrors web fields + `whatsapp_enabled` toggle + privacy banner; routed via `ToolSettingsDialog` when `tool.name === 'stt'`
-- **Desktop voices service + hook**: `services/voices.ts` (`listVoices`, `refreshVoices`) + `hooks/use-voices.ts` (plain useState/useEffect — no React Query on desktop; mirrors web hook shape)
-- **Desktop Vitest infrastructure**: `vitest.config.ts` + `test/setup.ts` (jsdom + jest-dom + HTMLMediaElement mock) — resolves P6-H3 (desktop tests previously impossible)
-- **Desktop i18n `tts` namespace**: `i18n/locales/{en,vi,zh}/tts.json` (15 → 16 total namespaces registered in `i18n/index.ts`) + `tools.json` extended with `builtin.sttForm.*` keys
-- **Desktop component tests**: voice picker (4 tests) + STT form (3 tests) — parity subset covering render, save, preview, privacy banner
+- **`internal/hooks/` package**: Foundational types (HookConfig, HookExecution, Event), StdDispatcher (fire-and-decide with sequential execution), CEL+regex matcher, audit writer (PII-redacted, encrypted), circuit breaker with auto-disable
+- **PostgreSQL migration 000052**: `agent_hooks` table (id, tenant_id, agent_id, event, handler_type, config, matcher, if_expr, priority, enabled, created_at, updated_at) + `hook_executions` table (hook_id, session_id, event, input_hash, decision, duration_ms, error, created_at) with unique dedup_key index
+- **SQLite schema entries**: Full schema in `schema.sql` + migration map bump for Lite/desktop edition
+- **HookStore interface + implementations**: `PGHookStore` (database/sql + pgx/v5) and `SQLiteHookStore` (modernc.org/sqlite) with List, Create, Update, Delete, LogExecution methods
+- **Security primitives**: Loop-depth guard (M5 mitigation, MaxLoopDepth=3), per-hook timeout, chain budget (10s wall-time), circuit breaker with auto-disable (C4 mitigation), fail-closed policy for blocking events
+- **Edition gating**: `HookEditionPolicy` allows command handler on Lite only; master-scope blocks command on Standard tenant
+- **Config validation**: CEL cost limits, required matcher for prompt handlers, bounded queue per-turn limits
 
 ### Changed
-- **Desktop `AgentDetailPanel`**: Added `ttsVoiceId` local state + `onSaveWithVoice` wrapper that preserves existing `other_config` fields via spread-merge before overwriting `tts_voice_id`
-- **Desktop `ToolSettingsDialog`**: Added `tool.name === 'stt'` routing branch before JsonSettingsForm fallback; existing `web_fetch` + MEDIA_TOOLS routing unchanged
-- **Desktop `package.json`**: Added devDeps (`vitest`, `@testing-library/react`, `@testing-library/jest-dom`, `jsdom`, `@vitejs/plugin-react`) + `test` / `test:watch` npm scripts
+- **Store layer**: Added `store.Hooks` field (typed as `any` to avoid import cycles)
+- **Base store**: `TablesWithUpdatedAt["agent_hooks"] = true` for touch-all update helpers
 
-### Resolved
-- **Audit finding P6-B1**: Gate G5 verified — Phase 5 merged green before Phase 6 work began
-- **Audit finding P6-B2**: Desktop path rewrite confirmed — no `pages/` dir used; component composition via `AgentDetailPanel` + `ToolSettingsDialog`
-- **Audit finding P6-B3**: `tts.json` namespace created + registered in desktop `i18n/index.ts` (web-desktop i18n parity)
-- **Audit finding P6-H1**: `tools.json` extended with STT labels; `tts.json` created per Decision 4
-- **Audit finding P6-H2**: SttProviderForm integration point identified (`ToolSettingsDialog.tsx` name-routing) + wired
-- **Audit finding P6-H3**: Vitest installed + configured in desktop frontend (was previously absent)
-- **Audit finding P6-L**: Voice preview button hidden (not disabled) when `preview_url` null/empty
-- **Audit finding P6-M** (codec): MP3 + Opus codec smoke test remains on manual verification checklist (user to confirm on macOS WKWebView + Windows WebView2)
-- **Cross-phase XP-5**: Desktop paths confirmed — `components/agents/`, `components/builtin-tools/`, `services/`, `hooks/` (no `pages/`)
+### Testing
+- **Integration test suite**: `tests/integration/v3_hooks_store_test.go` covers multi-tenant isolation, dedup key uniqueness, schema migration up/down for both PG + SQLite
 
-### Deferred
-- **Manual smoke test**: `wails dev -tags sqliteonly` voice picker save + STT form submit + codec playback requires user verification (cannot run headless in automation)
+### Deferred to Phase 2+
+- Handler implementations (command/http/prompt)
+- Pipeline wiring (ContextStage, ToolStage, FinalizeStage, delegate integration)
+- Web UI (CRUD, test panel, history)
+- Tracing integration
+- i18n keys (en/vi/zh)
+
+---
+
+#### Desktop Voice Management + STT Admin (2026-04-15)
+
+### Added
+- **Desktop voice picker**: Agent detail panel now includes a voice selector with live preview. Users can browse ElevenLabs voices, hear a sample, and persist the choice per agent on the desktop app.
+- **Desktop STT admin form**: Speech-to-text provider configuration (API keys, providers, WhatsApp opt-in toggle + privacy banner) available in desktop tool settings.
+- **Singleton voice preview**: Only one voice sample plays at a time; preview button hides automatically when a voice has no sample URL.
+- **Desktop i18n `tts` namespace**: Voice-management strings translated to English, Vietnamese, and Chinese; STT form labels added to the tools namespace.
+- **Desktop test harness**: Vitest + Testing Library infrastructure; voice picker and STT form covered by unit tests.
+
+### Changed
+- **Agent voice persistence (desktop)**: Voice selection merges into `other_config` without overwriting sibling fields.
+- **Tool settings routing (desktop)**: Speech-to-text tool opens the dedicated admin form instead of the generic JSON editor.
 
 ---
 

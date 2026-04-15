@@ -38,6 +38,7 @@ flowchart TD
         SCHED[Scheduler -- 4 Lanes]
         AR[Agent Router]
         LOOP[Agent Loop -- Think / Act / Observe]
+        HOOKS[Hook Dispatcher -- Lifecycle Events]
     end
 
     subgraph Providers["LLM Providers"]
@@ -143,6 +144,7 @@ flowchart TD
 | `internal/workspace/` | Workspace context resolver: 6 scenarios (agent default, team lead, team member, dispatch, subagent, cron) |
 | `internal/vault/` | Knowledge Vault: wikilinks (semantic mesh), hybrid search (BM25+vector), filesystem sync, L0 auto-injection |
 | `internal/channels/whatsapp/` | Native WhatsApp channel via whatsmeow (replaces WhatsApp API), QR auth, media handling |
+| `internal/hooks/` | Agent lifecycle hooks: event dispatcher (sync/async), handlers (command/http/prompt), matchers (regex + CEL), audit logging, edition gating, cost safeguards |
 
 ---
 

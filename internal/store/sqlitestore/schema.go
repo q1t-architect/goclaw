@@ -16,7 +16,7 @@ var schemaSQL string
 
 // SchemaVersion is the current SQLite schema version.
 // Bump this when adding new migration steps below.
-const SchemaVersion = 19
+const SchemaVersion = 20
 
 // migrations maps version → SQL to apply when upgrading FROM that version.
 // schema.sql always represents the LATEST full schema (for fresh DBs).
@@ -455,7 +455,80 @@ WHERE context_pruning IS NOT NULL
   AND json_valid(context_pruning)
   AND json_type(context_pruning) = 'object'
   AND json_extract(context_pruning, '$.mode') IS NULL;`,
+
+	// Version 19 → 20: agent hooks system (mirrors PG migration 000052).
+	// Creates agent_hooks, hook_executions, tenant_hook_budget tables.
+	// All idempotent (CREATE TABLE IF NOT EXISTS / CREATE INDEX IF NOT EXISTS).
+	19: addAgentHooksTables,
 }
+
+// addAgentHooksTables is the SQLite incremental migration for schema v19 → v20.
+// Idempotent: CREATE TABLE IF NOT EXISTS / CREATE UNIQUE INDEX IF NOT EXISTS.
+// Mirrors PG migration 000052_agent_hooks.up.sql.
+// JSONB → TEXT, TIMESTAMPTZ → TEXT (ISO8601), BYTEA → BLOB, DATE → TEXT.
+const addAgentHooksTables = `
+CREATE TABLE IF NOT EXISTS agent_hooks (
+    id           TEXT NOT NULL PRIMARY KEY,
+    tenant_id    TEXT NOT NULL DEFAULT '0193a5b0-7000-7000-8000-000000000001',
+    agent_id     TEXT REFERENCES agents(id) ON DELETE CASCADE,
+    scope        TEXT NOT NULL CHECK (scope IN ('global', 'tenant', 'agent')),
+    event        TEXT NOT NULL,
+    handler_type TEXT NOT NULL CHECK (handler_type IN ('command', 'http', 'prompt')),
+    config       TEXT NOT NULL DEFAULT '{}',
+    matcher      TEXT,
+    if_expr      TEXT,
+    timeout_ms   INTEGER NOT NULL DEFAULT 5000,
+    on_timeout   TEXT NOT NULL DEFAULT 'block' CHECK (on_timeout IN ('block', 'allow')),
+    priority     INTEGER NOT NULL DEFAULT 0,
+    enabled      INTEGER NOT NULL DEFAULT 1,
+    version      INTEGER NOT NULL DEFAULT 1,
+    source       TEXT NOT NULL DEFAULT 'ui' CHECK (source IN ('ui', 'api', 'seed')),
+    metadata     TEXT NOT NULL DEFAULT '{}',
+    created_by   TEXT,
+    created_at   TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+    updated_at   TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
+);
+CREATE UNIQUE INDEX IF NOT EXISTS uq_hooks_global
+    ON agent_hooks (event, handler_type)
+    WHERE scope = 'global';
+CREATE UNIQUE INDEX IF NOT EXISTS uq_hooks_tenant
+    ON agent_hooks (tenant_id, event, handler_type)
+    WHERE scope = 'tenant';
+CREATE UNIQUE INDEX IF NOT EXISTS uq_hooks_agent
+    ON agent_hooks (tenant_id, agent_id, event, handler_type)
+    WHERE scope = 'agent';
+CREATE INDEX IF NOT EXISTS idx_hooks_lookup
+    ON agent_hooks (tenant_id, agent_id, event)
+    WHERE enabled = 1;
+CREATE TABLE IF NOT EXISTS hook_executions (
+    id           TEXT NOT NULL PRIMARY KEY,
+    hook_id      TEXT REFERENCES agent_hooks(id) ON DELETE SET NULL,
+    session_id   TEXT,
+    event        TEXT NOT NULL,
+    input_hash   TEXT,
+    decision     TEXT NOT NULL CHECK (decision IN ('allow', 'block', 'error', 'timeout')),
+    duration_ms  INTEGER NOT NULL DEFAULT 0,
+    retry        INTEGER NOT NULL DEFAULT 0,
+    dedup_key    TEXT,
+    error        TEXT,
+    error_detail BLOB,
+    metadata     TEXT NOT NULL DEFAULT '{}',
+    created_at   TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
+);
+CREATE INDEX IF NOT EXISTS idx_hook_executions_session
+    ON hook_executions (session_id, created_at);
+CREATE UNIQUE INDEX IF NOT EXISTS uq_hook_executions_dedup
+    ON hook_executions (dedup_key)
+    WHERE dedup_key IS NOT NULL;
+CREATE TABLE IF NOT EXISTS tenant_hook_budget (
+    tenant_id      TEXT NOT NULL PRIMARY KEY,
+    month_start    TEXT NOT NULL,
+    budget_total   INTEGER NOT NULL DEFAULT 0,
+    remaining      INTEGER NOT NULL DEFAULT 0,
+    last_warned_at TEXT,
+    metadata       TEXT NOT NULL DEFAULT '{}',
+    updated_at     TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
+);`
 
 // backfillV16 populates base_name / path_basename for rows that existed
 // before the v15 → v16 migration. Idempotent — re-running on already-filled
