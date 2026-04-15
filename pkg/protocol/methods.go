@@ -165,6 +165,12 @@ const (
 	MethodAPIKeysRevoke = "api_keys.revoke"
 )
 
+// Voices (ElevenLabs voice picker)
+const (
+	MethodVoicesList    = "voices.list"
+	MethodVoicesRefresh = "voices.refresh"
+)
+
 // Phase 3+ - NICE TO HAVE methods
 const (
 	MethodLogsTail = "logs.tail"

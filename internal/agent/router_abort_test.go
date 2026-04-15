@@ -137,7 +137,7 @@ func TestAbortRun_AlreadyAborting(t *testing.T) {
 	results := make([]AbortResult, n)
 	var wg sync.WaitGroup
 	wg.Add(n)
-	for i := 0; i < n; i++ {
+	for i := range n {
 		i := i
 		go func() {
 			defer wg.Done()
@@ -213,7 +213,7 @@ func TestAbortRun_AfterUnregister(t *testing.T) {
 // TestAbortRun_Race_UnregisterConcurrent verifies no panic and no goroutine leak
 // when UnregisterRun and AbortRun interleave across 100 iterations.
 func TestAbortRun_Race_UnregisterConcurrent(t *testing.T) {
-	for i := 0; i < 100; i++ {
+	for range 100 {
 		r := NewRouter()
 		runID := "run-race"
 		sessionKey := "session-race"

@@ -192,5 +192,15 @@ func init() {
 		MsgTenantUserNotFound:  "không tìm thấy tenant user",
 		MsgTenantMismatch:      "tenant user không thuộc tenant này",
 		MsgTenantScopeRequired: "cần xác định tenant để thực hiện thao tác này",
+
+		// TTS / Giọng đọc
+		MsgTtsUnknownModel:  "model tts không hỗ trợ: %s",
+		MsgVoicesListFailed: "không tải được danh sách giọng đọc: %s",
+
+		// STT
+		MsgSTTAllProvidersFailed:     "Tất cả nhà cung cấp STT đều thất bại",
+		MsgSTTLegacyConfigDeprecated: "Cấu hình STT cũ đã lỗi thời; hãy chuyển sang builtin_tools[stt]",
+		MsgSTTWhatsappPrivacyWarning: "Bật STT cho WhatsApp sẽ phá vỡ mã hóa đầu cuối cho tin nhắn thoại gửi đến agent này.",
+		MsgVoiceMessageFallback:      "[Tin nhắn thoại]",
 	})
 }

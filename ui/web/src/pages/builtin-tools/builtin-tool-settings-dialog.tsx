@@ -19,12 +19,14 @@ import { KGMutateSettingsForm } from "./kg-mutate-settings-form";
 import { WebFetchExtractorChainForm } from "./web-fetch-extractor-chain-form";
 import { WebSearchChainForm } from "./web-search-chain-form";
 import { TtsProviderForm } from "./tts-provider-form";
+import { SttProviderForm } from "./stt-provider-form";
 
 const KG_TOOL = "knowledge_graph_search";
 const KG_MUTATE_TOOL = "knowledge_graph_mutate";
 const WEB_FETCH_TOOL = "web_fetch";
 const WEB_SEARCH_TOOL = "web_search";
 const TTS_TOOL = "tts";
+const STT_TOOL = "stt";
 
 interface Props {
   tool: BuiltinToolData | null;
@@ -64,6 +66,7 @@ export function BuiltinToolSettingsDialog({
   const isWebFetch = tool?.name === WEB_FETCH_TOOL;
   const isWebSearch = tool?.name === WEB_SEARCH_TOOL;
   const isTts = tool?.name === TTS_TOOL;
+  const isStt = tool?.name === STT_TOOL;
   const wide = isMedia || isKG || isKGMutate || isWebFetch || isWebSearch;
 
   // Tenant-scope overlay: prefer the tenant override when present; fall back
@@ -95,6 +98,12 @@ export function BuiltinToolSettingsDialog({
           />
         ) : isTts && tool ? (
           <TtsProviderForm
+            initialSettings={initialSettings}
+            onSave={(settings) => onSave(tool.name, settings).then(() => onOpenChange(false))}
+            onCancel={() => onOpenChange(false)}
+          />
+        ) : isStt && tool ? (
+          <SttProviderForm
             initialSettings={initialSettings}
             onSave={(settings) => onSave(tool.name, settings).then(() => onOpenChange(false))}
             onCancel={() => onOpenChange(false)}

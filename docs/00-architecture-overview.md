@@ -120,7 +120,8 @@ flowchart TD
 | `internal/permissions/` | RBAC policy engine (admin, operator, viewer roles) |
 | `internal/store/pg/pairing.go` | DM/device pairing service (8-character codes, database-backed) |
 | `internal/sandbox/` | Docker-based code execution sandbox |
-| `internal/tts/` | Text-to-Speech providers: OpenAI, ElevenLabs, Edge, MiniMax |
+| `internal/audio/` | Unified audio manager: 4 provider interfaces (TTS active; STT/Music/SFX stubbed/partial). Orchestrates ElevenLabs, OpenAI, Edge, MiniMax TTS providers. `internal/tts/` retained as backward-compat alias |
+| `internal/tts/` | Backward-compat alias layer (24 symbols) — all pre-refactor callers compile unchanged |
 | `internal/http/` | HTTP API handlers: /v1/chat/completions, /v1/agents, /v1/skills, /v1/traces, /v1/mcp, /v1/delegations, summoner |
 | `internal/crypto/` | AES-256-GCM encryption for API keys |
 | `internal/tracing/` | LLM call tracing (traces + spans), in-memory buffer with periodic store flush |
@@ -473,6 +474,29 @@ Six distinct workspace scenarios:
 - **Hybrid Search**: BM25 keyword search + vector similarity (pgvector) combined via RRF (reciprocal rank fusion)
 - **L0 Auto-Injection**: Top-K vault entries injected into system prompt as "relevant context from vault"
 - **Filesystem Sync**: Vault entries exported as `.md` files for manual editing, re-imported with change tracking
+
+### Audio & Voice System (ElevenLabs + Streaming TTS)
+
+**Provider architecture** (`internal/audio/`):
+- **`Manager`**: Central orchestrator dispatching TTS/STT/Music/SFX requests to pluggable providers
+- **`TTSProvider` interface**: Core text-to-speech contract (blocking, buffered response)
+- **`StreamingTTSProvider` interface**: Optional interface for ElevenLabs `/stream` endpoint (chunked audio via `io.ReadCloser`)
+- **Implementations**: ElevenLabs, OpenAI, Edge, MiniMax (phase-gated; STT/Music/SFX partial)
+
+**Voice discovery & caching**:
+- **Voice cache** (`internal/audio/voice_cache.go`): In-memory LRU (cap 1000 tenants, TTL 1h) shared by HTTP `/v1/voices` + WS `voices.list` handlers. Thread-safe with `sync.Mutex` (LRU updates require write lock)
+- **Cache miss recovery**: HTTP handler auto-fetches from ElevenLabs; WS handler requires prior cache warm (provider resolution deferred to Phase 3)
+- **Agent audio context** (`store.WithAgentAudio` / `AgentAudioFromCtx`): Immutable snapshot bundle (AgentID + OtherConfig JSONB) injected by dispatcher before tool dispatch; consumed by `TtsTool.Execute` for voice/model resolution
+
+**Agent-level configuration** (`agents.other_config` JSONB):
+- `tts_voice_id`: ElevenLabs voice ID (e.g., "pMsXgVXv3BLzUgSXRplE")
+- `tts_model_id`: Model choice (eleven_v3, eleven_flash_v2_5, eleven_multilingual_v2, eleven_turbo_v2_5)
+- Resolution precedence: CLI args → agent config → tenant override → provider default
+
+**Web UI voice picker** (`ui/web/src/components/voice-picker.tsx`):
+- Combobox with BM25 search, preview playback button (HTML `<audio>`)
+- Handles preview CDN 403 (expiry) via `onError` → auto-refresh cache
+- Embedded in PromptSettingsSection, bound to `other_config.tts_voice_id`
 
 ---
 

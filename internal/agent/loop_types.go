@@ -2,6 +2,7 @@ package agent
 
 import (
 	"context"
+	"encoding/json"
 	"sync"
 	"sync/atomic"
 
@@ -78,8 +79,11 @@ type Loop struct {
 	// agentUUID is the canonical DB primary key. Use for SQL WHERE/JOIN,
 	// DomainEvent.AgentID, OTel span attributes, and context propagation via
 	// store.WithAgentID. See docs/agent-identity-conventions.md.
-	agentUUID uuid.UUID
-	tenantID  uuid.UUID // agent's owning tenant
+	agentUUID        uuid.UUID
+	tenantID         uuid.UUID // agent's owning tenant
+	// agentOtherConfig is a defensive byte copy of agents.other_config JSONB.
+	// Copied once at Loop construction; used to build AgentAudioSnapshot at tool dispatch.
+	agentOtherConfig json.RawMessage
 	agentType        string    // "open" or "predefined"
 	defaultTimezone  string    // system default timezone for bootstrap pre-fill
 	provider         providers.Provider
@@ -237,6 +241,14 @@ type Loop struct {
 
 	// User identity resolver: maps channel contacts to merged tenant users for credential lookups.
 	userResolver UserIdentityResolver
+
+	// Per-session cache-touch timestamps for the cache-TTL pruning gate (Phase 06).
+	// Key: sessionKey (string), Value: time.Time of last prune mutation.
+	// sync.Map zero value is ready to use — no init required.
+	// Grows with distinct sessions; typical gateway has bounded session count.
+	// Note: in-memory only — timestamps reset on process restart (one extra prune
+	// per session on restart, then steady-state resumes).
+	cacheTouchBySession sync.Map
 }
 
 // AgentEvent is emitted during agent execution for WS broadcasting.
@@ -319,9 +331,10 @@ type LoopConfig struct {
 	ShellDenyGroups map[string]bool
 
 	// Agent UUID + tenant for context propagation to tools
-	AgentUUID   uuid.UUID
-	TenantID    uuid.UUID // agent's owning tenant — injected into execution context
-	AgentType   string    // "open" or "predefined"
+	AgentUUID        uuid.UUID
+	TenantID         uuid.UUID        // agent's owning tenant — injected into execution context
+	AgentOtherConfig json.RawMessage  // raw other_config JSONB — copied defensively in NewLoop
+	AgentType        string           // "open" or "predefined"
 	DisplayName string    // human-readable agent display name (for runtime section)
 	IsTeamLead bool      // agent leads a team (from resolver detection)
 
@@ -449,6 +462,7 @@ func NewLoop(cfg LoopConfig) *Loop {
 		displayName:            cfg.DisplayName,
 		agentUUID:              cfg.AgentUUID,
 		tenantID:               cfg.TenantID,
+		agentOtherConfig:       append([]byte(nil), cfg.AgentOtherConfig...), // defensive copy
 		agentType:              cfg.AgentType,
 		provider:               cfg.Provider,
 		model:                  cfg.Model,

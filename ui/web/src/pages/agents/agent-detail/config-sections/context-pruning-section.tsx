@@ -38,6 +38,19 @@ export function ContextPruningSection({ enabled, value, onToggle, onChange }: Co
         />
       </div>
 
+      {/* Cache TTL — always shown when pruning is enabled (opt-in requires cache-ttl mode) */}
+      {enabled && (
+        <div className="max-w-xs space-y-2">
+          <InfoLabel tip='Prompt cache TTL. Pruning is skipped while the cache is live, preserving cache hits. Use Go duration strings like "5m", "30s". Default: 5m.'>{t(`${s}.cacheTtl`, "Cache TTL")}</InfoLabel>
+          <Input
+            type="text"
+            placeholder="5m"
+            value={value.ttl ?? ""}
+            onChange={(e) => onChange({ ...value, ttl: e.target.value || undefined })}
+          />
+        </div>
+      )}
+
       {/* Advanced toggle */}
       <button
         type="button"

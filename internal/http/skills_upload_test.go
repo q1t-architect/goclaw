@@ -5,6 +5,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"maps"
 	"mime/multipart"
 	"net/http"
 	"net/http/httptest"
@@ -365,12 +366,12 @@ func skillMarkdown(name, slug string) string {
 }
 
 type skillManageStoreStub struct {
-	baseDir      string
-	version      int64
-	nextBySlug   map[string]int
-	skills       map[uuid.UUID]store.SkillInfo
-	systemDirs   map[string]string
-	hashBySlug   map[string]string // slug -> SKILL.md content hash (most recent)
+	baseDir    string
+	version    int64
+	nextBySlug map[string]int
+	skills     map[uuid.UUID]store.SkillInfo
+	systemDirs map[string]string
+	hashBySlug map[string]string // slug -> SKILL.md content hash (most recent)
 }
 
 func newSkillManageStoreStub(baseDir string) *skillManageStoreStub {
@@ -515,9 +516,7 @@ func (s *skillManageStoreStub) ListAllSystemSkills(context.Context) []store.Skil
 }
 func (s *skillManageStoreStub) ListSystemSkillDirs(context.Context) map[string]string {
 	out := make(map[string]string, len(s.systemDirs))
-	for slug, dir := range s.systemDirs {
-		out[slug] = dir
-	}
+	maps.Copy(out, s.systemDirs)
 	return out
 }
 func (s *skillManageStoreStub) StoreMissingDeps(_ context.Context, id uuid.UUID, missing []string) error {

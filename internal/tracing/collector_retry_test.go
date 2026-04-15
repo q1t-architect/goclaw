@@ -219,7 +219,7 @@ func TestShutdown_WorkerExitsCleanly(t *testing.T) {
 	c := newTestCollector(&alwaysFailStore{})
 
 	// Put a few items in the retry channel before starting worker.
-	for i := 0; i < 5; i++ {
+	for range 5 {
 		c.retryCh <- pendingUpdate{TraceID: uuid.New(), Updates: map[string]any{"status": "pending"}}
 	}
 

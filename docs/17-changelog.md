@@ -4,6 +4,128 @@ All notable changes to GoClaw Gateway are documented here. Format follows [Keep 
 
 ---
 
+## [Unreleased] — 2026-04-15
+
+#### ElevenLabs Audio Manager Refactor — Phase 6 (2026-04-15)
+
+Desktop UI parity: voice picker + STT admin form ported from web to Wails desktop frontend. Completes 6-phase plan; all audio surfaces (TTS/STT/Music/SFX) now manageable from both web and desktop Lite editions.
+
+### Added
+- **Desktop voice picker**: `ui/desktop/frontend/src/components/agents/voice-picker.tsx` — uses desktop's native Combobox primitive; embedded in `AgentDetailPanel` with `other_config.tts_voice_id` persistence via spread-merge pattern
+- **Desktop voice preview button**: `ui/desktop/frontend/src/components/agents/voice-preview-button.tsx` — singleton `<audio>` (module-level `currentAudio` ref); hidden when `preview_url` absent (resolves P6-L)
+- **Desktop STT admin form**: `ui/desktop/frontend/src/components/builtin-tools/stt-provider-form.tsx` — mirrors web fields + `whatsapp_enabled` toggle + privacy banner; routed via `ToolSettingsDialog` when `tool.name === 'stt'`
+- **Desktop voices service + hook**: `services/voices.ts` (`listVoices`, `refreshVoices`) + `hooks/use-voices.ts` (plain useState/useEffect — no React Query on desktop; mirrors web hook shape)
+- **Desktop Vitest infrastructure**: `vitest.config.ts` + `test/setup.ts` (jsdom + jest-dom + HTMLMediaElement mock) — resolves P6-H3 (desktop tests previously impossible)
+- **Desktop i18n `tts` namespace**: `i18n/locales/{en,vi,zh}/tts.json` (15 → 16 total namespaces registered in `i18n/index.ts`) + `tools.json` extended with `builtin.sttForm.*` keys
+- **Desktop component tests**: voice picker (4 tests) + STT form (3 tests) — parity subset covering render, save, preview, privacy banner
+
+### Changed
+- **Desktop `AgentDetailPanel`**: Added `ttsVoiceId` local state + `onSaveWithVoice` wrapper that preserves existing `other_config` fields via spread-merge before overwriting `tts_voice_id`
+- **Desktop `ToolSettingsDialog`**: Added `tool.name === 'stt'` routing branch before JsonSettingsForm fallback; existing `web_fetch` + MEDIA_TOOLS routing unchanged
+- **Desktop `package.json`**: Added devDeps (`vitest`, `@testing-library/react`, `@testing-library/jest-dom`, `jsdom`, `@vitejs/plugin-react`) + `test` / `test:watch` npm scripts
+
+### Resolved
+- **Audit finding P6-B1**: Gate G5 verified — Phase 5 merged green before Phase 6 work began
+- **Audit finding P6-B2**: Desktop path rewrite confirmed — no `pages/` dir used; component composition via `AgentDetailPanel` + `ToolSettingsDialog`
+- **Audit finding P6-B3**: `tts.json` namespace created + registered in desktop `i18n/index.ts` (web-desktop i18n parity)
+- **Audit finding P6-H1**: `tools.json` extended with STT labels; `tts.json` created per Decision 4
+- **Audit finding P6-H2**: SttProviderForm integration point identified (`ToolSettingsDialog.tsx` name-routing) + wired
+- **Audit finding P6-H3**: Vitest installed + configured in desktop frontend (was previously absent)
+- **Audit finding P6-L**: Voice preview button hidden (not disabled) when `preview_url` null/empty
+- **Audit finding P6-M** (codec): MP3 + Opus codec smoke test remains on manual verification checklist (user to confirm on macOS WKWebView + Windows WebView2)
+- **Cross-phase XP-5**: Desktop paths confirmed — `components/agents/`, `components/builtin-tools/`, `services/`, `hooks/` (no `pages/`)
+
+### Deferred
+- **Manual smoke test**: `wails dev -tags sqliteonly` voice picker save + STT form submit + codec playback requires user verification (cannot run headless in automation)
+
+---
+
+#### ElevenLabs Audio Manager Refactor — Phase 5 (2026-04-15)
+
+Channel STT migration (Telegram/Feishu/Discord) + WhatsApp voice transcription with tenant opt-in (default disabled due to E2E encryption trade-off, resolves privacy red-team finding).
+
+### Added
+- **WhatsApp voice transcription**: `internal/channels/whatsapp/stt.go` — opt-in per-tenant via `builtin_tools[stt].settings.whatsapp_enabled` (default `false` per Decision 6)
+- **Synchronous 10s timeout**: All 4 channels (Telegram/Feishu/Discord/WhatsApp) enforce ctx timeout for voice message processing; timeout/error → fallback label
+- **i18n fallback key**: `MsgVoiceMessageFallback` ("voice message" placeholder in en/vi/zh) rendered when STT unavailable or disabled
+- **Privacy banner**: Admin UI displays E2E encryption trade-off warning when enabling WhatsApp STT
+
+### Changed
+- **Channel STT handlers**: All 4 channels now call `audio.Manager.Transcribe()` with 10s timeout instead of per-channel `transcribeAudio()` helpers
+- **Channel factory signatures**: All 4 factories (`NewChannel`) accept `audioMgr *audio.Manager` parameter
+- **WhatsApp messaging**: Voice messages now transcribed (opt-in) and appended to message text for agent understanding
+
+### Removed
+- **Per-channel STT helpers**: Deleted `internal/channels/{telegram,feishu,discord}/stt.go` (consolidated into Manager)
+- **Telegram STT tests**: Deleted `internal/channels/telegram/stt_test.go` — coverage preserved in `internal/audio/proxy_stt/provider_test.go` (12 ported scenarios, deliberate deletion documented)
+
+### Resolved
+- **Audit finding P5-B1**: Gate G4 verified; Manager.Transcribe chain wired
+- **Audit finding P5-H1**: All transcribeAudio call sites migrated; grep confirms zero direct channel STT calls
+- **Audit finding P5-H2** + **Decision 6** (privacy): WhatsApp STT opt-in with default=false; privacy banner + docs note E2E trade-off
+- **Cross-phase XP-3**: Telegram test ported/deleted with 12-scenario coverage guarantee
+- **Cross-phase XP-4**: `MsgVoiceMessageFallback` pre-wired in Phase 5 step 1 (blocking)
+
+### Security / Privacy
+- **WhatsApp E2E encryption**: Voice transcription breaks end-to-end guarantee. **Tenant opt-in required** with explicit admin acknowledgment (privacy banner in UI)
+- **Temp file cleanup**: Existing `scheduleMediaCleanup` preserves file handles during 10s STT window; no race condition risk
+- **Audit logging**: WhatsApp STT invocation logged at info level for audit trail
+
+---
+
+#### ElevenLabs Audio Manager Refactor — Phase 4 (2026-04-15)
+
+STT via ElevenLabs Scribe + proxy fallback with tenant config migration + admin UI form. Legacy per-channel STT config bridged with 2-week deprecation grace.
+
+### Added
+- **ElevenLabs Scribe STT provider**: `internal/audio/elevenlabs/stt.go` — POST `/v1/speech-to-text`, multipart upload, 20MB cap, configurable language + diarization
+- **Proxy STT wrapper**: `internal/audio/proxy_stt/provider.go` — backward-compat bridge for legacy `media.TranscribeAudio` with automatic temp-file handling
+- **STT admin form**: `ui/web/src/pages/builtin-tools/stt-provider-form.tsx` — mirrors TTS form pattern, includes tenant config (API keys, providers list, WhatsApp opt-in toggle)
+- **`audio.Manager.Transcribe()`**: Chain-based STT dispatch with channel-override precedence (per-channel STTProxyURL wins over tenant builtin_tools[stt])
+- **i18n keys**: `MsgSTTAllProvidersFailed`, `MsgSTTLegacyConfigDeprecated`, `MsgSTTWhatsappPrivacyWarning` across en/vi/zh
+
+### Changed
+- **STT config location**: Migrated from per-channel fields (Telegram/Feishu/Discord `STTProxyURL`) to tenant `builtin_tools[stt].settings` (Decision 1 per audit)
+- **`builtin_tools[stt]` table entry**: New seed row via migration 000050 (PG) + schema.go incremental (SQLite)
+- **Legacy bridge**: Startup-time scan of per-channel STT configs → auto-registers `proxy_stt.Provider` with deprecation warn when tenant lacks `builtin_tools[stt]` (2-week grace period)
+
+### Resolved
+- **Audit finding P4-H1** (channel-override precedence): Decision 2 — per-channel config takes priority; tenant fallback when channel config absent
+- **Audit finding P4-H2** (Scribe endpoint verification): ElevenLabs Scribe v2 `/v1/speech-to-text` confirmed with xi-api-key auth
+- **Audit finding P4-B3** (explicit bridge loop): 3-channel explicit loop (Telegram, Feishu, Discord) replaces ambiguous iteration
+- **Cross-phase XP-3** (12 test ported): All 12 Telegram STT scenarios (NoProxy, EmptyFile, Success, Error, etc.) ported into `proxy_stt/provider_test.go` before Phase 5 channel migration
+
+### Deprecated
+- Per-channel `STTProxyURL`, `STTAPIKey`, `STTTenantID` fields (Telegram, Feishu, Discord configs) — soft deprecation with 2-week grace; migration to `builtin_tools[stt]` required for Phase 5+ channels
+
+### Fixed
+- **JSON schema divergence**: `duration_secs` → `audio_duration_secs` in Scribe response parsing (matches ElevenLabs API)
+- **Provider registration**: Scribe + SetSTTChain wired into setupAudioExtras for Phase 5 channel integration
+
+---
+
+#### ElevenLabs Audio Manager Refactor — Phase 3 (2026-04-14)
+
+Music generation via ElevenLabs + MiniMax with fallback chain. Suno provider fully removed from codebase (no official API, ToS violation risk).
+
+### Added
+- **ElevenLabs Music provider**: `internal/audio/elevenlabs/music.go` — POST `/v1/music`, model `music_v1`, binary MP3 response, 300s timeout, prompt + optional lyrics
+- **MiniMax Music provider**: `internal/audio/minimax/music.go` — POST `{base}/music_generation`, 2-step URL-download pattern, 200 MB cap, optional instrumentation toggle
+
+### Changed
+- **`create_audio` tool simplified**: Now thin Manager dispatcher (`NewCreateAudioTool(audioMgr *audio.Manager)`), removed inline provider logic + per-provider switch cases
+- **`audio.Manager.GenerateMusic/GenerateSFX`**: Chain-based resolution (elevenlabs → minimax for music, elevenlabs-only for SFX)
+- **`createAudio` builtin tool**: Unified dispatch via Manager instead of `providers.Registry` dependency injection
+
+### Removed
+- **Suno provider**: Fully excised (10 atomic locations) — research confirms no official API + ToS violations. Files deleted: `create_audio_suno.go`, `create_audio_minimax.go`, `create_audio_elevenlabs.go` shim. HTTP route removed. TS schema entry removed. Config provider removed.
+
+### Types
+- **`audio.MusicOptions`**: Added `Instrumental bool`, `Model string`, `TimeoutSec int` fields
+- **`audio.AudioResult`**: Added `Provider string` field for observability (tool span metadata)
+
+---
+
 ## [v2.66.0] — 2026-04-05
 
 ### Security
@@ -33,6 +155,36 @@ All notable changes to GoClaw Gateway are documented here. Format follows [Keep 
 ## [Unreleased]
 
 ### Added
+
+#### ElevenLabs Audio Manager Refactor — Phase 1 (2026-04-14)
+
+Unified audio provider management via new `internal/audio/` package with pluggable interface-based architecture. Phase 1 wires TTS providers (ElevenLabs, OpenAI, Edge, MiniMax); STT/Music/SFX interfaces defined for Phase 3-4.
+
+**What changed:**
+- **`internal/audio/` package**: Central `Manager` orchestrates 4 provider kinds via interfaces (`TTSProvider`, `STTProvider`, `MusicProvider`, `SFXProvider`)
+- **Provider organization**: Implementations in `internal/audio/{elevenlabs,openai,edge,minimax}/`. ElevenLabs shared HTTP client (`xi-api-key` header) for both TTS and SFX subproviders
+- **`internal/tts/` → backward-compat alias**: 24-symbol package (15 types + 6 consts + 5 constructors + 5 signature guards). All pre-refactor callers compile unchanged, zero breaking changes
+- **Config extension**: `config.Audio` optional pointer (nil-safe) added for future STT/Music subsections. `cfg.Tts` retained unchanged
+- **ElevenLabs SFX tool**: `internal/tools/create_audio_elevenlabs.go` rewritten as thin shim calling `elevenlabs.NewSFXProvider(...).GenerateSFX(ctx, audio.SFXOptions{...})`
+- **WS `tts.*` namespace**: 6 methods unchanged externally
+
+**Impact**: Existing TTS flows fully compatible. New code can import `internal/audio` directly. STT/Music/SFX wiring deferred to Phase 3-4.
+
+#### ElevenLabs Audio Manager Enhancements — Phase 2 (2026-04-14)
+
+Voice discovery and agent-level audio config via new backend endpoints, in-memory cache, and web UI picker. Bundles producer/consumer context pattern (`store.WithAgentAudio`) for seamless voice/model resolution throughout the tool execution pipeline.
+
+**What changed:**
+- **Voice cache** (`internal/audio/voice_cache.go`): In-memory LRU (cap 1000 tenants) with TTL 1h, shared between HTTP + WS handlers, thread-safe under concurrent access
+- **Streaming TTS interface** (`internal/audio/types.go`): New `StreamingTTSProvider` optional interface for ElevenLabs `/v1/text-to-speech/{voice_id}/stream` chunked playback
+- **ElevenLabs enhancements**: Model allowlist (11_v3, eleven_flash_v2_5, eleven_multilingual_v2, eleven_turbo_v2_5), `SynthesizeStream()` method, `ListVoices()` via `/v1/voices`
+- **Agent audio context** (`internal/store/context.go`): New `WithAgentAudio` / `AgentAudioFromCtx` bundle; producer wires snapshot at dispatcher level (internal/agent/), consumer (`TtsTool.Execute`) reads voice/model overrides from agent config
+- **Agent config extension** (`agents.other_config` JSONB): New `tts_voice_id` and `tts_model_id` fields with resolution precedence: args → agent → tenant → provider default
+- **HTTP + WS endpoints**: GET /v1/voices (cached), POST /v1/voices/refresh (admin-only), WS method `voices.list` + `voices.refresh`
+- **Web voice picker** (`ui/web/src/components/voice-picker.tsx`): Combobox with search, preview button (HTML audio + onError → refresh), embedded in PromptSettingsSection
+- **i18n**: 10 new frontend keys (voice_label, voice_placeholder, voice_refresh, voice_preview, model_label, etc.) + 2 new backend keys (MsgTtsUnknownModel, MsgVoicesListFailed) across en/vi/zh
+
+**Impact**: Existing TTS callers fully compatible (backward-compat via Phase 1 alias layer). Web UI gains voice discovery + per-agent voice/model overrides. Zero breaking changes. Integration test validates producer+consumer context flow.
 
 #### Trace Stop/Abort Redesign — Cascading 4-Layer Fix (2026-04-14)
 

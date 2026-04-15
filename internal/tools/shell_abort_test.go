@@ -80,7 +80,7 @@ func findOrphanSleeps(t *testing.T) []string {
 	}
 
 	var found []string
-	for _, line := range strings.Split(string(out), "\n") {
+	for line := range strings.SplitSeq(string(out), "\n") {
 		// Match lines containing "sleep 60" but not the grep/ps command itself.
 		if strings.Contains(line, "sleep 60") && !strings.Contains(line, "ps aux") {
 			fields := strings.Fields(line)

@@ -190,6 +190,16 @@ const (
 	// --- Tenants ---
 	MsgInvalidRole = "error.invalid_role" // "invalid role: allowed values are owner, admin, operator, member, viewer"
 
+	// --- TTS / Voices ---
+	MsgTtsUnknownModel   = "error.tts_unknown_model"  // "unknown tts model: %s"
+	MsgVoicesListFailed  = "error.voices_list_failed" // "failed to list voices: %s"
+
+	// --- STT ---
+	MsgSTTAllProvidersFailed    = "error.stt_all_providers_failed"    // "All STT providers failed"
+	MsgSTTLegacyConfigDeprecated = "warn.stt_legacy_config_deprecated" // "Legacy STT config deprecated; migrate to builtin_tools[stt]"
+	MsgSTTWhatsappPrivacyWarning = "warn.stt_whatsapp_privacy"         // "Enabling STT for WhatsApp breaks end-to-end encryption for voice messages sent to this agent."
+	MsgVoiceMessageFallback     = "channel.voice_message_fallback"    // "[Voice message]" — used when STT unavailable/disabled/timed-out
+
 	// --- Contact merge ---
 	MsgContactIDsRequired  = "error.contact_ids_required"  // "contact_ids is required"
 	MsgMergeTargetRequired = "error.merge_target_required"  // "exactly one of tenant_user_id or create_user is required"

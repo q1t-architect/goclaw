@@ -796,7 +796,7 @@
     "contextPruning": {
       "title": "Context Pruning",
       "description": "Trim old tool results to save context window",
-      "descriptionSimple": "Automatically trims old tool results to prevent context overflow. Enabled by default.",
+      "descriptionSimple": "Automatically trims old tool results to prevent context overflow. Set mode to 'cache-ttl' to enable.",
       "mode": "Mode",
       "keepLastAssistants": "Keep Last Assistants",
       "softTrimRatio": "Soft Trim Ratio (0-1)",
@@ -809,6 +809,7 @@
       "hardClear": "Hard Clear",
       "enabled": "Enabled",
       "placeholderText": "Placeholder Text",
+      "cacheTtl": "Cache TTL",
       "advanced": "Advanced"
     },
     "sandbox": {

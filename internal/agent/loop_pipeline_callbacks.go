@@ -47,6 +47,7 @@ func (l *Loop) pipelineCallbacks(req *RunRequest, bridgeRS *runState) pipelineCa
 		buildFilteredTools: l.makeBuildFilteredTools(req),
 		callLLM:            l.makeCallLLM(req, emitRun),
 		pruneMessages:      l.makePruneMessages(),
+		sanitizeHistory:    sanitizeHistory,
 		compactMessages:    l.makeCompactMessages(req),
 		runMemoryFlush:     l.makeRunMemoryFlush(),
 		executeToolCall:    l.makeExecuteToolCall(req, bridgeRS),
@@ -73,7 +74,8 @@ type pipelineCallbackSet struct {
 	injectReminders    func(ctx context.Context, input *pipeline.RunInput, msgs []providers.Message) []providers.Message
 	buildFilteredTools func(state *pipeline.RunState) ([]providers.ToolDefinition, error)
 	callLLM            func(ctx context.Context, state *pipeline.RunState, req providers.ChatRequest) (*providers.ChatResponse, error)
-	pruneMessages      func(msgs []providers.Message, budget int) []providers.Message
+	pruneMessages      func(msgs []providers.Message, budget int) ([]providers.Message, pipeline.PruneStats)
+	sanitizeHistory    func(msgs []providers.Message) ([]providers.Message, int)
 	compactMessages    func(ctx context.Context, msgs []providers.Message, model string) ([]providers.Message, error)
 	runMemoryFlush     func(ctx context.Context, state *pipeline.RunState) error
 	executeToolCall    func(ctx context.Context, state *pipeline.RunState, tc providers.ToolCall) ([]providers.Message, error)
@@ -312,9 +314,11 @@ func (l *Loop) makeCallLLM(req *RunRequest, emitRun func(AgentEvent)) func(ctx c
 	}
 }
 
-func (l *Loop) makePruneMessages() func(msgs []providers.Message, budget int) []providers.Message {
-	return func(msgs []providers.Message, budget int) []providers.Message {
-		return pruneContextMessages(msgs, budget, l.contextPruningCfg, l.tokenCounter, l.model)
+func (l *Loop) makePruneMessages() func(msgs []providers.Message, budget int) ([]providers.Message, pipeline.PruneStats) {
+	return func(msgs []providers.Message, budget int) ([]providers.Message, pipeline.PruneStats) {
+		var stats pipeline.PruneStats
+		pruned := pruneContextMessages(msgs, budget, l.contextPruningCfg, l.tokenCounter, l.model, &stats)
+		return pruned, stats
 	}
 }
 
@@ -341,6 +345,21 @@ func (l *Loop) makeCompactMessages(req *RunRequest) func(ctx context.Context, ms
 // the web UI code path can read it back via GetSessionMetadata without
 // duplicating the string.
 const SessionMetaKeyLastCompactionAt = "last_compaction_at"
+
+// cacheTouchAt returns the last prune-mutation timestamp for a session.
+// Returns zero time if no touch recorded yet.
+func (l *Loop) cacheTouchAt(sessionKey string) time.Time {
+	if v, ok := l.cacheTouchBySession.Load(sessionKey); ok {
+		return v.(time.Time)
+	}
+	return time.Time{}
+}
+
+// markCacheTouched records the current time as the last prune-mutation timestamp
+// for the given session. Called only after pruning actually mutates messages.
+func (l *Loop) markCacheTouched(sessionKey string) {
+	l.cacheTouchBySession.Store(sessionKey, time.Now())
+}
 
 func (l *Loop) makeRunMemoryFlush() func(ctx context.Context, state *pipeline.RunState) error {
 	return func(ctx context.Context, state *pipeline.RunState) error {

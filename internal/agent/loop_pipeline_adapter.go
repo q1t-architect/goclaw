@@ -3,6 +3,7 @@ package agent
 import (
 	"context"
 
+	"github.com/nextlevelbuilder/goclaw/internal/config"
 	"github.com/nextlevelbuilder/goclaw/internal/eventbus"
 	"github.com/nextlevelbuilder/goclaw/internal/memory"
 	"github.com/nextlevelbuilder/goclaw/internal/pipeline"
@@ -111,7 +112,21 @@ func (l *Loop) buildPipelineDeps(req *RunRequest, bridgeRS *runState) pipeline.P
 
 		// Prune callbacks
 		PruneMessages:   cb.pruneMessages,
+		SanitizeHistory: cb.sanitizeHistory,
 		CompactMessages: cb.compactMessages,
+
+		// Cache-TTL gate callbacks (Phase 06)
+		GetProviderCaps: func() providers.ProviderCapabilities {
+			if ca, ok := l.provider.(providers.CapabilitiesAware); ok {
+				return ca.Capabilities()
+			}
+			return providers.ProviderCapabilities{}
+		},
+		GetPruningConfig: func() *config.ContextPruningConfig {
+			return l.contextPruningCfg
+		},
+		GetCacheTouch:    l.cacheTouchAt,
+		MarkCacheTouched: l.markCacheTouched,
 
 		// Memory flush
 		RunMemoryFlush: cb.runMemoryFlush,

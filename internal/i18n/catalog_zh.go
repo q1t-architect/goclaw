@@ -192,5 +192,15 @@ func init() {
 		MsgTenantUserNotFound:  "未找到租户用户",
 		MsgTenantMismatch:      "租户用户不属于此租户",
 		MsgTenantScopeRequired: "此操作需要指定租户范围",
+
+		// TTS / 声音
+		MsgTtsUnknownModel:  "未知的 tts 模型：%s",
+		MsgVoicesListFailed: "获取声音列表失败：%s",
+
+		// STT
+		MsgSTTAllProvidersFailed:     "所有 STT 提供商均失败",
+		MsgSTTLegacyConfigDeprecated: "旧版 STT 配置已弃用；请迁移至 builtin_tools[stt]",
+		MsgSTTWhatsappPrivacyWarning: "为 WhatsApp 启用 STT 将破坏发送至此 Agent 的语音消息的端对端加密。",
+		MsgVoiceMessageFallback:      "[语音消息]",
 	})
 }

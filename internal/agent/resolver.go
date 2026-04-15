@@ -451,6 +451,7 @@ func NewManagedResolver(deps ResolverDeps) ResolverFunc {
 			DisplayName:            ag.DisplayName,
 			AgentUUID:              ag.ID,
 			TenantID:               ag.TenantID,
+			AgentOtherConfig:       ag.OtherConfig,
 			AgentType:              ag.AgentType,
 			IsTeamLead:             isTeamLead,
 			AutoInjector:          deps.AutoInjector,

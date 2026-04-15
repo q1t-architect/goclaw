@@ -792,7 +792,8 @@
       "hardClear": "Xóa cứng",
       "enabled": "Đã bật",
       "placeholderText": "Văn bản thay thế",
-      "descriptionSimple": "Tự động cắt bớt kết quả công cụ cũ để tránh tràn ngữ cảnh. Bật mặc định.",
+      "cacheTtl": "Cache TTL",
+      "descriptionSimple": "Tự động cắt bớt kết quả công cụ cũ để tránh tràn ngữ cảnh. Đặt chế độ 'cache-ttl' để bật.",
       "advanced": "Nâng cao"
     },
     "sandbox": {

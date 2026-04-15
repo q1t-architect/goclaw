@@ -192,5 +192,15 @@ func init() {
 		MsgTenantUserNotFound:  "tenant user not found",
 		MsgTenantMismatch:      "tenant user does not belong to this tenant",
 		MsgTenantScopeRequired: "tenant scope is required for this operation",
+
+		// TTS / Voices
+		MsgTtsUnknownModel:  "unknown tts model: %s",
+		MsgVoicesListFailed: "failed to list voices: %s",
+
+		// STT
+		MsgSTTAllProvidersFailed:     "All STT providers failed",
+		MsgSTTLegacyConfigDeprecated: "Legacy STT config deprecated; migrate to builtin_tools[stt]",
+		MsgSTTWhatsappPrivacyWarning: "Enabling STT for WhatsApp breaks end-to-end encryption for voice messages sent to this agent.",
+		MsgVoiceMessageFallback:      "[Voice message]",
 	})
 }

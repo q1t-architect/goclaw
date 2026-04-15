@@ -501,6 +501,68 @@ Multi-tenant management (admin only).
 
 ---
 
+## 17.1. Voices (Voice Discovery)
+
+Discover available TTS voices for the tenant's configured provider.
+
+| Method | Description |
+|--------|-------------|
+| `voices.list` | Fetch available voices (in-memory cached, TTL 1h) |
+| `voices.refresh` | Force cache invalidation (admin-only) |
+
+### `voices.list` Request
+
+```json
+{
+  "method": "voices.list",
+  "id": 1
+}
+```
+
+**Response** (200 OK):
+```json
+{
+  "id": 1,
+  "result": [
+    {
+      "voice_id": "pMsXgVXv3BLzUgSXRplE",
+      "name": "Alice",
+      "preview_url": "https://...",
+      "category": "premade",
+      "labels": {
+        "use_case": "conversational",
+        "accent": "american"
+      }
+    }
+  ]
+}
+```
+
+**Errors:**
+- `code: -1`: Provider error (e.g., ElevenLabs API unreachable)
+- `code: -2`: Cache miss + no provider context available (desktop edition in Phase 2; HTTP handler resolves provider dynamically)
+
+### `voices.refresh` Request
+
+Admin-only. Invalidate tenant cache, forcing fresh fetch on next list.
+
+```json
+{
+  "method": "voices.refresh",
+  "id": 2
+}
+```
+
+**Response** (200 OK):
+```json
+{
+  "id": 2,
+  "result": { "message": "voice cache invalidated" }
+}
+```
+
+---
+
 ## 18. Browser Automation
 
 | Method | Description |

@@ -2,6 +2,7 @@ package store
 
 import (
 	"context"
+	"encoding/json"
 
 	"github.com/google/uuid"
 )
@@ -46,7 +47,34 @@ const (
 	CredentialUserIDKey contextKey = "goclaw_credential_user_id"
 	// SenderNameKey is the display name from channel metadata (for bootstrap auto-contact).
 	SenderNameKey contextKey = "goclaw_sender_name"
+	// AgentAudioKey carries the immutable agent audio snapshot for TTS tool dispatch.
+	AgentAudioKey contextKey = "goclaw_agent_audio"
 )
+
+// AgentAudioSnapshot is an immutable snapshot of agent audio config carried through
+// the tool-dispatch context. OtherConfig is a defensive byte copy taken at insertion
+// time — callers MUST NOT mutate it after calling WithAgentAudio.
+type AgentAudioSnapshot struct {
+	AgentID     uuid.UUID
+	OtherConfig json.RawMessage // immutable byte copy — never mutate after insertion
+}
+
+// WithAgentAudio returns a new context with the given agent audio snapshot.
+// The snapshot is stored as-is — the CALLER is responsible for making a defensive
+// copy of OtherConfig before calling this function (use append([]byte(nil), src...)).
+func WithAgentAudio(ctx context.Context, snap AgentAudioSnapshot) context.Context {
+	return context.WithValue(ctx, AgentAudioKey, snap)
+}
+
+// AgentAudioFromCtx extracts the agent audio snapshot from context.
+// Returns ok=true only when the key is present AND AgentID != uuid.Nil.
+func AgentAudioFromCtx(ctx context.Context) (AgentAudioSnapshot, bool) {
+	snap, ok := ctx.Value(AgentAudioKey).(AgentAudioSnapshot)
+	if !ok || snap.AgentID == uuid.Nil {
+		return AgentAudioSnapshot{}, false
+	}
+	return snap, true
+}
 
 // WithShellDenyGroups returns a new context with shell deny group overrides.
 func WithShellDenyGroups(ctx context.Context, groups map[string]bool) context.Context {

@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"io"
 	"log/slog"
+	"maps"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -232,9 +233,7 @@ func (h *SkillsHandler) handleUpload(w http.ResponseWriter, r *http.Request) {
 			)
 			skill.Status = depState.status
 			skill.MissingDeps = depState.missing
-			for key, value := range depState.response {
-				response[key] = value
-			}
+			maps.Copy(response, depState.response)
 		}
 	}
 

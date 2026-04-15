@@ -11,6 +11,7 @@ import (
 	"os"
 	"os/exec"
 	"regexp"
+	"slices"
 	"strings"
 	"time"
 
@@ -189,10 +190,8 @@ func matchesBinaryVerbose(args []string, denyPatternsJSON json.RawMessage) strin
 			slog.Warn("secure_cli.invalid_deny_pattern", "pattern", p, "error", err)
 			continue
 		}
-		for _, arg := range args {
-			if re.MatchString(arg) {
-				return p
-			}
+		if slices.ContainsFunc(args, re.MatchString) {
+			return p
 		}
 	}
 	return ""

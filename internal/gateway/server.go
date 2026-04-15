@@ -509,6 +509,9 @@ func (s *Server) SetEvolutionHandler(h *httpapi.EvolutionHandler) {
 	s.handlers = append(s.handlers, h)
 }
 
+// SetVoicesHandler sets the ElevenLabs voices list + refresh handler.
+func (s *Server) SetVoicesHandler(h *httpapi.VoicesHandler) { s.handlers = append(s.handlers, h) }
+
 // SetVaultHandler sets the Knowledge Vault document handler.
 func (s *Server) SetVaultHandler(h *httpapi.VaultHandler) { s.handlers = append(s.handlers, h) }
 

@@ -2,9 +2,11 @@ package agent
 
 import (
 	"fmt"
+	"log/slog"
 	"unicode/utf8"
 
 	"github.com/nextlevelbuilder/goclaw/internal/config"
+	"github.com/nextlevelbuilder/goclaw/internal/pipeline"
 	"github.com/nextlevelbuilder/goclaw/internal/providers"
 	"github.com/nextlevelbuilder/goclaw/internal/tokencount"
 )
@@ -134,9 +136,13 @@ func resolvePruningSettings(cfg *config.ContextPruningConfig) *effectivePruningS
 // When tc is non-nil, token counting uses tiktoken for accuracy (especially
 // for non-ASCII content like Vietnamese/Chinese). When nil, falls back to the
 // legacy rune_count/charsPerTokenEstimate heuristic so existing tests pass.
-func pruneContextMessages(msgs []providers.Message, contextWindowTokens int, cfg *config.ContextPruningConfig, tc tokencount.TokenCounter, model string) []providers.Message {
-	// Pruning runs by default for all providers. Only skip when explicitly disabled.
-	if cfg != nil && cfg.Mode == "off" {
+func pruneContextMessages(msgs []providers.Message, contextWindowTokens int, cfg *config.ContextPruningConfig, tc tokencount.TokenCounter, model string, stats *pipeline.PruneStats) []providers.Message {
+	// Opt-in: require explicit mode. Matches TS computeEffectiveSettings in settings.ts.
+	if cfg == nil || cfg.Mode == "" || cfg.Mode == "off" {
+		return msgs
+	}
+	if cfg.Mode != "cache-ttl" {
+		slog.Warn("context_pruning: unknown mode, disabled", "mode", cfg.Mode)
 		return msgs
 	}
 	if contextWindowTokens <= 0 || len(msgs) == 0 {
@@ -201,51 +207,11 @@ func pruneContextMessages(msgs []providers.Message, contextWindowTokens int, cfg
 		return msgs
 	}
 
-	// Pass 0: Per-result context guard — force-trim any single tool result
-	// exceeding 30% of the context window. Catches outlier outputs even
-	// when overall context ratio is low.
-	maxSingleResultTokens := tokenWindow * 3 / 10
-	// Char budget for actual string slicing (always char-based regardless of estimator).
-	maxSingleResultChars := maxSingleResultTokens
-	if tc != nil {
-		maxSingleResultChars = maxSingleResultTokens * charsPerTokenEstimate
-	}
-	var result []providers.Message
-	for _, idx := range prunableIndexes {
-		msgTokens := est.estimateTokens(msgs[idx].Content)
-		if msgTokens > maxSingleResultTokens {
-			if result == nil {
-				result = make([]providers.Message, len(msgs))
-				copy(result, msgs)
-			}
-			msg := msgs[idx]
-			head := takeHead(msg.Content, maxSingleResultChars*7/10)
-			tail := takeTail(msg.Content, maxSingleResultChars*3/10)
-			msgChars := utf8.RuneCountInString(msg.Content)
-			trimmed := fmt.Sprintf("%s\n\n⚠️ [... middle content omitted ...]\n\n%s\n\n[Single tool result trimmed: %d chars exceeded per-result limit of %d chars.]",
-				head, tail, msgChars, maxSingleResultChars)
-			result[idx] = providers.Message{
-				Role:       msg.Role,
-				Content:    trimmed,
-				ToolCallID: msg.ToolCallID,
-			}
-			totalTokens += est.estimateTokens(trimmed) - msgTokens
-		}
-	}
-	if result != nil {
-		msgs = result
-		result = nil
-		// Re-check ratio after per-result guard.
-		ratio = float64(totalTokens) / float64(tokenWindow)
-		if ratio < settings.softTrimRatio {
-			return msgs
-		}
-	}
-
 	// Build tool call name map for media tool detection in soft trim.
 	toolCallNames := buildToolCallNameMap(msgs)
 
 	// Pass 1: Soft trim long tool results.
+	var result []providers.Message
 	for i := range prunableIndexes {
 		idx := prunableIndexes[i]
 		msg := msgs[idx]
@@ -295,6 +261,9 @@ func pruneContextMessages(msgs []providers.Message, contextWindowTokens int, cfg
 			ToolCallID: msg.ToolCallID,
 		}
 		totalTokens += est.estimateTokens(trimmed) - msgTokens
+		if stats != nil {
+			stats.ResultsTrimmed++
+		}
 	}
 
 	output := msgs
@@ -347,6 +316,9 @@ func pruneContextMessages(msgs []providers.Message, contextWindowTokens int, cfg
 		afterTokens := est.estimateTokens(settings.hardClearPlaceholder)
 		totalTokens += afterTokens - beforeTokens
 		ratio = float64(totalTokens) / float64(tokenWindow)
+		if stats != nil {
+			stats.ResultsCleared++
+		}
 	}
 
 	return output

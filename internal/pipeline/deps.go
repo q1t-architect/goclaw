@@ -2,6 +2,7 @@ package pipeline
 
 import (
 	"context"
+	"time"
 
 	"github.com/nextlevelbuilder/goclaw/internal/bootstrap"
 	"github.com/nextlevelbuilder/goclaw/internal/config"
@@ -10,6 +11,14 @@ import (
 	"github.com/nextlevelbuilder/goclaw/internal/tokencount"
 	"github.com/nextlevelbuilder/goclaw/internal/workspace"
 )
+
+// PruneStats holds counts from a single pruneContextMessages invocation.
+// Populated by the pruning function; read by PruneStage for event emission.
+type PruneStats struct {
+	ResultsTrimmed int  // Pass 1: soft-trimmed count
+	ResultsCleared int  // Pass 2: hard-cleared count
+	Compacted      bool // LLM compaction ran this cycle
+}
 
 // PipelineDeps bundles all external dependencies stages need.
 // Passed to NewDefaultPipeline; individual stages receive what they need via closure or direct field access.
@@ -55,8 +64,15 @@ type PipelineDeps struct {
 	EmitBlockReply      func(content string) // emit block.reply for intermediate assistant content
 
 	// Prune callbacks (PruneStage)
-	PruneMessages   func(msgs []providers.Message, budget int) []providers.Message
+	PruneMessages   func(msgs []providers.Message, budget int) ([]providers.Message, PruneStats)
+	SanitizeHistory func(msgs []providers.Message) ([]providers.Message, int)
 	CompactMessages func(ctx context.Context, msgs []providers.Message, model string) ([]providers.Message, error)
+
+	// Cache-TTL gate callbacks (Phase 06). All optional (nil = feature disabled).
+	GetProviderCaps  func() providers.ProviderCapabilities  // provider capabilities for cache detection
+	GetPruningConfig func() *config.ContextPruningConfig    // pruning config (TTL field)
+	GetCacheTouch    func(sessionKey string) time.Time      // per-session last prune-mutation timestamp
+	MarkCacheTouched func(sessionKey string)                // record mutation timestamp AFTER prune mutates
 
 	// Memory flush callbacks (MemoryFlushStage, invoked by PruneStage)
 	RunMemoryFlush func(ctx context.Context, state *RunState) error
