@@ -48,17 +48,18 @@ func TestHookEventJSONRoundTrip(t *testing.T) {
 	}
 }
 
-// TestHandlerTypeEnumExact verifies exactly 3 HandlerType constants exist.
+// TestHandlerTypeEnumExact verifies exactly 4 HandlerType constants exist.
 func TestHandlerTypeEnumExact(t *testing.T) {
 	all := []hooks.HandlerType{
 		hooks.HandlerCommand,
 		hooks.HandlerHTTP,
 		hooks.HandlerPrompt,
+		hooks.HandlerScript,
 	}
-	if len(all) != 3 {
-		t.Fatalf("expected 3 HandlerType values, got %d", len(all))
+	if len(all) != 4 {
+		t.Fatalf("expected 4 HandlerType values, got %d", len(all))
 	}
-	expectedStrings := []string{"command", "http", "prompt"}
+	expectedStrings := []string{"command", "http", "prompt", "script"}
 	for i, h := range all {
 		if string(h) != expectedStrings[i] {
 			t.Errorf("HandlerType[%d]: got %q, want %q", i, string(h), expectedStrings[i])
@@ -88,6 +89,8 @@ func TestDecisionIsBlock(t *testing.T) {
 		{hooks.DecisionBlock, true},
 		{hooks.DecisionError, false},
 		{hooks.DecisionTimeout, false},
+		{hooks.DecisionAsk, false},
+		{hooks.DecisionDefer, false},
 	}
 	for _, tc := range cases {
 		got := tc.d.IsBlock()

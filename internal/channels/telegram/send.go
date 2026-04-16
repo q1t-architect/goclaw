@@ -374,12 +374,15 @@ func (c *Channel) sendMediaMessage(ctx context.Context, chatID int64, msg bus.Ou
 				return err
 			}
 		case strings.HasPrefix(ct, "audio/"):
-			if msg.Metadata["audio_as_voice"] == "true" {
+			// Voice message: use SendVoice for inline playback bubble.
+			if msg.Metadata["audio_as_voice"] == "true" && isVoiceCompatible(ct) {
 				if err := c.sendVoice(ctx, chatIDObj, media.URL, caption, replyTo, threadID); err != nil {
 					return err
 				}
-			} else if err := c.sendAudio(ctx, chatIDObj, media.URL, caption, replyTo, threadID); err != nil {
-				return err
+			} else {
+				if err := c.sendAudio(ctx, chatIDObj, media.URL, caption, replyTo, threadID); err != nil {
+					return err
+				}
 			}
 		default:
 			if err := c.sendDocument(ctx, chatIDObj, media.URL, caption, replyTo, threadID); err != nil {
@@ -634,7 +637,8 @@ func (c *Channel) sendAudio(ctx context.Context, chatID telego.ChatID, filePath,
 	return err
 }
 
-// sendVoice sends an audio file as a Telegram voice message (round player).
+// sendVoice sends an audio file as a voice message (inline playable bubble).
+// Telegram supports OGG (Opus), MP3, and M4A for voice messages.
 func (c *Channel) sendVoice(ctx context.Context, chatID telego.ChatID, filePath, caption string, replyTo, threadID int) error {
 	file, err := os.Open(filePath)
 	if err != nil {
@@ -676,6 +680,14 @@ func (c *Channel) sendVoice(ctx context.Context, chatID telego.ChatID, filePath,
 	}
 	return err
 }
+
+// isVoiceCompatible returns true if content-type is supported by Telegram SendVoice.
+// Supported: OGG (Opus), MP3, M4A per Telegram Bot API docs.
+func isVoiceCompatible(ct string) bool {
+	return ct == "audio/ogg" || ct == "audio/mpeg" || ct == "audio/mp3" ||
+		ct == "audio/m4a" || ct == "audio/x-m4a"
+}
+
 
 // sendDocument sends a document/file message.
 func (c *Channel) sendDocument(ctx context.Context, chatID telego.ChatID, filePath, caption string, replyTo, threadID int) error {

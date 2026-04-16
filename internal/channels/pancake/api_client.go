@@ -294,7 +294,7 @@ func (c *APIClient) ReactComment(ctx context.Context, conversationID, messageID 
 	if conversationID == "" || messageID == "" {
 		return fmt.Errorf("pancake: react-comment requires conversation_id and message_id")
 	}
-	if strings.ContainsAny(conversationID, "/?#") || strings.ContainsAny(messageID, "/?#") {
+	if strings.ContainsAny(conversationID, "/?#\\") || strings.ContainsAny(messageID, "/?#\\") {
 		return fmt.Errorf("pancake: invalid character in conversation_id or message_id")
 	}
 

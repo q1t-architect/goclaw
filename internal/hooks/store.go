@@ -2,9 +2,35 @@ package hooks
 
 import (
 	"context"
+	"errors"
 
 	"github.com/google/uuid"
 )
+
+// ErrBuiltinReadOnly is returned by Update/Delete when a caller attempts to
+// modify a row with source='builtin' beyond toggling `enabled`. Builtin rows
+// are canonical — content comes from embedded JS at every startup (Phase 04
+// seed). UI should render them read-only except for the enabled toggle.
+// Message is surfaced via i18n key hook.builtin_readonly.
+var ErrBuiltinReadOnly = errors.New("hook: builtin row is read-only except enabled toggle")
+
+// seedBypassKey is the private context key used by Phase 04 builtin seeder to
+// bypass the Update/Delete builtin-readonly guard. Process-private: only the
+// seeder sets it. Ensures user-facing writes still fail ErrBuiltinReadOnly.
+type seedBypassKey struct{}
+
+// WithSeedBypass marks ctx as originating from the builtin seeder. Store
+// implementations MUST consult IsSeedBypass(ctx) before rejecting writes on
+// builtin rows. Any other caller is denied.
+func WithSeedBypass(ctx context.Context) context.Context {
+	return context.WithValue(ctx, seedBypassKey{}, true)
+}
+
+// IsSeedBypass reports whether ctx carries the builtin-seeder bypass marker.
+func IsSeedBypass(ctx context.Context) bool {
+	v, _ := ctx.Value(seedBypassKey{}).(bool)
+	return v
+}
 
 // ListFilter narrows results from HookStore.List.
 type ListFilter struct {
@@ -50,4 +76,10 @@ type HookStore interface {
 	// WriteExecution appends an immutable execution audit row.
 	// Caller must pre-truncate Error to 256 chars and encrypt ErrorDetail.
 	WriteExecution(ctx context.Context, exec HookExecution) error
+
+	// SetHookAgents replaces all junction rows for hookID with the given agentIDs.
+	SetHookAgents(ctx context.Context, hookID uuid.UUID, agentIDs []uuid.UUID) error
+
+	// GetHookAgents returns the agent UUIDs linked to hookID via the junction table.
+	GetHookAgents(ctx context.Context, hookID uuid.UUID) ([]uuid.UUID, error)
 }

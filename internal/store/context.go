@@ -3,6 +3,7 @@ package store
 import (
 	"context"
 	"encoding/json"
+	"strings"
 
 	"github.com/google/uuid"
 )
@@ -198,6 +199,46 @@ func SenderIDFromContext(ctx context.Context) string {
 		return rc.SenderID
 	}
 	return ""
+}
+
+// ActorIDFromContext returns the acting principal — the entity performing
+// the action. The resolution is context-aware:
+//
+//   - Group / guild scope (UserID has "group:" or "guild:" prefix):
+//     returns SenderID (the individual sender) when set, else falls back
+//     to UserID. SenderID is the only stable actor identity in a group
+//     because UserID is the shared group principal.
+//
+//   - DM / HTTP / cron / anywhere UserID is a real user identifier:
+//     returns UserID. This preserves tenant-user merging — the gateway
+//     consumer rewrites UserID to the merged tenant identity (e.g.
+//     "viettx") for DMs via ContactCollector.ResolveTenantUserID, so
+//     ownership/audit records use the cross-channel stable identity
+//     rather than a channel-specific raw sender (e.g. "386246614").
+//     SenderID is used only as a fallback when UserID is empty.
+//
+// Use for:
+//   - permission checks (file writers, role gates)
+//   - audit trails (initiated_by, owner_id)
+//   - ownership fields (skill publisher, cron owner)
+//
+// DO NOT use for:
+//   - memory / KG / session scope (use UserIDFromContext / MemoryUserID / KGUserID)
+//   - file-system or per-scope isolation (scope = group principal on purpose)
+func ActorIDFromContext(ctx context.Context) string {
+	uid := UserIDFromContext(ctx)
+	// Group/guild: UserID is the scope namespace, not an actor. Prefer SenderID.
+	if strings.HasPrefix(uid, "group:") || strings.HasPrefix(uid, "guild:") {
+		if sid := SenderIDFromContext(ctx); sid != "" {
+			return sid
+		}
+		return uid
+	}
+	// DM / HTTP / cron: UserID is (possibly merged) actor identity.
+	if uid != "" {
+		return uid
+	}
+	return SenderIDFromContext(ctx)
 }
 
 // WithSelfEvolve returns a new context with the self-evolve flag.

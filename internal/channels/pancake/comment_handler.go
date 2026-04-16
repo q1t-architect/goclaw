@@ -60,8 +60,7 @@ func (ch *Channel) handleCommentEvent(data MessagingData) {
 
 	// Auto-react BEFORE keyword filter — fires on all valid non-duplicate comments.
 	// Independent of comment_reply: reacts even if reply is disabled.
-	if ch.config.Features.AutoReact && ch.platform == "facebook" &&
-		data.ConversationID != "" && data.Message.ID != "" {
+	if ch.config.Features.AutoReact && ch.platform == "facebook" && data.Message.ID != "" {
 		select {
 		case ch.reactSem <- struct{}{}:
 			go ch.reactCommentAsync(data.ConversationID, data.Message.ID)

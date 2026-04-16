@@ -8,6 +8,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/nextlevelbuilder/goclaw/internal/bootstrap"
 	"github.com/nextlevelbuilder/goclaw/internal/hooks"
+	hookhandlers "github.com/nextlevelbuilder/goclaw/internal/hooks/handlers"
 	"github.com/nextlevelbuilder/goclaw/internal/providers"
 	"github.com/nextlevelbuilder/goclaw/internal/store"
 )
@@ -27,6 +28,13 @@ func (s *ContextStage) Name() string { return "context" }
 
 // Execute populates RunState with workspace, context files, system prompt, and overhead tokens.
 func (s *ContextStage) Execute(ctx context.Context, state *RunState) error {
+	// Seed per-turn prompt-hook invocation counter exactly once per user turn.
+	// This ctx is then propagated to every downstream FireHook call (including
+	// PreToolUse in ToolStage via state.Ctx), making the per-turn cap (L2)
+	// enforceable across the whole chain.
+	ctx = hookhandlers.WithPromptTurn(ctx)
+	state.Ctx = ctx
+
 	// Hook: async SessionStart — best-effort, fires every execute call.
 	// TODO: add first-iteration-only gate once RunState.Iteration tracking is confirmed stable.
 	if s.deps != nil && s.deps.Hooks != nil {
@@ -40,16 +48,20 @@ func (s *ContextStage) Execute(ctx context.Context, state *RunState) error {
 		})
 	}
 
-	// Hook: sync UserPromptSubmit — blocking; abort if blocked.
-	if dec, _ := s.deps.FireHook(ctx, hooks.Event{
+	// Hook: sync UserPromptSubmit — blocking; abort if blocked. A builtin-
+	// source hook may rewrite RawInput (e.g. PII redactor); apply the update
+	// before any downstream stage reads state.Input.Message.
+	if r, _ := s.deps.FireHook(ctx, hooks.Event{
 		EventID:   uuid.NewString(),
 		SessionID: state.Input.SessionKey,
 		TenantID:  store.TenantIDFromContext(ctx),
 		AgentID:   store.AgentIDFromContext(ctx),
 		RawInput:  state.Input.Message,
 		HookEvent: hooks.EventUserPromptSubmit,
-	}); dec == hooks.DecisionBlock {
+	}); r.Decision == hooks.DecisionBlock {
 		return fmt.Errorf("hook blocked user_prompt_submit")
+	} else if r.UpdatedRawInput != nil {
+		state.Input.Message = *r.UpdatedRawInput
 	}
 
 	// 0. Inject context values (agent/tenant/user/workspace scoping, input guard, truncation).

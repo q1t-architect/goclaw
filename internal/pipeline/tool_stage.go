@@ -48,8 +48,10 @@ func (s *ToolStage) Execute(ctx context.Context, state *RunState) error {
 
 	// Sequential fallback: ExecuteToolCall handles both I/O and state mutation.
 	for _, tc := range toolCalls {
-		// Hook: sync PreToolUse — block if hook denies.
-		if dec, _ := s.deps.FireHook(ctx, hooks.Event{
+		// Hook: sync PreToolUse — block if hook denies. Builtin-source hooks may
+		// rewrite tc.Arguments via UpdatedToolInput (e.g. path-sanitizer); apply
+		// before ExecuteToolCall so the rewrite is authoritative.
+		if r, _ := s.deps.FireHook(ctx, hooks.Event{
 			EventID:   uuid.NewString(),
 			SessionID: state.Input.SessionKey,
 			TenantID:  store.TenantIDFromContext(ctx),
@@ -57,7 +59,7 @@ func (s *ToolStage) Execute(ctx context.Context, state *RunState) error {
 			ToolName:  tc.Name,
 			ToolInput: tc.Arguments,
 			HookEvent: hooks.EventPreToolUse,
-		}); dec == hooks.DecisionBlock {
+		}); r.Decision == hooks.DecisionBlock {
 			// Inject synthetic blocked tool message and skip actual execution.
 			state.Messages.AppendPending(providers.Message{
 				Role:       "tool",
@@ -66,6 +68,8 @@ func (s *ToolStage) Execute(ctx context.Context, state *RunState) error {
 			})
 			state.Tool.TotalToolCalls++
 			continue
+		} else if r.UpdatedToolInput != nil {
+			tc.Arguments = r.UpdatedToolInput
 		}
 
 		msgs, err := s.deps.ExecuteToolCall(ctx, state, tc)

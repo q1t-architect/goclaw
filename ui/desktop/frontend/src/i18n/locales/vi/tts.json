@@ -70,6 +70,9 @@
   },
   "voice_label": "Giọng đọc",
   "voice_placeholder": "Chọn giọng đọc…",
+  "voice_picker": {
+    "requires_provider": "Vui lòng cấu hình provider TTS trước"
+  },
   "voice_refresh": "Làm mới",
   "voice_preview": "Nghe thử",
   "voice_stop_preview": "Dừng",
@@ -77,5 +80,53 @@
   "voice_loading": "Đang tải giọng đọc…",
   "voice_preview_error": "Không nghe thử được — đang làm mới",
   "model_label": "Mô hình",
-  "model_placeholder": "Mặc định (tenant/hệ thống)"
+  "model_placeholder": "Mặc định (tenant/hệ thống)",
+  "empty_state": {
+    "title": "Giọng đọc AI chưa được cấu hình",
+    "description": "Cấu hình TTS để agent trả lời bằng giọng nói",
+    "cta": "Cấu hình TTS",
+    "non_owner_hint": "Liên hệ owner để bật giọng đọc AI"
+  },
+  "test": {
+    "button": "Thử giọng đọc",
+    "sample_text": "Xin chào, đây là giọng đọc thử.",
+    "title": "Nghe thử",
+    "placeholder": "Nhập text để nghe thử...",
+    "play": "Phát",
+    "stop": "Dừng",
+    "error_missing_config": "Chọn provider và nhập API key trước",
+    "error_synthesize": "Không tạo được audio: {{error}}"
+  },
+  "override": {
+    "label": "Ghi đè giọng đọc cho agent này",
+    "inherits": "Kế thừa: {{provider}} · {{voice}} · {{model}}"
+  },
+  "testConnection": {
+    "label": "Kiểm tra kết nối",
+    "testing": "Đang kiểm tra…",
+    "success": "Kết nối thành công",
+    "failed": "Kết nối thất bại"
+  },
+  "connection": {
+    "test": "Kiểm tra kết nối",
+    "ok": "Kết nối OK",
+    "fail": "Key không hợp lệ hoặc network lỗi"
+  },
+  "agent": {
+    "override_label": "Ghi đè voice cho agent này",
+    "inherits_from_global": "Kế thừa từ global: {{provider}} · {{voice}} · {{model}}"
+  },
+  "playground": {
+    "title": "Thử nghiệm",
+    "inputLabel": "Văn bản cần đọc",
+    "placeholder": "Nhập văn bản để nghe thử…",
+    "play": "Phát",
+    "stop": "Dừng",
+    "synthesizing": "Đang tổng hợp…",
+    "playbackFailed": "Phát âm thất bại",
+    "requiresProvider": "Chọn provider ở trên để bật phát thử."
+  },
+  "advanced": {
+    "title": "Cài đặt nâng cao"
+  }
 }

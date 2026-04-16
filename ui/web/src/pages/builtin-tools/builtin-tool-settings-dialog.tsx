@@ -18,14 +18,12 @@ import { KGSettingsForm } from "./kg-settings-form";
 import { KGMutateSettingsForm } from "./kg-mutate-settings-form";
 import { WebFetchExtractorChainForm } from "./web-fetch-extractor-chain-form";
 import { WebSearchChainForm } from "./web-search-chain-form";
-import { TtsProviderForm } from "./tts-provider-form";
 import { SttProviderForm } from "./stt-provider-form";
 
 const KG_TOOL = "knowledge_graph_search";
 const KG_MUTATE_TOOL = "knowledge_graph_mutate";
 const WEB_FETCH_TOOL = "web_fetch";
 const WEB_SEARCH_TOOL = "web_search";
-const TTS_TOOL = "tts";
 const STT_TOOL = "stt";
 
 interface Props {
@@ -65,7 +63,6 @@ export function BuiltinToolSettingsDialog({
   const isKGMutate = tool?.name === KG_MUTATE_TOOL;
   const isWebFetch = tool?.name === WEB_FETCH_TOOL;
   const isWebSearch = tool?.name === WEB_SEARCH_TOOL;
-  const isTts = tool?.name === TTS_TOOL;
   const isStt = tool?.name === STT_TOOL;
   const wide = isMedia || isKG || isKGMutate || isWebFetch || isWebSearch;
 
@@ -93,12 +90,6 @@ export function BuiltinToolSettingsDialog({
           <WebSearchChainForm
             initialSettings={initialSettings}
             secretsSet={tool.secrets_set}
-            onSave={(settings) => onSave(tool.name, settings).then(() => onOpenChange(false))}
-            onCancel={() => onOpenChange(false)}
-          />
-        ) : isTts && tool ? (
-          <TtsProviderForm
-            initialSettings={initialSettings}
             onSave={(settings) => onSave(tool.name, settings).then(() => onOpenChange(false))}
             onCancel={() => onOpenChange(false)}
           />

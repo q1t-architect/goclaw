@@ -72,6 +72,8 @@ const (
 	HandlerHTTP HandlerType = "http"
 	// HandlerPrompt routes the event through an LLM prompt.
 	HandlerPrompt HandlerType = "prompt"
+	// HandlerScript runs a user-provided ES5.1 JavaScript snippet in a sandboxed goja runtime.
+	HandlerScript HandlerType = "script"
 )
 
 // MarshalJSON encodes HandlerType as a JSON string.
@@ -120,12 +122,35 @@ const (
 	DecisionError Decision = "error"
 	// DecisionTimeout indicates the hook did not respond within the time budget.
 	DecisionTimeout Decision = "timeout"
+	// DecisionAsk requests human approval before proceeding. Wave 1: treated as block + warn.
+	DecisionAsk Decision = "ask"
+	// DecisionDefer defers the decision to an external system. Wave 1: treated as block + warn.
+	DecisionDefer Decision = "defer"
 )
 
 // IsBlock returns true only when the decision is DecisionBlock.
 // Used by the dispatcher sync chain: first block wins.
 func (d Decision) IsBlock() bool {
 	return d == DecisionBlock
+}
+
+// FireResult is the return value of Dispatcher.Fire. Callers read Decision to
+// branch on allow/block and apply Updated* when a builtin hook mutated input.
+//
+// UpdatedToolInput is non-nil only when at least one builtin-source hook in
+// the chain returned updatedInput AND the dispatcher applied allow-listed
+// fields. Callers overwrite their own tc.Arguments / state.Input with it.
+//
+// UpdatedRawInput points to a string only when a builtin hook mutated
+// rawInput. Callers replace state.Input.Message with the dereferenced value.
+//
+// For non-builtin scripts returning updatedInput the dispatcher strips the
+// mutation + logs a WARN; Updated* stay nil (defense-in-depth against a
+// tenant-authored script escalating its capability tier).
+type FireResult struct {
+	Decision         Decision
+	UpdatedToolInput map[string]any
+	UpdatedRawInput  *string
 }
 
 // ─── Config & execution structs ──────────────────────────────────────────────
@@ -135,10 +160,12 @@ func (d Decision) IsBlock() bool {
 type HookConfig struct {
 	ID          uuid.UUID          `json:"id"`
 	TenantID    uuid.UUID          `json:"tenant_id"`
-	AgentID     *uuid.UUID         `json:"agent_id,omitempty"`
+	AgentID     *uuid.UUID         `json:"agent_id,omitempty"`     // DEPRECATED: kept for JSON backward compat
+	AgentIDs    []uuid.UUID        `json:"agent_ids,omitempty"`
 	Event       HookEvent          `json:"event"`
 	HandlerType HandlerType        `json:"handler_type"`
 	Scope       Scope              `json:"scope"`
+	Name        string             `json:"name,omitempty"`
 	// Config holds handler-specific options (command path, HTTP URL, prompt template).
 	Config      map[string]any     `json:"config"`
 	Matcher     string             `json:"matcher,omitempty"`

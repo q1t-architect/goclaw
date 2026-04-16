@@ -27,10 +27,11 @@ const (
 	MethodAgentsFileSet  = "agents.files.set"
 
 	// Config
-	MethodConfigGet    = "config.get"
-	MethodConfigApply  = "config.apply"
-	MethodConfigPatch  = "config.patch"
-	MethodConfigSchema = "config.schema"
+	MethodConfigGet      = "config.get"
+	MethodConfigApply    = "config.apply"
+	MethodConfigPatch    = "config.patch"
+	MethodConfigSchema   = "config.schema"
+	MethodConfigDefaults = "config.defaults"
 
 	// Sessions
 	MethodSessionsList    = "sessions.list"
@@ -192,4 +193,15 @@ const (
 
 	// WhatsApp
 	MethodWhatsAppQRStart = "whatsapp.qr.start"
+)
+
+// Agent hooks (Phase 3)
+const (
+	MethodHooksList    = "hooks.list"
+	MethodHooksCreate  = "hooks.create"
+	MethodHooksUpdate  = "hooks.update"
+	MethodHooksDelete  = "hooks.delete"
+	MethodHooksToggle  = "hooks.toggle"
+	MethodHooksTest    = "hooks.test"
+	MethodHooksHistory = "hooks.history"
 )

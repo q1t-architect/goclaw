@@ -34,6 +34,8 @@ type DelegateRequest struct {
 	Task         string
 	DelegationID string
 	UserID       string
+	SenderID     string // real acting sender preserved through delegate announce re-ingress (#915)
+	Role         string // caller's RBAC role; bypasses per-user grants for admin/operator/owner (#915)
 	TenantID     string
 	Channel      string
 	ChatID       string
@@ -137,7 +139,9 @@ func (t *DelegateTool) Execute(ctx context.Context, args map[string]any) *Result
 	}
 
 	delegationID := uuid.New().String()
-	userID := store.UserIDFromContext(ctx)
+	// Audit-trail identity = actor (real sender). Groups audit actions to the
+	// individual user rather than the group principal (#915).
+	actorID := store.ActorIDFromContext(ctx)
 
 	req := DelegateRequest{
 		FromAgentID:  fromAgentID,
@@ -145,7 +149,9 @@ func (t *DelegateTool) Execute(ctx context.Context, args map[string]any) *Result
 		ToAgentKey:   agentKey,
 		Task:         task,
 		DelegationID: delegationID,
-		UserID:       userID,
+		UserID:       actorID,
+		SenderID:     store.SenderIDFromContext(ctx),
+		Role:         store.RoleFromContext(ctx),
 		TenantID:     store.TenantIDFromContext(ctx).String(),
 		Channel:      ToolChannelFromCtx(ctx),
 		ChatID:       ToolChatIDFromCtx(ctx),
@@ -172,7 +178,7 @@ func (t *DelegateTool) Execute(ctx context.Context, args map[string]any) *Result
 			HookEvent: hooks.EventSubagentStart,
 			Depth:     hooks.DepthFrom(ctx),
 		}
-		dec, err := t.hookDispatcher.Fire(ctx, evt)
+		r, err := t.hookDispatcher.Fire(ctx, evt)
 		if err != nil {
 			t.emitEvent(ctx, eventbus.EventDelegateFailed, eventbus.DelegateFailedPayload{
 				DelegationID: req.DelegationID,
@@ -182,7 +188,9 @@ func (t *DelegateTool) Execute(ctx context.Context, args map[string]any) *Result
 			})
 			return ErrorResult(fmt.Sprintf("subagent_start hook error: %v", err))
 		}
-		if dec == hooks.DecisionBlock {
+		// Updated* from FireResult intentionally unused — delegate has no
+		// mutation need in Wave 1.
+		if r.Decision == hooks.DecisionBlock {
 			t.emitEvent(ctx, eventbus.EventDelegateFailed, eventbus.DelegateFailedPayload{
 				DelegationID: req.DelegationID,
 				FromAgent:    req.FromAgentKey,
@@ -281,6 +289,24 @@ func (t *DelegateTool) announceToParent(req DelegateRequest, content string, med
 		return
 	}
 	tenantUUID, _ := uuid.Parse(req.TenantID)
+	meta := map[string]string{
+		"origin_channel":     req.Channel,
+		"origin_peer_kind":   req.PeerKind,
+		"origin_session_key": req.SessionKey,
+		"delegation_id":      req.DelegationID,
+		"delegate_from":      req.FromAgentKey,
+		"delegate_to":        req.ToAgentKey,
+		MetaParentAgent:      req.FromAgentKey,
+	}
+	if req.SenderID != "" {
+		meta[MetaOriginSenderID] = req.SenderID
+	}
+	if req.Role != "" {
+		meta[MetaOriginRole] = req.Role
+	}
+	if req.UserID != "" {
+		meta[MetaOriginUserID] = req.UserID
+	}
 	t.msgBus.PublishInbound(bus.InboundMessage{
 		Channel:  "system",
 		SenderID: fmt.Sprintf("subagent:delegate:%s", req.DelegationID),
@@ -289,15 +315,7 @@ func (t *DelegateTool) announceToParent(req DelegateRequest, content string, med
 		Media:    media,
 		UserID:   req.UserID,
 		TenantID: tenantUUID,
-		Metadata: map[string]string{
-			"origin_channel":     req.Channel,
-			"origin_peer_kind":   req.PeerKind,
-			"origin_session_key": req.SessionKey,
-			"delegation_id":      req.DelegationID,
-			"delegate_from":      req.FromAgentKey,
-			"delegate_to":        req.ToAgentKey,
-			MetaParentAgent:      req.FromAgentKey,
-		},
+		Metadata: meta,
 	})
 }
 
@@ -319,7 +337,7 @@ func (t *DelegateTool) emitEvent(ctx context.Context, eventType eventbus.EventTy
 		Type:      eventType,
 		TenantID:  store.TenantIDFromContext(ctx).String(),
 		AgentID:   store.AgentIDFromContext(ctx).String(),
-		UserID:    store.UserIDFromContext(ctx),
+		UserID:    store.ActorIDFromContext(ctx), // audit actor, not scope (#915)
 		Timestamp: time.Now().UTC(),
 		Payload:   payload,
 	})

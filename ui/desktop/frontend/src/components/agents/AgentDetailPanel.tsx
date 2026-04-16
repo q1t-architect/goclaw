@@ -17,9 +17,12 @@ import { AgentSkillsSection } from './AgentSkillsSection'
 import { AgentMcpSection } from './AgentMcpSection'
 import { AgentFilesTab } from './AgentFilesTab'
 import { VoicePicker } from './voice-picker'
+import { TtsEmptyState } from './tts-empty-state'
 import { ConfirmDialog } from '../common/ConfirmDialog'
 import { useAgentDetailState } from '../../hooks/use-agent-detail-state'
+import { useDesktopTtsConfig } from '../../hooks/use-tts-config'
 import type { AgentData } from '../../types/agent'
+import type { TtsProviderId } from '@/data/tts-providers'
 
 type DetailTab = 'overview' | 'evolution' | 'files'
 
@@ -57,6 +60,7 @@ export function AgentDetailPanel({ agent, onSave, onResummon, onClose }: AgentDe
 
   const s = useAgentDetailState(agent, onSaveWithVoice, onClose)
   const isPredefined = agent.agent_type === 'predefined'
+  const { globalProvider } = useDesktopTtsConfig()
 
   const handleConfirmResummon = async () => {
     setConfirmResummon(false)
@@ -184,12 +188,20 @@ export function AgentDetailPanel({ agent, onSave, onResummon, onClose }: AgentDe
             <hr className="border-border" />
             <AgentMcpSection agentId={agent.id} />
             <hr className="border-border" />
-            {/* TTS Voice section */}
+            {/* TTS Voice section — gated on global TTS provider being configured */}
             <div className="space-y-2">
               <p className="text-xs font-semibold text-text-primary uppercase tracking-wide">
                 {t('tts:voice_label')}
               </p>
-              <VoicePicker value={ttsVoiceId} onChange={setTtsVoiceId} />
+              {globalProvider ? (
+                <VoicePicker
+                  value={ttsVoiceId}
+                  onChange={setTtsVoiceId}
+                  provider={globalProvider as TtsProviderId}
+                />
+              ) : (
+                <TtsEmptyState />
+              )}
             </div>
           </div>
         ) : (

@@ -21,6 +21,7 @@ const (
 	defaultSoftTrimHeadChars    = 3000
 	defaultSoftTrimTailChars    = 3000
 	defaultHardClearPlaceholder = "[Old tool result content cleared]"
+	defaultCacheTTL             = "5m"
 	charsPerTokenEstimate       = 4
 
 	// Media tool results contain irreplaceable vision/audio descriptions
@@ -29,6 +30,40 @@ const (
 	mediaSoftTrimHeadChars = 4000
 	mediaSoftTrimTailChars = 4000
 )
+
+// PruningDefaults mirrors the private pruning const block for external
+// consumers (e.g. config.defaults RPC). Values are the SSoT the resolver uses
+// when a user config leaves a field unset.
+type PruningDefaults struct {
+	KeepLastAssistants   int
+	SoftTrimRatio        float64
+	HardClearRatio       float64
+	MinPrunableToolChars int
+	SoftTrimMaxChars     int
+	SoftTrimHeadChars    int
+	SoftTrimTailChars    int
+	HardClearEnabled     bool
+	HardClearPlaceholder string
+	TTL                  string
+}
+
+// DefaultPruningValues returns the private pruning consts packaged for
+// cross-package consumption. The resolver in resolvePruningSettings uses these
+// same values.
+func DefaultPruningValues() PruningDefaults {
+	return PruningDefaults{
+		KeepLastAssistants:   defaultKeepLastAssistants,
+		SoftTrimRatio:        defaultSoftTrimRatio,
+		HardClearRatio:       defaultHardClearRatio,
+		MinPrunableToolChars: defaultMinPrunableToolChars,
+		SoftTrimMaxChars:     defaultSoftTrimMaxChars,
+		SoftTrimHeadChars:    defaultSoftTrimHeadChars,
+		SoftTrimTailChars:    defaultSoftTrimTailChars,
+		HardClearEnabled:     true,
+		HardClearPlaceholder: defaultHardClearPlaceholder,
+		TTL:                  defaultCacheTTL,
+	}
+}
 
 // pruningEstimator wraps either a tiktoken counter or the legacy char-based heuristic.
 // When counter is nil, falls back to rune_count / charsPerTokenEstimate.

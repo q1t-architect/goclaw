@@ -55,7 +55,25 @@ type Config struct {
 	Telemetry TelemetryConfig `json:"telemetry"`
 	Tailscale TailscaleConfig `json:"tailscale"`
 	Bindings  []AgentBinding  `json:"bindings,omitempty"`
+	Hooks     HooksConfig     `json:"hooks,omitempty"`
 	mu        sync.RWMutex
+}
+
+// HooksConfig tunes the script-hook runtime caps. All zero-valued fields fall
+// back to the handlers package defaults (see handlers.NewScriptHandler).
+//
+// ScriptConcurrency bounds the total concurrent script executions per process.
+// ScriptPerTenantConcurrency bounds a single tenant's share of that pool so a
+// runaway tenant cannot starve global slots. ScriptCacheSize caps the LRU of
+// compiled goja programs keyed by (hookID, version).
+//
+// BuiltinDisable names builtin hook IDs (from Phase 04's builtins.yaml) that
+// the operator wants force-disabled at startup — per-deployment escape hatch.
+type HooksConfig struct {
+	ScriptConcurrency          int      `json:"script_concurrency,omitempty"`
+	ScriptPerTenantConcurrency int      `json:"script_per_tenant_concurrency,omitempty"`
+	ScriptCacheSize            int      `json:"script_cache_size,omitempty"`
+	BuiltinDisable             []string `json:"builtin_disable,omitempty"`
 }
 
 // TailscaleConfig configures the optional Tailscale tsnet listener.

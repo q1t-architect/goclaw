@@ -15,7 +15,9 @@ type HookEditionPolicy struct{}
 // reason is a stable string suitable for audit rows and i18n key lookup.
 func (HookEditionPolicy) Allow(ht HandlerType, _ Scope, ed edition.Edition) (bool, string) {
 	switch ht {
-	case HandlerHTTP, HandlerPrompt:
+	case HandlerHTTP, HandlerPrompt, HandlerScript:
+		// Script hooks run in a sandboxed goja runtime — no shell escape surface.
+		// Allowed on every edition for tenant admin + operator authors alike.
 		return true, ""
 	case HandlerCommand:
 		if ed.Name == edition.Lite.Name {

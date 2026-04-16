@@ -3,6 +3,7 @@ package pg
 import (
 	"context"
 	"database/sql"
+	"errors"
 	"os"
 	"testing"
 	"time"
@@ -35,7 +36,7 @@ func hooksTestDB(t *testing.T) *sql.DB {
 		t.Skipf("PG not reachable: %v", err)
 	}
 
-	m, err := migrate.New("file://../../../../migrations", dsn)
+	m, err := migrate.New("file://../../../migrations", dsn)
 	if err != nil {
 		db.Close()
 		t.Fatalf("migrate.New: %v", err)
@@ -57,22 +58,27 @@ func seedTenantAndAgent(t *testing.T, db *sql.DB) (tenantID, agentID uuid.UUID) 
 	tenantID = uuid.Must(uuid.NewV7())
 	agentID = uuid.Must(uuid.NewV7())
 
+	// UUIDv7s generated in the same millisecond share their 8-char prefix,
+	// so deriving slug/agent_key from `[:8]` collides when a test calls
+	// seedTenantAndAgent twice back-to-back and the second INSERT is swallowed
+	// by ON CONFLICT DO NOTHING on the unique slug/agent_key constraint. Use
+	// the full UUID — always unique.
 	_, err := db.Exec(
 		`INSERT INTO tenants (id, name, slug, status) VALUES ($1,$2,$3,'active') ON CONFLICT DO NOTHING`,
-		tenantID, "hook-test-"+tenantID.String()[:8], "ht"+tenantID.String()[:8])
+		tenantID, "hook-test-"+tenantID.String()[:8], "ht-"+tenantID.String())
 	if err != nil {
 		t.Fatalf("seed tenant: %v", err)
 	}
 	_, err = db.Exec(
 		`INSERT INTO agents (id, tenant_id, agent_key, agent_type, status, provider, model, owner_id)
 		 VALUES ($1,$2,$3,'predefined','active','test','test-model','owner') ON CONFLICT DO NOTHING`,
-		agentID, tenantID, "hook-agent-"+agentID.String()[:8])
+		agentID, tenantID, "hook-agent-"+agentID.String())
 	if err != nil {
 		t.Fatalf("seed agent: %v", err)
 	}
 	t.Cleanup(func() {
-		db.Exec("DELETE FROM hook_executions WHERE hook_id IN (SELECT id FROM agent_hooks WHERE tenant_id=$1)", tenantID)
-		db.Exec("DELETE FROM agent_hooks WHERE tenant_id=$1", tenantID)
+		db.Exec("DELETE FROM hook_executions WHERE hook_id IN (SELECT id FROM hooks WHERE tenant_id=$1)", tenantID)
+		db.Exec("DELETE FROM hooks WHERE tenant_id=$1", tenantID)
 		db.Exec("DELETE FROM agents WHERE id=$1", agentID)
 		db.Exec("DELETE FROM tenants WHERE id=$1", tenantID)
 	})
@@ -379,5 +385,89 @@ func TestPGHookStore_CacheInvalidatedOnWrite(t *testing.T) {
 	}
 	if len(after) <= beforeCount {
 		t.Errorf("expected more hooks after create: before=%d after=%d", beforeCount, len(after))
+	}
+}
+
+// H9 (Phase 03): Create must honor a caller-supplied cfg.ID so the builtin
+// seeder's idempotent UUIDv5 keys survive restarts and tests can use
+// deterministic IDs. Verified on both Create paths (fixed + auto).
+func TestPGHookStore_CreateHonorsFixedID(t *testing.T) {
+	db := hooksTestDB(t)
+	tenantID, _ := seedTenantAndAgent(t, db)
+	s := NewPGHookStore(db)
+	ctx := tenantScopedCtx(tenantID)
+
+	fixed := uuid.MustParse("aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee")
+	cfg := minimalHook(tenantID, hooks.EventUserPromptSubmit)
+	cfg.ID = fixed
+
+	got, err := s.Create(ctx, cfg)
+	if err != nil {
+		t.Fatalf("Create fixed id: %v", err)
+	}
+	t.Cleanup(func() { s.Delete(masterCtx(), got) })
+	if got != fixed {
+		t.Fatalf("returned id=%s, want %s (H9: caller id must be honored)", got, fixed)
+	}
+
+	// Nil cfg.ID still auto-generates a UUIDv7.
+	cfg2 := minimalHook(tenantID, hooks.EventPreToolUse)
+	cfg2.ID = uuid.Nil
+	auto, err := s.Create(ctx, cfg2)
+	if err != nil {
+		t.Fatalf("Create auto id: %v", err)
+	}
+	t.Cleanup(func() { s.Delete(masterCtx(), auto) })
+	if auto == uuid.Nil {
+		t.Fatal("Create returned nil id for cfg.ID=uuid.Nil path")
+	}
+}
+
+// ─── Phase 04: builtin-row readonly protection ───────────────────────────────
+
+// TestPGHookStore_BuiltinReadOnly exercises the Phase 04 guard: user-facing
+// writes on a source='builtin' row may only toggle enabled; every other patch
+// must surface ErrBuiltinReadOnly. The seed bypass marker unlocks full writes
+// for the loader package only.
+func TestPGHookStore_BuiltinReadOnly(t *testing.T) {
+	db := hooksTestDB(t)
+	tenantID, _ := seedTenantAndAgent(t, db)
+	s := NewPGHookStore(db)
+
+	// Seed a builtin row via WithSeedBypass (the only authorized path).
+	seedCtx := hooks.WithSeedBypass(store.WithRole(masterCtx(), store.RoleOwner))
+	cfg := minimalHook(hooks.SentinelTenantID, hooks.EventUserPromptSubmit)
+	cfg.Source = hooks.SourceBuiltin
+	cfg.Scope = hooks.ScopeGlobal
+	cfg.HandlerType = hooks.HandlerScript
+	cfg.Config = map[string]any{"source": "// v1"}
+	fixedID := uuid.MustParse("11111111-2222-3333-4444-555555555555")
+	cfg.ID = fixedID
+	id, err := s.Create(seedCtx, cfg)
+	if err != nil {
+		t.Fatalf("seed create: %v", err)
+	}
+	t.Cleanup(func() { s.Delete(seedCtx, id) })
+
+	// User ctx: tenant-scoped. Non-enabled patch must be rejected.
+	userCtx := tenantScopedCtx(tenantID)
+	err = s.Update(userCtx, id, map[string]any{"matcher": "evil"})
+	if !errors.Is(err, hooks.ErrBuiltinReadOnly) {
+		t.Fatalf("Update(matcher) err=%v, want ErrBuiltinReadOnly", err)
+	}
+
+	// Enabled toggle through master context is allowed.
+	if err := s.Update(masterCtx(), id, map[string]any{"enabled": false}); err != nil {
+		t.Fatalf("Update(enabled) should succeed on builtin: %v", err)
+	}
+
+	// Delete blocked for users.
+	if err := s.Delete(userCtx, id); !errors.Is(err, hooks.ErrBuiltinReadOnly) {
+		t.Fatalf("Delete user err=%v, want ErrBuiltinReadOnly", err)
+	}
+
+	// Seed bypass unlocks full writes (round-trip to prove).
+	if err := s.Update(seedCtx, id, map[string]any{"matcher": "ok"}); err != nil {
+		t.Fatalf("seed-bypass Update should succeed: %v", err)
 	}
 }

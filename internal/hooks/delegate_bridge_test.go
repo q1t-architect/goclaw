@@ -40,9 +40,9 @@ type fakeCapturingDispatcher struct {
 	events []Event
 }
 
-func (f *fakeCapturingDispatcher) Fire(_ context.Context, ev Event) (Decision, error) {
+func (f *fakeCapturingDispatcher) Fire(_ context.Context, ev Event) (FireResult, error) {
 	f.events = append(f.events, ev)
-	return DecisionAllow, nil
+	return FireResult{Decision: DecisionAllow}, nil
 }
 
 // --- tests ---

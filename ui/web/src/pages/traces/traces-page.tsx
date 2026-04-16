@@ -62,11 +62,14 @@ export function TracesPage() {
   const { t } = useTranslation("traces");
   const { t: tc } = useTranslation("common");
   const tz = useUiStore((s) => s.timezone);
+  const globalPageSize = useUiStore((s) => s.pageSize);
+  const setGlobalPageSize = useUiStore((s) => s.setPageSize);
   const [agentFilter, setAgentFilter] = useState<string>();
   const [channelFilter, setChannelFilter] = useState<string>();
   const [selectedTraceId, setSelectedTraceId] = useState<string | null>(null);
   const [page, setPage] = useState(1);
-  const [pageSize, setPageSize] = useState(20);
+  const [pageSize, setPageSizeRaw] = useState(globalPageSize);
+  const setPageSize = (size: number) => { setPageSizeRaw(size); setPage(1); setGlobalPageSize(size); };
 
   const ws = useWs();
   const queryClient = useQueryClient();

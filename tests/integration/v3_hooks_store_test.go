@@ -50,7 +50,7 @@ func TestHooksStore_CRUDRoundTrip(t *testing.T) {
 	}
 	t.Cleanup(func() {
 		db.Exec("DELETE FROM hook_executions WHERE hook_id = $1", id)
-		db.Exec("DELETE FROM agent_hooks WHERE id = $1", id)
+		db.Exec("DELETE FROM hooks WHERE id = $1", id)
 	})
 
 	got, err := s.GetByID(ctx, id)
@@ -120,7 +120,7 @@ func TestHooksStore_TenantIsolation(t *testing.T) {
 		t.Fatalf("Create tenantA hook: %v", err)
 	}
 	t.Cleanup(func() {
-		db.Exec("DELETE FROM agent_hooks WHERE id = $1", id)
+		db.Exec("DELETE FROM hooks WHERE id = $1", id)
 	})
 
 	// Tenant B must not see A's row.
@@ -170,7 +170,7 @@ func TestHooksStore_DedupKeyIdempotent(t *testing.T) {
 	}
 	t.Cleanup(func() {
 		db.Exec("DELETE FROM hook_executions WHERE hook_id = $1", hookID)
-		db.Exec("DELETE FROM agent_hooks WHERE id = $1", hookID)
+		db.Exec("DELETE FROM hooks WHERE id = $1", hookID)
 	})
 
 	exec := hooks.HookExecution{

@@ -48,13 +48,19 @@ func (p *Provider) Name() string { return "edge" }
 
 // Synthesize shells out to edge-tts. Output is always MP3
 // (edge-tts default format: audio-24khz-48kbitrate-mono-mp3).
-func (p *Provider) Synthesize(ctx context.Context, text string, _ audio.TTSOptions) (*audio.SynthResult, error) {
+// opts.Voice overrides the construction-time voice when non-empty.
+func (p *Provider) Synthesize(ctx context.Context, text string, opts audio.TTSOptions) (*audio.SynthResult, error) {
 	tmpDir := os.TempDir()
 	outPath := filepath.Join(tmpDir, fmt.Sprintf("tts-%d.mp3", time.Now().UnixNano()))
 	defer os.Remove(outPath)
 
+	voice := p.voice
+	if opts.Voice != "" {
+		voice = opts.Voice
+	}
+
 	args := []string{
-		"--voice", p.voice,
+		"--voice", voice,
 		"--text", text,
 		"--write-media", outPath,
 	}

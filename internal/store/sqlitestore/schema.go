@@ -16,7 +16,7 @@ var schemaSQL string
 
 // SchemaVersion is the current SQLite schema version.
 // Bump this when adding new migration steps below.
-const SchemaVersion = 20
+const SchemaVersion = 24
 
 // migrations maps version → SQL to apply when upgrading FROM that version.
 // schema.sql always represents the LATEST full schema (for fresh DBs).
@@ -456,24 +456,58 @@ WHERE context_pruning IS NOT NULL
   AND json_type(context_pruning) = 'object'
   AND json_extract(context_pruning, '$.mode') IS NULL;`,
 
-	// Version 19 → 20: agent hooks system (mirrors PG migration 000052).
-	// Creates agent_hooks, hook_executions, tenant_hook_budget tables.
-	// All idempotent (CREATE TABLE IF NOT EXISTS / CREATE INDEX IF NOT EXISTS).
-	19: addAgentHooksTables,
+	// Version 19 → 20: hooks system (mirrors PG migrations 000052–000055).
+	// Creates hooks, hook_agents, hook_executions, tenant_hook_budget tables
+	// with final schema. SQLite/desktop never shipped with intermediate names
+	// (agent_hooks, agent_hook_agents) so we create the final form directly.
+	19: addHooksTables,
+
+	// Versions 20–22: no-op — consolidated into v19 above.
+	20: `SELECT 1;`,
+	21: `SELECT 1;`,
+	22: `SELECT 1;`,
+
+	// Version 23 → 24: vault_documents scope/ownership consistency triggers.
+	// Mirrors PG migration 000055 CHECK constraint; SQLite cannot add CHECK via
+	// ALTER TABLE so we use BEFORE INSERT + BEFORE UPDATE triggers instead.
+	// fresh DBs get the inline CHECK in schema.sql; existing DBs get triggers.
+	23: `CREATE TRIGGER IF NOT EXISTS trg_vault_docs_scope_consistency_ins
+  BEFORE INSERT ON vault_documents
+  FOR EACH ROW
+  WHEN NOT (
+    (NEW.scope='personal' AND NEW.agent_id IS NOT NULL AND NEW.team_id IS NULL) OR
+    (NEW.scope='team'     AND NEW.team_id  IS NOT NULL AND NEW.agent_id IS NULL) OR
+    (NEW.scope='shared'   AND NEW.agent_id IS NULL     AND NEW.team_id  IS NULL) OR
+    NEW.scope='custom'
+  )
+  BEGIN
+    SELECT RAISE(ABORT, 'vault_documents_scope_consistency violation');
+  END;
+
+CREATE TRIGGER IF NOT EXISTS trg_vault_docs_scope_consistency_upd
+  BEFORE UPDATE OF scope, agent_id, team_id ON vault_documents
+  FOR EACH ROW
+  WHEN NOT (
+    (NEW.scope='personal' AND NEW.agent_id IS NOT NULL AND NEW.team_id IS NULL) OR
+    (NEW.scope='team'     AND NEW.team_id  IS NOT NULL AND NEW.agent_id IS NULL) OR
+    (NEW.scope='shared'   AND NEW.agent_id IS NULL     AND NEW.team_id  IS NULL) OR
+    NEW.scope='custom'
+  )
+  BEGIN
+    SELECT RAISE(ABORT, 'vault_documents_scope_consistency violation');
+  END;`,
 }
 
-// addAgentHooksTables is the SQLite incremental migration for schema v19 → v20.
-// Idempotent: CREATE TABLE IF NOT EXISTS / CREATE UNIQUE INDEX IF NOT EXISTS.
-// Mirrors PG migration 000052_agent_hooks.up.sql.
-// JSONB → TEXT, TIMESTAMPTZ → TEXT (ISO8601), BYTEA → BLOB, DATE → TEXT.
-const addAgentHooksTables = `
-CREATE TABLE IF NOT EXISTS agent_hooks (
+// addHooksTables is the SQLite incremental migration for schema v19 → v20.
+// Mirrors PG migrations 000052–000055 (consolidated — desktop never shipped
+// with intermediate agent_hooks / agent_hook_agents names).
+const addHooksTables = `
+CREATE TABLE IF NOT EXISTS hooks (
     id           TEXT NOT NULL PRIMARY KEY,
     tenant_id    TEXT NOT NULL DEFAULT '0193a5b0-7000-7000-8000-000000000001',
-    agent_id     TEXT REFERENCES agents(id) ON DELETE CASCADE,
     scope        TEXT NOT NULL CHECK (scope IN ('global', 'tenant', 'agent')),
     event        TEXT NOT NULL,
-    handler_type TEXT NOT NULL CHECK (handler_type IN ('command', 'http', 'prompt')),
+    handler_type TEXT NOT NULL CHECK (handler_type IN ('command', 'http', 'prompt', 'script')),
     config       TEXT NOT NULL DEFAULT '{}',
     matcher      TEXT,
     if_expr      TEXT,
@@ -482,27 +516,26 @@ CREATE TABLE IF NOT EXISTS agent_hooks (
     priority     INTEGER NOT NULL DEFAULT 0,
     enabled      INTEGER NOT NULL DEFAULT 1,
     version      INTEGER NOT NULL DEFAULT 1,
-    source       TEXT NOT NULL DEFAULT 'ui' CHECK (source IN ('ui', 'api', 'seed')),
+    source       TEXT NOT NULL DEFAULT 'ui' CHECK (source IN ('ui', 'api', 'seed', 'builtin')),
     metadata     TEXT NOT NULL DEFAULT '{}',
+    name         TEXT,
     created_by   TEXT,
     created_at   TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
     updated_at   TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
 );
-CREATE UNIQUE INDEX IF NOT EXISTS uq_hooks_global
-    ON agent_hooks (event, handler_type)
-    WHERE scope = 'global';
-CREATE UNIQUE INDEX IF NOT EXISTS uq_hooks_tenant
-    ON agent_hooks (tenant_id, event, handler_type)
-    WHERE scope = 'tenant';
-CREATE UNIQUE INDEX IF NOT EXISTS uq_hooks_agent
-    ON agent_hooks (tenant_id, agent_id, event, handler_type)
-    WHERE scope = 'agent';
 CREATE INDEX IF NOT EXISTS idx_hooks_lookup
-    ON agent_hooks (tenant_id, agent_id, event)
+    ON hooks (tenant_id, event)
     WHERE enabled = 1;
+CREATE TABLE IF NOT EXISTS hook_agents (
+    hook_id  TEXT NOT NULL REFERENCES hooks(id) ON DELETE CASCADE,
+    agent_id TEXT NOT NULL REFERENCES agents(id) ON DELETE CASCADE,
+    PRIMARY KEY (hook_id, agent_id)
+);
+CREATE INDEX IF NOT EXISTS idx_hook_agents_agent
+    ON hook_agents (agent_id);
 CREATE TABLE IF NOT EXISTS hook_executions (
     id           TEXT NOT NULL PRIMARY KEY,
-    hook_id      TEXT REFERENCES agent_hooks(id) ON DELETE SET NULL,
+    hook_id      TEXT REFERENCES hooks(id) ON DELETE SET NULL,
     session_id   TEXT,
     event        TEXT NOT NULL,
     input_hash   TEXT,

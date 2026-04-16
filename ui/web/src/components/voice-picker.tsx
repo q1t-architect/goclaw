@@ -5,14 +5,33 @@ import { createPortal } from "react-dom";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { cn } from "@/lib/utils";
 import { useVoices, useRefreshVoices, type Voice } from "@/api/voices";
 import { VoicePreviewButton } from "@/components/voice-preview-button";
+import {
+  getProviderDefinition,
+  type TtsProviderId,
+} from "@/data/tts-providers";
 
 interface Props {
   value?: string;
   onChange: (id: string) => void;
   disabled?: boolean;
+  /**
+   * Controls picker mode:
+   *   - undefined / "elevenlabs" → dynamic fetch from /v1/voices (legacy behavior).
+   *   - "openai" | "edge" | "minimax" → hardcoded list from catalog.
+   *   - "" (empty string) → disabled; shows "Configure TTS provider first".
+   */
+  provider?: TtsProviderId | "";
+  placeholder?: string;
 }
 
 const LABEL_KEYS = ["gender", "accent", "age", "use_case"] as const;
@@ -44,7 +63,96 @@ function VoiceRow({ voice, selected, onSelect }: { voice: Voice; selected: boole
   );
 }
 
-export function VoicePicker({ value, onChange, disabled }: Props) {
+/**
+ * Top-level picker. Dispatches to one of three sub-components based on `provider`:
+ *   - "" → disabled empty-state
+ *   - non-dynamic provider (openai/edge/minimax) → <Select> from catalog
+ *   - undefined | "elevenlabs" → <DynamicVoicePicker> that fetches /v1/voices
+ */
+export function VoicePicker({ value, onChange, disabled, provider, placeholder }: Props) {
+  if (provider === "") {
+    return <EmptyStatePicker placeholder={placeholder} />;
+  }
+  const def = provider ? getProviderDefinition(provider) : null;
+  if (def && !def.dynamic) {
+    return (
+      <StaticVoicePicker
+        value={value}
+        onChange={onChange}
+        disabled={disabled}
+        voices={def.voices}
+        placeholder={placeholder}
+      />
+    );
+  }
+  return (
+    <DynamicVoicePicker
+      value={value}
+      onChange={onChange}
+      disabled={disabled}
+    />
+  );
+}
+
+function EmptyStatePicker({ placeholder }: { placeholder?: string }) {
+  const { t } = useTranslation("tts");
+  return (
+    <button
+      type="button"
+      disabled
+      className={cn(
+        "border-input dark:bg-input/30 flex h-9 w-full items-center justify-between gap-2 rounded-md border bg-transparent px-3 py-2 text-base md:text-sm shadow-xs outline-none",
+        "disabled:cursor-not-allowed disabled:opacity-50",
+        "text-muted-foreground",
+      )}
+    >
+      <span className="truncate">
+        {placeholder ?? t("voice_picker.requires_provider")}
+      </span>
+      <ChevronDownIcon className="size-4 shrink-0 opacity-50" />
+    </button>
+  );
+}
+
+function StaticVoicePicker({
+  value,
+  onChange,
+  disabled,
+  voices,
+  placeholder,
+}: {
+  value?: string;
+  onChange: (id: string) => void;
+  disabled?: boolean;
+  voices: { value: string; label: string }[];
+  placeholder?: string;
+}) {
+  const { t } = useTranslation("tts");
+  return (
+    <Select value={value ?? ""} onValueChange={onChange} disabled={disabled}>
+      <SelectTrigger className="w-full">
+        <SelectValue placeholder={placeholder ?? t("voice_placeholder")} />
+      </SelectTrigger>
+      <SelectContent>
+        {voices.map((v) => (
+          <SelectItem key={v.value} value={v.value}>
+            {v.label}
+          </SelectItem>
+        ))}
+      </SelectContent>
+    </Select>
+  );
+}
+
+function DynamicVoicePicker({
+  value,
+  onChange,
+  disabled,
+}: {
+  value?: string;
+  onChange: (id: string) => void;
+  disabled?: boolean;
+}) {
   const { t } = useTranslation("tts");
   const [open, setOpen] = useState(false);
   const [search, setSearch] = useState("");
@@ -77,7 +185,6 @@ export function VoicePicker({ value, onChange, disabled }: Props) {
     refresh();
   };
 
-  // Close on outside click
   const handleBlur = (e: React.FocusEvent) => {
     if (!e.currentTarget.contains(e.relatedTarget as Node)) {
       setOpen(false);
@@ -99,7 +206,6 @@ export function VoicePicker({ value, onChange, disabled }: Props) {
         return { position: "fixed" as const, top: rect.bottom + 4, left: rect.left, width: rect.width };
       })()}
     >
-      {/* Header: search + refresh */}
       <div className="flex items-center gap-1 border-b px-2 py-1.5">
         <input
           autoFocus
@@ -121,7 +227,6 @@ export function VoicePicker({ value, onChange, disabled }: Props) {
         </Button>
       </div>
 
-      {/* Voice list */}
       <div className="max-h-60 overflow-y-auto p-1">
         {isLoading ? (
           <div className="space-y-1 p-1">

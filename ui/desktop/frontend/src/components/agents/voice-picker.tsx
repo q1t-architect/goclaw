@@ -3,11 +3,16 @@ import { useVoices, useRefreshVoices } from '../../hooks/use-voices'
 import { VoicePreviewButton } from './voice-preview-button'
 import { Combobox } from '../common/Combobox'
 import type { Voice } from '../../services/voices'
+import {
+  getProviderDefinition,
+  type TtsProviderId,
+} from '@/data/tts-providers'
 
 interface Props {
   value: string | null
   onChange: (voiceId: string) => void
   disabled?: boolean
+  provider?: TtsProviderId | ''
 }
 
 function VoiceOption({ voice, selected }: { voice: Voice; selected: boolean }) {
@@ -28,7 +33,73 @@ function VoiceOption({ voice, selected }: { voice: Voice; selected: boolean }) {
   )
 }
 
-export function VoicePicker({ value, onChange, disabled }: Props) {
+export function VoicePicker({ value, onChange, disabled, provider }: Props) {
+  if (provider === '') {
+    return <EmptyStatePicker />
+  }
+  const def = provider ? getProviderDefinition(provider) : null
+  if (def && !def.dynamic) {
+    return (
+      <StaticVoicePicker
+        value={value}
+        onChange={onChange}
+        disabled={disabled}
+        voices={def.voices}
+      />
+    )
+  }
+  return (
+    <DynamicVoicePicker
+      value={value}
+      onChange={onChange}
+      disabled={disabled}
+    />
+  )
+}
+
+function EmptyStatePicker() {
+  const { t } = useTranslation('tts')
+  return (
+    <div className="flex h-8 w-full items-center rounded border border-border bg-surface-secondary px-2 text-xs text-text-muted opacity-60 cursor-not-allowed">
+      {t('voice_picker.requires_provider')}
+    </div>
+  )
+}
+
+function StaticVoicePicker({
+  value,
+  onChange,
+  disabled,
+  voices,
+}: {
+  value: string | null
+  onChange: (id: string) => void
+  disabled?: boolean
+  voices: { value: string; label: string }[]
+}) {
+  const { t } = useTranslation('tts')
+  const options = voices.map((v) => ({ value: v.value, label: v.label }))
+  return (
+    <Combobox
+      value={value ?? ''}
+      onChange={onChange}
+      options={options}
+      placeholder={t('voice_placeholder')}
+      allowCustom={false}
+      disabled={disabled}
+    />
+  )
+}
+
+function DynamicVoicePicker({
+  value,
+  onChange,
+  disabled,
+}: {
+  value: string | null
+  onChange: (voiceId: string) => void
+  disabled?: boolean
+}) {
   const { t } = useTranslation('tts')
   const { data: voices, isLoading } = useVoices()
   const { mutate: refresh, isPending: refreshing } = useRefreshVoices()
@@ -70,7 +141,6 @@ export function VoicePicker({ value, onChange, disabled }: Props) {
         </button>
       </div>
 
-      {/* Preview for selected voice */}
       {value && voices.find((v) => v.voice_id === value) && (
         <div className="flex items-center gap-1 text-[11px] text-text-muted">
           <VoicePreviewButton
@@ -88,5 +158,4 @@ export function VoicePicker({ value, onChange, disabled }: Props) {
   )
 }
 
-// Export VoiceOption for potential reuse
 export { VoiceOption }

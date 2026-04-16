@@ -157,7 +157,6 @@ func (ch *Channel) Start(ctx context.Context) error {
 			"note", "webhook_secret not configured; incoming webhook requests will not be authenticated")
 	}
 
-	// [F9] Warn if auto_react enabled without webhook signature verification.
 	// Without HMAC, any actor reaching the webhook endpoint can trigger Pancake API calls.
 	if ch.config.Features.AutoReact && ch.webhookSecret == "" {
 		slog.Warn("security.pancake_auto_react_without_hmac: auto_react is enabled but "+

@@ -75,6 +75,9 @@ func init() {
 		MsgNoDescription:         "agent has no description to resummon from",
 		MsgInvalidPath:           "invalid path",
 
+		// Tenant backup / restore
+		MsgRestoreNewModeRejectsTenantID: "mode=new creates a fresh tenant; pass tenant_slug (not tenant_id) as the new tenant's target slug",
+
 		// Scheduler
 		MsgQueueFull:    "session queue is full",
 		MsgShuttingDown: "gateway is shutting down, please retry shortly",
@@ -202,5 +205,14 @@ func init() {
 		MsgSTTLegacyConfigDeprecated: "Legacy STT config deprecated; migrate to builtin_tools[stt]",
 		MsgSTTWhatsappPrivacyWarning: "Enabling STT for WhatsApp breaks end-to-end encryption for voice messages sent to this agent.",
 		MsgVoiceMessageFallback:      "[Voice message]",
+
+		// Hooks
+		MsgHookInvalidMatcher:          "invalid matcher regex: %s",
+		MsgHookCommandDisabledStandard: "command-type hooks are only available on Lite edition",
+		MsgHookPromptRequiresMatcher:   "prompt hooks require a matcher or if_expr (runaway-cost guard)",
+		MsgHookCircuitBreakerTripped:   "hook auto-disabled after repeated failures",
+		MsgHookBudgetExceeded:          "tenant hook token budget exceeded",
+		MsgHookPerTurnCapReached:       "hook invocation per-turn cap reached",
+		MsgHookBuiltinReadOnly:         "builtin hooks are read-only except for the enabled toggle",
 	})
 }

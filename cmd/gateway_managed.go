@@ -5,9 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"log/slog"
-	"os"
 	"path/filepath"
-	"time"
 
 	"github.com/google/uuid"
 
@@ -19,7 +17,7 @@ import (
 	"github.com/nextlevelbuilder/goclaw/internal/edition"
 	"github.com/nextlevelbuilder/goclaw/internal/eventbus"
 	"github.com/nextlevelbuilder/goclaw/internal/hooks"
-	hookhandlers "github.com/nextlevelbuilder/goclaw/internal/hooks/handlers"
+	hookbuiltin "github.com/nextlevelbuilder/goclaw/internal/hooks/builtin"
 	"github.com/nextlevelbuilder/goclaw/internal/orchestration"
 	httpapi "github.com/nextlevelbuilder/goclaw/internal/http"
 	kg "github.com/nextlevelbuilder/goclaw/internal/knowledgegraph"
@@ -28,7 +26,6 @@ import (
 	memorypkg "github.com/nextlevelbuilder/goclaw/internal/memory"
 	"github.com/nextlevelbuilder/goclaw/internal/providers"
 	"github.com/nextlevelbuilder/goclaw/internal/sandbox"
-	"github.com/nextlevelbuilder/goclaw/internal/security"
 	"github.com/nextlevelbuilder/goclaw/internal/skills"
 	"github.com/nextlevelbuilder/goclaw/internal/store"
 	"github.com/nextlevelbuilder/goclaw/internal/store/pg"
@@ -130,8 +127,10 @@ func wireExtras(
 
 	// 5. Shared MCP connection pool (eliminates duplicate connections across agents)
 	var mcpPool *mcpbridge.Pool
+	var mcpGrantChecker mcpbridge.GrantChecker
 	if stores.MCP != nil {
 		mcpPool = mcpbridge.NewPool(mcpbridge.DefaultPoolConfig())
+		mcpGrantChecker = mcpbridge.NewStoreGrantChecker(stores.MCP, msgBus)
 	}
 
 	// 6. Set up agent resolver: lazy-creates Loops from DB
@@ -152,21 +151,43 @@ func wireExtras(
 	// Agent Hooks (Issue #875) — lifecycle dispatcher + handlers.
 	var hookDispatcher hooks.Dispatcher = hooks.NewNoopDispatcher()
 	if hs, ok := stores.Hooks.(hooks.HookStore); ok && hs != nil {
-		encryptKey := os.Getenv("GOCLAW_ENCRYPTION_KEY")
+		// Phase 04: wire builtin registry. Install a strip-all lookup FIRST so a
+		// Load() failure leaves the dispatcher failing closed (no wide fallback
+		// via the Phase 03 permissive default). On successful Load we swap in the
+		// real per-id allowlist, then UPSERT canonical rows with stable UUIDv5s.
+		// Seed failures log but never block startup.
+		hooks.SetBuiltinAllowlistLookup(func(uuid.UUID) []string { return nil })
+		if err := hookbuiltin.Load(); err != nil {
+			slog.Warn("hooks.builtin_load_failed", "err", err)
+		} else {
+			hooks.SetBuiltinAllowlistLookup(hookbuiltin.AllowlistFor)
+			if err := hookbuiltin.Seed(context.Background(), hs, appCfg.Hooks); err != nil {
+				slog.Warn("hooks.builtin_seed_failed", "err", err)
+			}
+		}
+
+		// Phase 07: runtime migration — auto-disable legacy command-type hooks
+		// on Standard edition. No-op on Lite. Idempotent. Runs synchronously
+		// before listeners so traffic never sees a command hook fire on a
+		// post-Wave-1 Standard instance.
+		if n, err := hooks.DisableLegacyCommandHooks(context.Background(), hs, edition.Current()); err != nil {
+			slog.Warn("hooks.command_migration_failed", "err", err)
+		} else if n > 0 {
+			slog.Info("hooks.command_migration_ran",
+				"disabled_count", n, "edition", edition.Current().Name)
+		}
+
+		handlers := buildHookHandlers(stores, providerReg, appCfg.Hooks)
 		stdOpts := hooks.StdDispatcherOpts{
-			Store: hs,
-			Audit: hooks.NewAuditWriter(hs, ""),
-			Handlers: map[hooks.HandlerType]hooks.Handler{
-				hooks.HandlerCommand: &hookhandlers.CommandHandler{Edition: edition.Current()},
-				hooks.HandlerHTTP: &hookhandlers.HTTPHandler{
-					EncryptKey: encryptKey,
-					Client:     security.NewSafeClient(10 * time.Second),
-				},
-			},
+			Store:    hs,
+			Audit:    hooks.NewAuditWriter(hs, ""),
+			Handlers: handlers,
 		}
 		hookDispatcher = hooks.NewStdDispatcher(stdOpts)
 		hooks.SubscribeDelegateEvents(domainBus, hookDispatcher)
-		slog.Info("agent hooks dispatcher wired", "handlers", "command,http")
+		// Stash handlers for later gateway.go wiring (test runner).
+		sharedHookHandlers = handlers
+		slog.Info("agent hooks dispatcher wired", "handlers", "command,http,prompt")
 	}
 
 	resolver := agent.NewManagedResolver(agent.ResolverDeps{
@@ -202,6 +223,7 @@ func wireExtras(
 		BuiltinToolStore:       stores.BuiltinTools,
 		MCPStore:               stores.MCP,
 		MCPPool:                mcpPool,
+		MCPGrantChecker:        mcpGrantChecker,
 		ConfigPermStore:        stores.ConfigPermissions,
 		MediaStore:             mediaStore,
 		ModelPricing:           appCfg.Telemetry.ModelPricing,

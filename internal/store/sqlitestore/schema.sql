@@ -1531,7 +1531,13 @@ CREATE TABLE IF NOT EXISTS vault_documents (
     summary       TEXT NOT NULL DEFAULT '',
     metadata      TEXT DEFAULT '{}',
     created_at    TEXT DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
-    updated_at    TEXT DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
+    updated_at    TEXT DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+    CONSTRAINT vault_documents_scope_consistency CHECK (
+        (scope = 'personal' AND agent_id IS NOT NULL AND team_id IS NULL) OR
+        (scope = 'team'     AND team_id  IS NOT NULL AND agent_id IS NULL) OR
+        (scope = 'shared'   AND agent_id IS NULL     AND team_id  IS NULL) OR
+        scope = 'custom'
+    )
 );
 -- SQLite prohibits expressions in inline UNIQUE constraints; use a unique index instead.
 CREATE UNIQUE INDEX IF NOT EXISTS idx_vault_docs_unique_path
@@ -1570,18 +1576,17 @@ CREATE INDEX IF NOT EXISTS idx_vault_links_source
     WHERE json_extract(metadata, '$.source') IS NOT NULL;
 
 -- ============================================================
--- Table: agent_hooks (migration 000052)
+-- Table: hooks (renamed from agent_hooks, migration 000055)
 -- SQLite translation: JSONB→TEXT, TIMESTAMPTZ→TEXT, UUID→TEXT,
 -- BYTEA→BLOB, DATE→TEXT (ISO8601), CHECK for enums.
 -- ============================================================
 
-CREATE TABLE IF NOT EXISTS agent_hooks (
+CREATE TABLE IF NOT EXISTS hooks (
     id           TEXT NOT NULL PRIMARY KEY,
     tenant_id    TEXT NOT NULL DEFAULT '0193a5b0-7000-7000-8000-000000000001',
-    agent_id     TEXT REFERENCES agents(id) ON DELETE CASCADE,
     scope        TEXT NOT NULL CHECK (scope IN ('global', 'tenant', 'agent')),
     event        TEXT NOT NULL,
-    handler_type TEXT NOT NULL CHECK (handler_type IN ('command', 'http', 'prompt')),
+    handler_type TEXT NOT NULL CHECK (handler_type IN ('command', 'http', 'prompt', 'script')),
     config       TEXT NOT NULL DEFAULT '{}',
     matcher      TEXT,
     if_expr      TEXT,
@@ -1590,28 +1595,30 @@ CREATE TABLE IF NOT EXISTS agent_hooks (
     priority     INTEGER NOT NULL DEFAULT 0,
     enabled      INTEGER NOT NULL DEFAULT 1,
     version      INTEGER NOT NULL DEFAULT 1,
-    source       TEXT NOT NULL DEFAULT 'ui' CHECK (source IN ('ui', 'api', 'seed')),
+    source       TEXT NOT NULL DEFAULT 'ui' CHECK (source IN ('ui', 'api', 'seed', 'builtin')),
     metadata     TEXT NOT NULL DEFAULT '{}',
+    name         TEXT,
     created_by   TEXT,
     created_at   TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
     updated_at   TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
 );
 
-CREATE UNIQUE INDEX IF NOT EXISTS uq_hooks_global
-    ON agent_hooks (event, handler_type)
-    WHERE scope = 'global';
-
-CREATE UNIQUE INDEX IF NOT EXISTS uq_hooks_tenant
-    ON agent_hooks (tenant_id, event, handler_type)
-    WHERE scope = 'tenant';
-
-CREATE UNIQUE INDEX IF NOT EXISTS uq_hooks_agent
-    ON agent_hooks (tenant_id, agent_id, event, handler_type)
-    WHERE scope = 'agent';
-
 CREATE INDEX IF NOT EXISTS idx_hooks_lookup
-    ON agent_hooks (tenant_id, agent_id, event)
+    ON hooks (tenant_id, event)
     WHERE enabled = 1;
+
+-- ============================================================
+-- Table: hook_agents (renamed from agent_hook_agents, N:M junction)
+-- ============================================================
+
+CREATE TABLE IF NOT EXISTS hook_agents (
+    hook_id  TEXT NOT NULL REFERENCES hooks(id) ON DELETE CASCADE,
+    agent_id TEXT NOT NULL REFERENCES agents(id) ON DELETE CASCADE,
+    PRIMARY KEY (hook_id, agent_id)
+);
+
+CREATE INDEX IF NOT EXISTS idx_hook_agents_agent
+    ON hook_agents (agent_id);
 
 -- ============================================================
 -- Table: hook_executions (append-only audit log, migration 000052)
@@ -1619,7 +1626,7 @@ CREATE INDEX IF NOT EXISTS idx_hooks_lookup
 
 CREATE TABLE IF NOT EXISTS hook_executions (
     id           TEXT NOT NULL PRIMARY KEY,
-    hook_id      TEXT REFERENCES agent_hooks(id) ON DELETE SET NULL,
+    hook_id      TEXT REFERENCES hooks(id) ON DELETE SET NULL,
     session_id   TEXT,
     event        TEXT NOT NULL,
     input_hash   TEXT,

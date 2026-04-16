@@ -189,6 +189,9 @@ func setupSubagents(providerReg *providers.Registry, cfg *config.Config, msgBus 
 		if sc.ArchiveAfterMinutes > 0 {
 			subCfg.ArchiveAfterMinutes = sc.ArchiveAfterMinutes
 		}
+		if sc.MaxRetries > 0 {
+			subCfg.MaxRetries = sc.MaxRetries
+		}
 		if sc.Model != "" {
 			subCfg.Model = sc.Model
 		}

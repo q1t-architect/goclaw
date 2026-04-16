@@ -70,6 +70,7 @@ export const Methods = {
   CONFIG_APPLY: "config.apply",
   CONFIG_PATCH: "config.patch",
   CONFIG_SCHEMA: "config.schema",
+  CONFIG_DEFAULTS: "config.defaults",
 
   // Sessions
   SESSIONS_LIST: "sessions.list",

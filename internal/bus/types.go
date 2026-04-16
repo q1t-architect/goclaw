@@ -178,11 +178,13 @@ type MessageRouter interface {
 }
 
 // IsInternalSender returns true if the senderID belongs to an internal system
-// component (not a real channel user). These should not be stored as contacts.
+// component (not a real channel user). These should not be stored as contacts
+// and must be rejected by per-user permission checks in group contexts (#915).
 func IsInternalSender(senderID string) bool {
 	return strings.HasPrefix(senderID, "system:") ||
 		strings.HasPrefix(senderID, "notification:") ||
 		strings.HasPrefix(senderID, "teammate:") ||
 		strings.HasPrefix(senderID, "ticker:") ||
+		strings.HasPrefix(senderID, "subagent:") ||
 		senderID == "session_send_tool"
 }

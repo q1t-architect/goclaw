@@ -70,6 +70,9 @@
   },
   "voice_label": "Voice",
   "voice_placeholder": "Select a voice…",
+  "voice_picker": {
+    "requires_provider": "Configure TTS provider first"
+  },
   "voice_refresh": "Refresh",
   "voice_preview": "Preview",
   "voice_stop_preview": "Stop",
@@ -77,5 +80,53 @@
   "voice_loading": "Loading voices…",
   "voice_preview_error": "Preview failed — refreshing list",
   "model_label": "Model",
-  "model_placeholder": "Default (tenant/system)"
+  "model_placeholder": "Default (tenant/system)",
+  "empty_state": {
+    "title": "AI voice is not configured",
+    "description": "Configure TTS so agents can reply with audio.",
+    "cta": "Configure TTS",
+    "non_owner_hint": "Contact an owner to enable AI voice."
+  },
+  "test": {
+    "button": "Test this voice",
+    "sample_text": "Hello, this is a voice test.",
+    "title": "Listen",
+    "placeholder": "Enter text to hear a sample…",
+    "play": "Play",
+    "stop": "Stop",
+    "error_missing_config": "Choose a provider and enter an API key first.",
+    "error_synthesize": "Could not generate audio: {{error}}"
+  },
+  "override": {
+    "label": "Override voice for this agent",
+    "inherits": "Inherits: {{provider}} · {{voice}} · {{model}}"
+  },
+  "testConnection": {
+    "label": "Test connection",
+    "testing": "Testing…",
+    "success": "Connection successful",
+    "failed": "Connection failed"
+  },
+  "connection": {
+    "test": "Test connection",
+    "ok": "Connection OK",
+    "fail": "Invalid key or network error"
+  },
+  "agent": {
+    "override_label": "Override voice for this agent",
+    "inherits_from_global": "Inherits from global: {{provider}} · {{voice}} · {{model}}"
+  },
+  "playground": {
+    "title": "Test Playground",
+    "inputLabel": "Text to synthesize",
+    "placeholder": "Enter text to hear…",
+    "play": "Play",
+    "stop": "Stop",
+    "synthesizing": "Synthesizing…",
+    "playbackFailed": "Playback failed",
+    "requiresProvider": "Select a provider above to enable test playback."
+  },
+  "advanced": {
+    "title": "Advanced settings"
+  }
 }

@@ -112,6 +112,7 @@ type Loop struct {
 	domainBus       eventbus.DomainEventBus // V3 domain event bus for consolidation pipeline
 	sessions        store.SessionStore
 	tools           tools.ToolExecutor
+	registry        *tools.Registry        // direct registry access for MergeToolGroup (per-Registry tool groups)
 	toolPolicy      *tools.PolicyEngine    // optional: filters tools sent to LLM
 	agentToolPolicy *config.ToolPolicySpec // per-agent tool policy from DB (nil = no restrictions)
 	activeRuns      atomic.Int32           // number of currently executing runs
@@ -136,10 +137,11 @@ type Loop struct {
 	userSetups        sync.Map            // userID → *userSetup (workspace + seeding state, per Loop instance)
 
 	// Per-user MCP tools: servers requiring user credentials get connected per-request.
-	mcpStore        store.MCPServerStore  // for credential lookup
-	mcpPool         *mcpbridge.Pool       // user-keyed connection pool
-	mcpUserCredSrvs []store.MCPAccessInfo // servers needing per-user creds
-	mcpUserTools    sync.Map              // userID → []tools.Tool (cached per-user tools)
+	mcpStore        store.MCPServerStore    // for credential lookup
+	mcpPool         *mcpbridge.Pool         // user-keyed connection pool
+	mcpUserCredSrvs []store.MCPAccessInfo   // servers needing per-user creds
+	mcpUserTools    sync.Map                // userID → []tools.Tool (cached per-user tools)
+	mcpGrantChecker mcpbridge.GrantChecker  // runtime grant verification (nil = skip)
 
 	// Compaction config (memory flush settings)
 	compactionCfg *config.CompactionConfig
@@ -416,9 +418,10 @@ type LoopConfig struct {
 	MemoryStore store.MemoryStore
 
 	// Per-user MCP tools (servers requiring per-user credentials)
-	MCPStore        store.MCPServerStore  // for credential lookup
-	MCPPool         *mcpbridge.Pool       // user-keyed connection pool
-	MCPUserCredSrvs []store.MCPAccessInfo // servers needing per-user creds
+	MCPStore        store.MCPServerStore    // for credential lookup
+	MCPPool         *mcpbridge.Pool         // user-keyed connection pool
+	MCPUserCredSrvs []store.MCPAccessInfo   // servers needing per-user creds
+	MCPGrantChecker mcpbridge.GrantChecker  // runtime grant verification (nil = skip)
 
 	// V3 orchestration mode (resolved by resolver, controls tool visibility)
 	OrchMode          OrchestrationMode
@@ -491,6 +494,7 @@ func NewLoop(cfg LoopConfig) *Loop {
 		hookDispatcher:         cfg.HookDispatcher,
 		sessions:               cfg.Sessions,
 		tools:                  cfg.Tools,
+		registry:               cfg.Tools,
 		toolPolicy:             cfg.ToolPolicy,
 		agentToolPolicy:        cfg.AgentToolPolicy,
 		onEvent:                cfg.OnEvent,
@@ -540,6 +544,7 @@ func NewLoop(cfg LoopConfig) *Loop {
 		mcpStore:               cfg.MCPStore,
 		mcpPool:                cfg.MCPPool,
 		mcpUserCredSrvs:        cfg.MCPUserCredSrvs,
+		mcpGrantChecker:        cfg.MCPGrantChecker,
 		orchMode:               cfg.OrchMode,
 		delegateTargets:        cfg.DelegateTargets,
 		evolutionMetricsStore:  cfg.EvolutionMetricsStore,
@@ -562,6 +567,7 @@ type RunRequest struct {
 	UserID            string             // external user ID (TEXT, free-form) for multi-tenant scoping
 	SenderID          string             // original individual sender ID (preserved in group chats for permission checks)
 	SenderName        string             // display name from channel metadata (for bootstrap auto-contact)
+	Role              string             // caller's RBAC role (admin/operator/viewer/owner); bypasses per-user grants for authenticated admins (#915)
 	Stream            bool               // whether to stream response chunks
 	ExtraSystemPrompt string             // optional: injected into system prompt (skills, subagent context, etc.)
 	SkillFilter       []string           // per-request skill override: nil=use agent default, []=no skills, ["x","y"]=whitelist

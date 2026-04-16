@@ -16,9 +16,9 @@ type fakeDispatcher struct {
 	calls    int
 }
 
-func (f *fakeDispatcher) Fire(_ context.Context, _ hooks.Event) (hooks.Decision, error) {
+func (f *fakeDispatcher) Fire(_ context.Context, _ hooks.Event) (hooks.FireResult, error) {
 	f.calls++
-	return f.decision, nil
+	return hooks.FireResult{Decision: f.decision}, nil
 }
 
 // --- minimal noop stores to satisfy AgentLinkStore / AgentCRUDStore ---

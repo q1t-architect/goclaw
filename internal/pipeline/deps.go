@@ -110,11 +110,13 @@ type PipelineDeps struct {
 	MaybeSummarize         func(ctx context.Context, sessionKey string)
 }
 
-// FireHook is nil-safe. Returns DecisionAllow when no dispatcher is wired.
-// Callers on blocking events should abort the stage on DecisionBlock.
-func (d *PipelineDeps) FireHook(ctx context.Context, ev hooks.Event) (hooks.Decision, error) {
+// FireHook is nil-safe. Returns FireResult{Decision: DecisionAllow} when no
+// dispatcher is wired. Callers on blocking events should abort the stage on
+// result.Decision == DecisionBlock and apply result.UpdatedToolInput /
+// UpdatedRawInput to their local state when non-nil (builtin-hook mutations).
+func (d *PipelineDeps) FireHook(ctx context.Context, ev hooks.Event) (hooks.FireResult, error) {
 	if d == nil || d.Hooks == nil {
-		return hooks.DecisionAllow, nil
+		return hooks.FireResult{Decision: hooks.DecisionAllow}, nil
 	}
 	return d.Hooks.Fire(ctx, ev)
 }

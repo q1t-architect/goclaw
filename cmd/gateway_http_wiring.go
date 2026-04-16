@@ -133,7 +133,8 @@ func (d *gatewayDeps) wireHTTPHandlersOnServer(
 		d.server.SetUsageHandler(httpapi.NewUsageHandler(d.pgStores.Snapshots, d.pgStores.DB))
 	}
 
-	// Runtime package management (install/uninstall system/pip/npm packages)
+	// Runtime package management (install/uninstall system/pip/npm/github packages)
+	initGitHubInstaller()
 	d.server.SetPackagesHandler(httpapi.NewPackagesHandler())
 
 	// API documentation (OpenAPI spec + Swagger UI at /docs)
@@ -243,6 +244,18 @@ func (d *gatewayDeps) wireHTTPHandlersOnServer(
 		// Wire WS method — provider nil means each request resolves key via secretStore at HTTP layer.
 		// For WS, use same cache. Provider is resolved via secretStore at WS level in a future phase.
 		methods.NewVoicesMethods(voiceCache, nil).Register(d.server.Router())
+	}
+
+	// TTS synthesize endpoint — shares audio.Manager with setupTTS.
+	if d.audioMgr != nil {
+		ttsH := httpapi.NewTTSHandler(d.audioMgr)
+		// Reuse the server's rate limiter (per-IP/token; NOT per-user).
+		// Server.RateLimiter() is non-nil by construction (server.go:104).
+		if rl := d.server.RateLimiter(); rl != nil && rl.Enabled() {
+			ttsH.SetRateLimiter(rl.Allow)
+		}
+		d.server.SetTTSHandler(ttsH)
+		d.ttsHandler = ttsH // store for hot-reload
 	}
 
 	// Seed + apply builtin tool disables

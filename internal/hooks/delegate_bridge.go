@@ -45,6 +45,8 @@ func SubscribeDelegateEvents(bus eventbus.DomainEventBus, d Dispatcher) {
 				"err", err,
 			)
 		}
+		// SubagentStop is non-blocking; Updated* from FireResult is ignored
+		// (delegate bridge has no mutation path in Wave 1).
 		return nil
 	}
 

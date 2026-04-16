@@ -5,6 +5,7 @@ package sqlitestore
 import (
 	"context"
 	"database/sql"
+	"errors"
 	"path/filepath"
 	"testing"
 	"time"
@@ -175,6 +176,22 @@ func TestSQLiteHookStore_TenantIsolation(t *testing.T) {
 		t.Fatalf("Create A: %v", err)
 	}
 
+	got, err := s.GetByID(ctxB, idA)
+	if err != nil {
+		t.Fatalf("GetByID B: %v", err)
+	}
+	if got != nil {
+		t.Errorf("tenant B saw tenant A hook %s in GetByID", idA)
+	}
+
+	gotMaster, err := s.GetByID(sqliteMasterCtx(), idA)
+	if err != nil {
+		t.Fatalf("GetByID master: %v", err)
+	}
+	if gotMaster == nil {
+		t.Fatal("master scope should see tenant A hook in GetByID")
+	}
+
 	// List from tenant B must not include tenant A's hook.
 	listB, err := s.List(ctxB, hooks.ListFilter{})
 	if err != nil {
@@ -212,25 +229,38 @@ func TestSQLiteHookStore_TenantIsolation(t *testing.T) {
 
 // ─── Partial unique indexes ───────────────────────────────────────────────────
 
-func TestSQLiteHookStore_UniqueIndexPreventsScopedDuplicates(t *testing.T) {
+// H9 (Phase 03): Create honors caller-supplied cfg.ID so the builtin seeder's
+// idempotent UUIDv5 keys survive restarts and tests get deterministic IDs.
+func TestSQLiteHookStore_CreateHonorsFixedID(t *testing.T) {
 	db := newHookTestDB(t)
 	tenantID, _ := seedHookTenantAgent(t, db)
 	s := NewSQLiteHookStore(db)
 	ctx := sqliteTenantCtx(tenantID)
 
+	fixed := uuid.MustParse("11111111-2222-3333-4444-555555555555")
 	cfg := sqliteMinimalHook(tenantID, hooks.EventUserPromptSubmit)
+	cfg.ID = fixed
 	cfg.Scope = hooks.ScopeTenant
 
-	id1, err := s.Create(ctx, cfg)
+	got, err := s.Create(ctx, cfg)
 	if err != nil {
-		t.Fatalf("first Create: %v", err)
+		t.Fatalf("Create: %v", err)
 	}
-	t.Cleanup(func() { s.Delete(sqliteMasterCtx(), id1) })
+	t.Cleanup(func() { s.Delete(sqliteMasterCtx(), got) })
+	if got != fixed {
+		t.Fatalf("Create returned id=%s, want %s (H9: caller id must be honored)", got, fixed)
+	}
 
-	// Same (tenant_id, event, handler_type) with ScopeTenant → should fail.
-	_, err = s.Create(ctx, cfg)
-	if err == nil {
-		t.Error("expected unique constraint error on duplicate scoped hook, got nil")
+	// A nil cfg.ID still auto-generates.
+	cfg2 := sqliteMinimalHook(tenantID, hooks.EventPreToolUse)
+	cfg2.ID = uuid.Nil
+	auto, err := s.Create(ctx, cfg2)
+	if err != nil {
+		t.Fatalf("Create auto: %v", err)
+	}
+	t.Cleanup(func() { s.Delete(sqliteMasterCtx(), auto) })
+	if auto == uuid.Nil {
+		t.Fatal("Create returned nil id for cfg.ID=uuid.Nil path")
 	}
 }
 
@@ -423,5 +453,52 @@ func TestSQLiteHookStore_GlobalScopeVisibleToTenant(t *testing.T) {
 	}
 	if !found {
 		t.Error("global hook not visible in ResolveForEvent from tenant scope")
+	}
+}
+
+// TestSQLiteHookStore_BuiltinReadOnly mirrors the PG test: user-facing writes
+// on source='builtin' rows may only toggle enabled; WithSeedBypass unlocks.
+func TestSQLiteHookStore_BuiltinReadOnly(t *testing.T) {
+	db := newHookTestDB(t)
+	tenantID, _ := seedHookTenantAgent(t, db)
+	s := NewSQLiteHookStore(db)
+
+	seedCtx := hooks.WithSeedBypass(store.WithRole(sqliteMasterCtx(), store.RoleOwner))
+
+	cfg := hooks.HookConfig{
+		ID:          uuid.MustParse("11111111-2222-3333-4444-555555555555"),
+		TenantID:    hooks.SentinelTenantID,
+		Event:       hooks.EventUserPromptSubmit,
+		HandlerType: hooks.HandlerScript,
+		Scope:       hooks.ScopeGlobal,
+		Config:      map[string]any{"source": "// v1"},
+		Metadata:    map[string]any{"builtin": true, "version": 1},
+		TimeoutMS:   500,
+		OnTimeout:   hooks.DecisionAllow,
+		Source:      hooks.SourceBuiltin,
+		Enabled:     true,
+	}
+	id, err := s.Create(seedCtx, cfg)
+	if err != nil {
+		t.Fatalf("seed create: %v", err)
+	}
+	t.Cleanup(func() { s.Delete(seedCtx, id) })
+
+	userCtx := sqliteTenantCtx(tenantID)
+
+	if err := s.Update(userCtx, id, map[string]any{"matcher": "evil"}); !errors.Is(err, hooks.ErrBuiltinReadOnly) {
+		t.Fatalf("Update(matcher) err=%v, want ErrBuiltinReadOnly", err)
+	}
+
+	if err := s.Update(sqliteMasterCtx(), id, map[string]any{"enabled": false}); err != nil {
+		t.Fatalf("Update(enabled) should succeed: %v", err)
+	}
+
+	if err := s.Delete(userCtx, id); !errors.Is(err, hooks.ErrBuiltinReadOnly) {
+		t.Fatalf("Delete user err=%v, want ErrBuiltinReadOnly", err)
+	}
+
+	if err := s.Update(seedCtx, id, map[string]any{"matcher": "ok"}); err != nil {
+		t.Fatalf("seed-bypass Update should succeed: %v", err)
 	}
 }
