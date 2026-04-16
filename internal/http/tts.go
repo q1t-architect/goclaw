@@ -8,6 +8,7 @@ import (
 	"log/slog"
 	"net/http"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/nextlevelbuilder/goclaw/internal/audio"
@@ -20,6 +21,7 @@ import (
 // TTSHandler handles POST /v1/tts/synthesize — converts text to audio via a
 // configured TTS provider and returns raw audio bytes with the appropriate MIME type.
 type TTSHandler struct {
+	mu          sync.RWMutex
 	manager     *audio.Manager
 	rateLimiter func(string) bool // per-IP/token rate limit check (nil = no limit)
 }
@@ -32,10 +34,22 @@ func NewTTSHandler(mgr *audio.Manager) *TTSHandler {
 // SetRateLimiter injects the rate limiter function (reused from the server's global limiter).
 func (h *TTSHandler) SetRateLimiter(fn func(string) bool) { h.rateLimiter = fn }
 
-// RegisterRoutes wires POST /v1/tts/synthesize onto mux with RoleOperator auth.
+// UpdateManager swaps the underlying manager (hot-reload safe).
+func (h *TTSHandler) UpdateManager(mgr *audio.Manager) {
+	if mgr == nil {
+		return
+	}
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	h.manager = mgr
+}
+
+// RegisterRoutes wires TTS endpoints onto mux with RoleOperator auth.
 func (h *TTSHandler) RegisterRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("POST /v1/tts/synthesize",
 		requireAuth(permissions.RoleOperator, h.handleSynthesize))
+	mux.HandleFunc("POST /v1/tts/test-connection",
+		requireAuth(permissions.RoleOperator, h.handleTestConnection))
 }
 
 // synthesizeRequest is the JSON body for POST /v1/tts/synthesize.
@@ -90,15 +104,20 @@ func (h *TTSHandler) handleSynthesize(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Resolve provider — explicit name or fall back to manager's primary.
+	// Copy manager reference under read lock to allow hot-reload.
+	h.mu.RLock()
+	mgr := h.manager
+	h.mu.RUnlock()
+
 	name := req.Provider
 	if name == "" {
-		name = h.manager.PrimaryProvider()
+		name = mgr.PrimaryProvider()
 	}
 	if name == "" {
 		http.Error(w, `{"error":"no tts provider configured"}`, http.StatusNotFound)
 		return
 	}
-	p, ok := h.manager.GetProvider(name)
+	p, ok := mgr.GetProvider(name)
 	if !ok {
 		http.Error(w, fmt.Sprintf(`{"error":%q}`, "provider not found: "+name), http.StatusNotFound)
 		return

@@ -255,6 +255,7 @@ func (d *gatewayDeps) wireHTTPHandlersOnServer(
 			ttsH.SetRateLimiter(rl.Allow)
 		}
 		d.server.SetTTSHandler(ttsH)
+		d.ttsHandler = ttsH // store for hot-reload
 	}
 
 	// Seed + apply builtin tool disables
