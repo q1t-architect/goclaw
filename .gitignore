@@ -91,6 +91,8 @@ compose.d/*
 *.test
 goclaw-patched-linux-amd64
 
+
 # Next.js build artifacts
 ui/web/.next/
 ui/web/next-env.d.ts
+ui/web/nginx.staging.conf
