@@ -21,6 +21,24 @@ Completes issue #952: moved `web_search` configuration to tenant-exclusive setti
 
 ---
 
+### Pancake auto-react allow/deny scope filter (2026-04-17)
+
+Extends the existing Facebook comment auto-react (like) feature with per-channel scope control.
+
+#### Added
+
+- `pancakeInstanceConfig.AutoReactOptions` (pointer type) in `internal/channels/pancake/types.go` — `allow_post_ids`, `deny_post_ids`, `allow_user_ids`, `deny_user_ids` string slices. Nil = no filter (react all).
+- `filterAutoReact()` + `containsString()` helpers in `internal/channels/pancake/comment_handler.go`. Pure function; deny lists override allow lists; whitespace-trimmed string equality.
+- Rollout-phase `slog.Info("pancake: auto-react filtered by allow/deny list")` fires when a gate-passing comment gets filtered (downgrade to Debug after ~2 weeks).
+- UI: `features.auto_react` toggle surface fix (previously required raw JSON edit) + 4 tags fields in `ui/web/src/pages/channels/channel-schemas.ts`, gated on `platform=facebook` + `features.auto_react=true`.
+
+#### Behaviour
+
+- Zero-config (existing channels) = no scope filter = existing react-all behaviour. Backward compatible.
+- Deny list entry with matching post/user ID → skip react. Empty allow list = no allow filter.
+
+---
+
 ### Secure CLI grant enforcement — registered binaries now hard-deny ungranted exec (2026-04-17)
 
 Closes a credential-scope bypass: an agent with no `secure_cli_agent_grants` row for a registered binary could still invoke it via shell fallthrough (`gh ...`, `sh -c 'gh ...'`) and pick up inherited env (`$GH_TOKEN`) or on-disk OAuth state (`~/.config/gh`). Registration is now an authorization boundary, not only a credential-injection hint.
