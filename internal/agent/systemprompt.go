@@ -173,7 +173,7 @@ func (cfg SystemPromptConfig) sectionContent(id string, defaultFn func() []strin
 // coreToolSummaries maps tool names to one-line descriptions.
 // Shown in the ## Tooling section of the system prompt.
 var coreToolSummaries = map[string]string{
-	"read_file":     "Read file contents",
+	"read_file":     "Read file contents — only accesses your agent workspace. For docs returned by vault_search (shared/personal/team vault), use vault_read instead",
 	"write_file":    "Create or overwrite files",
 	"list_files":    "List directory contents",
 	"exec":          "Run shell commands",
@@ -211,7 +211,8 @@ var coreToolSummaries = map[string]string{
 	"create_forum_topic":      "Create a forum topic in a Telegram supergroup",
 	"delegate":                "Delegate a task to a linked agent (requires agent_links). See ## Delegation Targets for available agents",
 	"memory_expand":           "Retrieve full session details from episodic memory results — use after memory_search returns episodic hits",
-	"vault_search": "Search documents in the knowledge vault (hybrid keyword + semantic)",
+	"vault_search": "Search documents in the knowledge vault (hybrid keyword + semantic). Pass the returned doc_id to vault_read for full content",
+	"vault_read":   "Read full content of a vault document by doc_id (from vault_search). Use for shared/personal/team vault docs that read_file cannot reach",
 
 	// Tool aliases (edit_file, sessions_spawn, Read, Write, Edit, Bash, etc.)
 	// are registered in the tool registry but excluded from the system prompt
