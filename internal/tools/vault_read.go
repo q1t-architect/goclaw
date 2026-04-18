@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"log/slog"
 	"os"
 	"path/filepath"
 	"strings"
@@ -27,7 +28,15 @@ const (
 	vaultReadDefaultMaxBytes = 500_000
 	vaultReadCeilingMaxBytes = 1_048_576
 	vaultReadUTF8SniffBytes  = 8192
+	vaultReadMaxOutlinks     = 20
 )
+
+// outlinkAllowedTypes restricts the footer to knowledge-graph links; operational
+// link types (task_attachment, delegation_attachment, ...) are excluded.
+var outlinkAllowedTypes = map[string]struct{}{
+	"wikilink":  {},
+	"reference": {},
+}
 
 // nonTextExtensions are file extensions rejected by the text-only gate.
 // Lower-case with leading dot. Keep in sync with phase 01 spec.
@@ -159,7 +168,97 @@ func (t *VaultReadTool) Execute(ctx context.Context, args map[string]any) *Resul
 	if truncated {
 		fmt.Fprintf(&sb, "\n\n…[truncated, content exceeds %d bytes]", maxBytes)
 	}
+	sb.WriteString(t.buildOutlinksFooter(ctx, tenantID.String(), doc.ID))
 	return NewResult(sb.String())
+}
+
+// buildOutlinksFooter returns a "## Links" section listing scope-accessible
+// outlinks (wikilink + reference only), deduped by target, capped at
+// vaultReadMaxOutlinks. Returns "" when no accessible links remain or on any
+// store error — footer is additive and must not break the read.
+func (t *VaultReadTool) buildOutlinksFooter(ctx context.Context, tenantID, docID string) string {
+	links, err := t.vaultStore.GetOutLinks(ctx, tenantID, docID)
+	if err != nil {
+		slog.Warn("vault_read.outlinks.get_failed", "doc_id", docID, "error", err)
+		return ""
+	}
+	if len(links) == 0 {
+		return ""
+	}
+
+	// Pass 1: type filter + self-link drop + dedup by ToDocID.
+	seen := make(map[string]struct{}, len(links))
+	filtered := make([]store.VaultLink, 0, len(links))
+	for _, l := range links {
+		if _, ok := outlinkAllowedTypes[l.LinkType]; !ok {
+			continue
+		}
+		if l.ToDocID == docID {
+			continue
+		}
+		if _, ok := seen[l.ToDocID]; ok {
+			continue
+		}
+		seen[l.ToDocID] = struct{}{}
+		filtered = append(filtered, l)
+	}
+	if len(filtered) == 0 {
+		return ""
+	}
+
+	// Batch fetch targets.
+	ids := make([]string, 0, len(filtered))
+	for _, l := range filtered {
+		ids = append(ids, l.ToDocID)
+	}
+	targets, err := t.vaultStore.GetDocumentsByIDs(ctx, tenantID, ids)
+	if err != nil {
+		slog.Warn("vault_read.outlinks.targets_failed", "doc_id", docID, "error", err)
+		return ""
+	}
+	byID := make(map[string]store.VaultDocument, len(targets))
+	for _, d := range targets {
+		byID[d.ID] = d
+	}
+
+	// Pass 2: missing-target + scope filter, cap.
+	type keptLink struct {
+		doc      store.VaultDocument
+		linkType string
+	}
+	kept := make([]keptLink, 0, vaultReadMaxOutlinks)
+	var overflow int
+	for _, l := range filtered {
+		target, ok := byID[l.ToDocID]
+		if !ok {
+			continue
+		}
+		if !t.allowed(ctx, &target) {
+			continue
+		}
+		if len(kept) >= vaultReadMaxOutlinks {
+			overflow++
+			continue
+		}
+		kept = append(kept, keptLink{doc: target, linkType: l.LinkType})
+	}
+	if len(kept) == 0 {
+		return ""
+	}
+
+	var sb strings.Builder
+	sb.WriteString("\n\n## Links\n")
+	for _, k := range kept {
+		title := k.doc.Title
+		if title == "" {
+			title = k.doc.Path
+		}
+		fmt.Fprintf(&sb, "- %s — id: %s (%s)\n", title, k.doc.ID, k.linkType)
+	}
+	if overflow > 0 {
+		fmt.Fprintf(&sb, "…[%d more links omitted]\n", overflow)
+	}
+	return sb.String()
 }
 
 // allowed enforces the scope matrix:

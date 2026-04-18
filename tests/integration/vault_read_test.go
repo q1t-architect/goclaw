@@ -176,3 +176,82 @@ func TestVaultRead_OversizeTruncation(t *testing.T) {
 	// Issue #948 regression guard: identifier in test name helps future greps.
 	_ = uuid.Nil
 }
+
+// TestVaultRead_OutlinksScopeMatrix verifies the inline ## Links footer honours
+// the scope matrix end-to-end with a real VaultStore:
+//   - shared target          → included
+//   - personal target (self) → included
+//   - personal target (other)→ dropped
+//   - team target (other)    → dropped
+//
+// Uses wikilink type so the type-filter (wikilink+reference only) lets all
+// test links through; the scope matrix is what we are exercising.
+func TestVaultRead_OutlinksScopeMatrix(t *testing.T) {
+	db := testDB(t)
+	tenantID, agentSelf := seedTenantAgent(t, db)
+	_, agentOther := seedTenantAgent(t, db)
+	vs := newVaultStore(db)
+
+	ws := t.TempDir()
+	tid := tenantID.String()
+	ctxSelf := store.WithAgentID(tenantCtx(tenantID), agentSelf)
+
+	// Source file on disk + doc (shared so read is allowed).
+	srcRel := "src.md"
+	if err := os.WriteFile(filepath.Join(ws, srcRel), []byte("src body"), 0o644); err != nil {
+		t.Fatalf("write src: %v", err)
+	}
+	src := makeSharedVaultDoc(tid, srcRel, "Source")
+	if err := vs.UpsertDocument(ctxSelf, src); err != nil {
+		t.Fatalf("Upsert src: %v", err)
+	}
+
+	// Targets.
+	// Seed a real team belonging to a DIFFERENT agent so the "team-other"
+	// target satisfies FK and is scope-denied from agentSelf's RunContext.
+	otherTeamID, _ := seedTeam(t, db, tenantID, agentOther)
+	shared := makeSharedVaultDoc(tid, "shared.md", "SharedTgt")
+	personalSelf := makeVaultDoc(tid, agentSelf.String(), "self.md", "SelfTgt")
+	personalOther := makeVaultDoc(tid, agentOther.String(), "other.md", "PersonalOtherTgt")
+	teamOther := makeTeamVaultDoc(tid, otherTeamID.String(), "team.md", "TeamOtherTgt")
+	for _, d := range []*store.VaultDocument{shared, personalSelf, personalOther, teamOther} {
+		if err := vs.UpsertDocument(ctxSelf, d); err != nil {
+			t.Fatalf("Upsert target %s: %v", d.Title, err)
+		}
+	}
+
+	// Wikilinks src → each target.
+	for _, toID := range []string{shared.ID, personalSelf.ID, personalOther.ID, teamOther.ID} {
+		if err := vs.CreateLink(ctxSelf, &store.VaultLink{
+			FromDocID: src.ID,
+			ToDocID:   toID,
+			LinkType:  "wikilink",
+		}); err != nil {
+			t.Fatalf("CreateLink → %s: %v", toID, err)
+		}
+	}
+
+	tool := tools.NewVaultReadTool()
+	tool.SetVaultStore(vs)
+	tool.SetWorkspace(ws)
+
+	res := tool.Execute(ctxSelf, map[string]any{"doc_id": src.ID})
+	if res.IsError {
+		t.Fatalf("vault_read error: %s", res.ForLLM)
+	}
+	if !strings.Contains(res.ForLLM, "## Links") {
+		t.Fatalf("missing Links section: %s", res.ForLLM)
+	}
+	if !strings.Contains(res.ForLLM, "SharedTgt") {
+		t.Fatalf("expected shared target in footer: %s", res.ForLLM)
+	}
+	if !strings.Contains(res.ForLLM, "SelfTgt") {
+		t.Fatalf("expected personal-self target in footer: %s", res.ForLLM)
+	}
+	if strings.Contains(res.ForLLM, "PersonalOtherTgt") {
+		t.Fatalf("personal-other leaked: %s", res.ForLLM)
+	}
+	if strings.Contains(res.ForLLM, "TeamOtherTgt") {
+		t.Fatalf("team-other leaked: %s", res.ForLLM)
+	}
+}

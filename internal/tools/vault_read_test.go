@@ -3,6 +3,7 @@ package tools
 import (
 	"bytes"
 	"context"
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
@@ -14,12 +15,14 @@ import (
 )
 
 // fakeVaultStore embeds store.VaultStore (nil) so the struct satisfies the
-// interface at compile time; only GetDocumentByID is implemented for tests.
-// Any call to an unimplemented method would nil-pointer panic — which is fine
-// because vault_read.Execute only hits GetDocumentByID.
+// interface at compile time. Methods used by vault_read.Execute are
+// implemented; others would nil-panic if called.
 type fakeVaultStore struct {
 	store.VaultStore
-	byID map[string]*store.VaultDocument // key: tenantID + ":" + docID
+	byID       map[string]*store.VaultDocument // key: tenantID + ":" + docID
+	outlinks   map[string][]store.VaultLink    // key: tenantID + ":" + docID
+	outLinkErr error                           // injected error for GetOutLinks
+	targetsErr error                           // injected error for GetDocumentsByIDs
 }
 
 func (f *fakeVaultStore) GetDocumentByID(ctx context.Context, tenantID, id string) (*store.VaultDocument, error) {
@@ -31,6 +34,29 @@ func (f *fakeVaultStore) GetDocumentByID(ctx context.Context, tenantID, id strin
 		return nil, os.ErrNotExist
 	}
 	return doc, nil
+}
+
+func (f *fakeVaultStore) GetOutLinks(ctx context.Context, tenantID, docID string) ([]store.VaultLink, error) {
+	if f.outLinkErr != nil {
+		return nil, f.outLinkErr
+	}
+	if f.outlinks == nil {
+		return nil, nil
+	}
+	return f.outlinks[tenantID+":"+docID], nil
+}
+
+func (f *fakeVaultStore) GetDocumentsByIDs(ctx context.Context, tenantID string, docIDs []string) ([]store.VaultDocument, error) {
+	if f.targetsErr != nil {
+		return nil, f.targetsErr
+	}
+	out := make([]store.VaultDocument, 0, len(docIDs))
+	for _, id := range docIDs {
+		if d, ok := f.byID[tenantID+":"+id]; ok {
+			out = append(out, *d)
+		}
+	}
+	return out, nil
 }
 
 // newVaultReadTestTool builds a VaultReadTool with a temp workspace and a
@@ -372,6 +398,306 @@ func TestVaultRead_SymlinkEscape_Denied(t *testing.T) {
 		map[string]any{"doc_id": docID.String()})
 	if !res.IsError || !strings.Contains(res.ForLLM, "outside workspace") {
 		t.Fatalf("expected symlink escape denied, got: %s", res.ForLLM)
+	}
+}
+
+// --- Outlinks footer tests -------------------------------------------------
+
+// sharedDoc returns a minimal shared-scope vault doc.
+func sharedDoc(tenantID uuid.UUID, title, path string) *store.VaultDocument {
+	return &store.VaultDocument{
+		ID: uuid.New().String(), TenantID: tenantID.String(),
+		Scope: "shared", Path: path, Title: title, DocType: "note",
+	}
+}
+
+// personalDoc returns a personal-scope doc owned by agentID.
+func personalDoc(tenantID, agentID uuid.UUID, title, path string) *store.VaultDocument {
+	aid := agentID.String()
+	return &store.VaultDocument{
+		ID: uuid.New().String(), TenantID: tenantID.String(),
+		AgentID: &aid, Scope: "personal", Path: path, Title: title, DocType: "note",
+	}
+}
+
+// teamDoc returns a team-scope doc bound to teamID.
+func teamDoc(tenantID uuid.UUID, teamID, title, path string) *store.VaultDocument {
+	tid := teamID
+	return &store.VaultDocument{
+		ID: uuid.New().String(), TenantID: tenantID.String(),
+		TeamID: &tid, Scope: "team", Path: path, Title: title, DocType: "note",
+	}
+}
+
+// seedWithLinks extends the fake store's outlinks map.
+func seedLinks(tool *VaultReadTool, tenantID, fromID string, links []store.VaultLink) {
+	f := tool.vaultStore.(*fakeVaultStore)
+	if f.outlinks == nil {
+		f.outlinks = make(map[string][]store.VaultLink)
+	}
+	f.outlinks[tenantID+":"+fromID] = links
+}
+
+// --- Case 1: outlinks present, all in scope → listed in order. ---
+func TestVaultReadOutlinks_AllInScope_Listed(t *testing.T) {
+	tenantID := uuid.New()
+	agentID := uuid.New()
+	src := sharedDoc(tenantID, "Source", "src.md")
+	tA := sharedDoc(tenantID, "Target A", "a.md")
+	tB := sharedDoc(tenantID, "Target B", "b.md")
+	tool, ws := newVaultReadTestTool(t, src, tA, tB)
+	writeFile(t, ws, "src.md", "body")
+	seedLinks(tool, tenantID.String(), src.ID, []store.VaultLink{
+		{ToDocID: tA.ID, LinkType: "wikilink"},
+		{ToDocID: tB.ID, LinkType: "reference"},
+	})
+
+	res := tool.Execute(makeCtx(tenantID, agentID), map[string]any{"doc_id": src.ID})
+	if res.IsError {
+		t.Fatalf("unexpected error: %s", res.ForLLM)
+	}
+	if !strings.Contains(res.ForLLM, "## Links") {
+		t.Fatalf("missing Links heading: %s", res.ForLLM)
+	}
+	if !strings.Contains(res.ForLLM, "Target A — id: "+tA.ID+" (wikilink)") {
+		t.Fatalf("target A line missing/wrong: %s", res.ForLLM)
+	}
+	if !strings.Contains(res.ForLLM, "Target B — id: "+tB.ID+" (reference)") {
+		t.Fatalf("target B line missing/wrong: %s", res.ForLLM)
+	}
+	// Order preserved (A before B).
+	if strings.Index(res.ForLLM, "Target A") > strings.Index(res.ForLLM, "Target B") {
+		t.Fatalf("order not preserved: %s", res.ForLLM)
+	}
+}
+
+// --- Case 2: outlink to personal doc owned by another agent → dropped. ---
+func TestVaultReadOutlinks_PersonalOtherAgent_Dropped(t *testing.T) {
+	tenantID := uuid.New()
+	agentSelf := uuid.New()
+	agentOther := uuid.New()
+	src := sharedDoc(tenantID, "Source", "src.md")
+	other := personalDoc(tenantID, agentOther, "Other Memo", "other.md")
+	tool, ws := newVaultReadTestTool(t, src, other)
+	writeFile(t, ws, "src.md", "body")
+	seedLinks(tool, tenantID.String(), src.ID, []store.VaultLink{
+		{ToDocID: other.ID, LinkType: "wikilink"},
+	})
+
+	res := tool.Execute(makeCtx(tenantID, agentSelf), map[string]any{"doc_id": src.ID})
+	if res.IsError {
+		t.Fatalf("unexpected error: %s", res.ForLLM)
+	}
+	if strings.Contains(res.ForLLM, "Other Memo") {
+		t.Fatalf("leaked other-agent personal doc: %s", res.ForLLM)
+	}
+	if strings.Contains(res.ForLLM, "## Links") {
+		t.Fatalf("empty Links heading should not appear: %s", res.ForLLM)
+	}
+}
+
+// --- Case 3: outlink to team doc from different team → dropped. ---
+func TestVaultReadOutlinks_TeamOtherTeam_Dropped(t *testing.T) {
+	tenantID := uuid.New()
+	agentID := uuid.New()
+	teamSelf := uuid.New().String()
+	teamOther := uuid.New().String()
+	src := sharedDoc(tenantID, "Source", "src.md")
+	target := teamDoc(tenantID, teamOther, "Other Team Doc", "ot.md")
+	tool, ws := newVaultReadTestTool(t, src, target)
+	writeFile(t, ws, "src.md", "body")
+	seedLinks(tool, tenantID.String(), src.ID, []store.VaultLink{
+		{ToDocID: target.ID, LinkType: "wikilink"},
+	})
+
+	res := tool.Execute(makeCtxWithTeam(tenantID, agentID, teamSelf),
+		map[string]any{"doc_id": src.ID})
+	if res.IsError {
+		t.Fatalf("unexpected error: %s", res.ForLLM)
+	}
+	if strings.Contains(res.ForLLM, "Other Team Doc") {
+		t.Fatalf("leaked other-team doc: %s", res.ForLLM)
+	}
+}
+
+// --- Case 4: outlink to shared doc → always included. ---
+func TestVaultReadOutlinks_Shared_Included(t *testing.T) {
+	tenantID := uuid.New()
+	agentID := uuid.New()
+	src := sharedDoc(tenantID, "Source", "src.md")
+	tgt := sharedDoc(tenantID, "Shared Target", "st.md")
+	tool, ws := newVaultReadTestTool(t, src, tgt)
+	writeFile(t, ws, "src.md", "body")
+	seedLinks(tool, tenantID.String(), src.ID, []store.VaultLink{
+		{ToDocID: tgt.ID, LinkType: "wikilink"},
+	})
+
+	res := tool.Execute(makeCtx(tenantID, agentID), map[string]any{"doc_id": src.ID})
+	if res.IsError {
+		t.Fatalf("unexpected error: %s", res.ForLLM)
+	}
+	if !strings.Contains(res.ForLLM, "Shared Target") {
+		t.Fatalf("shared target missing: %s", res.ForLLM)
+	}
+}
+
+// --- Case 5: task_attachment link type → dropped by type filter. ---
+func TestVaultReadOutlinks_TaskAttachment_Dropped(t *testing.T) {
+	tenantID := uuid.New()
+	agentID := uuid.New()
+	src := sharedDoc(tenantID, "Source", "src.md")
+	tgt := sharedDoc(tenantID, "Task Target", "tk.md")
+	tool, ws := newVaultReadTestTool(t, src, tgt)
+	writeFile(t, ws, "src.md", "body")
+	seedLinks(tool, tenantID.String(), src.ID, []store.VaultLink{
+		{ToDocID: tgt.ID, LinkType: "task_attachment"},
+	})
+
+	res := tool.Execute(makeCtx(tenantID, agentID), map[string]any{"doc_id": src.ID})
+	if res.IsError {
+		t.Fatalf("unexpected error: %s", res.ForLLM)
+	}
+	if strings.Contains(res.ForLLM, "## Links") {
+		t.Fatalf("footer should be absent for task_attachment only: %s", res.ForLLM)
+	}
+}
+
+// --- Case 6: broken link (target doc deleted) → dropped silently. ---
+func TestVaultReadOutlinks_BrokenLink_Dropped(t *testing.T) {
+	tenantID := uuid.New()
+	agentID := uuid.New()
+	src := sharedDoc(tenantID, "Source", "src.md")
+	ghostID := uuid.New().String()
+	tool, ws := newVaultReadTestTool(t, src) // ghost not seeded
+	writeFile(t, ws, "src.md", "body")
+	seedLinks(tool, tenantID.String(), src.ID, []store.VaultLink{
+		{ToDocID: ghostID, LinkType: "wikilink"},
+	})
+
+	res := tool.Execute(makeCtx(tenantID, agentID), map[string]any{"doc_id": src.ID})
+	if res.IsError {
+		t.Fatalf("unexpected error: %s", res.ForLLM)
+	}
+	if strings.Contains(res.ForLLM, "## Links") {
+		t.Fatalf("footer should be absent when only broken links: %s", res.ForLLM)
+	}
+	if strings.Contains(res.ForLLM, ghostID) {
+		t.Fatalf("ghost id leaked: %s", res.ForLLM)
+	}
+}
+
+// --- Case 7: self-link → dropped. ---
+func TestVaultReadOutlinks_SelfLink_Dropped(t *testing.T) {
+	tenantID := uuid.New()
+	agentID := uuid.New()
+	src := sharedDoc(tenantID, "Source", "src.md")
+	tool, ws := newVaultReadTestTool(t, src)
+	writeFile(t, ws, "src.md", "body")
+	seedLinks(tool, tenantID.String(), src.ID, []store.VaultLink{
+		{ToDocID: src.ID, LinkType: "wikilink"},
+	})
+
+	res := tool.Execute(makeCtx(tenantID, agentID), map[string]any{"doc_id": src.ID})
+	if res.IsError {
+		t.Fatalf("unexpected error: %s", res.ForLLM)
+	}
+	if strings.Contains(res.ForLLM, "## Links") {
+		t.Fatalf("self-link should not produce footer: %s", res.ForLLM)
+	}
+}
+
+// --- Case 8: >20 valid links → capped with overflow marker. ---
+func TestVaultReadOutlinks_Overflow_Capped(t *testing.T) {
+	tenantID := uuid.New()
+	agentID := uuid.New()
+	src := sharedDoc(tenantID, "Source", "src.md")
+	docs := []*store.VaultDocument{src}
+	links := []store.VaultLink{}
+	for i := range 25 {
+		d := sharedDoc(tenantID, fmt.Sprintf("T%02d", i), fmt.Sprintf("t%02d.md", i))
+		docs = append(docs, d)
+		links = append(links, store.VaultLink{ToDocID: d.ID, LinkType: "wikilink"})
+	}
+	tool, ws := newVaultReadTestTool(t, docs...)
+	writeFile(t, ws, "src.md", "body")
+	seedLinks(tool, tenantID.String(), src.ID, links)
+
+	res := tool.Execute(makeCtx(tenantID, agentID), map[string]any{"doc_id": src.ID})
+	if res.IsError {
+		t.Fatalf("unexpected error: %s", res.ForLLM)
+	}
+	if !strings.Contains(res.ForLLM, "…[5 more links omitted]") {
+		t.Fatalf("expected overflow marker for 25→20 cap: %s", res.ForLLM)
+	}
+	// Count rendered link lines (prefix "- T").
+	n := strings.Count(res.ForLLM, "\n- T")
+	if n != 20 {
+		t.Fatalf("expected 20 kept links, got %d", n)
+	}
+}
+
+// --- Case 9: zero valid links → no heading at all. ---
+func TestVaultReadOutlinks_ZeroValid_NoHeading(t *testing.T) {
+	tenantID := uuid.New()
+	agentID := uuid.New()
+	src := sharedDoc(tenantID, "Source", "src.md")
+	tool, ws := newVaultReadTestTool(t, src)
+	writeFile(t, ws, "src.md", "body")
+	// no links seeded.
+
+	res := tool.Execute(makeCtx(tenantID, agentID), map[string]any{"doc_id": src.ID})
+	if res.IsError {
+		t.Fatalf("unexpected error: %s", res.ForLLM)
+	}
+	if strings.Contains(res.ForLLM, "## Links") {
+		t.Fatalf("should not emit empty heading: %s", res.ForLLM)
+	}
+}
+
+// --- Case 10: dedup same target via wikilink + reference → shown once. ---
+func TestVaultReadOutlinks_Dedup_ByTarget(t *testing.T) {
+	tenantID := uuid.New()
+	agentID := uuid.New()
+	src := sharedDoc(tenantID, "Source", "src.md")
+	tgt := sharedDoc(tenantID, "DupTarget", "dup.md")
+	tool, ws := newVaultReadTestTool(t, src, tgt)
+	writeFile(t, ws, "src.md", "body")
+	seedLinks(tool, tenantID.String(), src.ID, []store.VaultLink{
+		{ToDocID: tgt.ID, LinkType: "wikilink"},
+		{ToDocID: tgt.ID, LinkType: "reference"},
+	})
+
+	res := tool.Execute(makeCtx(tenantID, agentID), map[string]any{"doc_id": src.ID})
+	if res.IsError {
+		t.Fatalf("unexpected error: %s", res.ForLLM)
+	}
+	if n := strings.Count(res.ForLLM, "DupTarget"); n != 1 {
+		t.Fatalf("expected 1 occurrence of DupTarget, got %d: %s", n, res.ForLLM)
+	}
+	// First link_type wins.
+	if !strings.Contains(res.ForLLM, "(wikilink)") {
+		t.Fatalf("expected first link_type wikilink to win: %s", res.ForLLM)
+	}
+}
+
+// --- Case: GetOutLinks error → read succeeds, footer empty. ---
+func TestVaultReadOutlinks_StoreError_NoFooter(t *testing.T) {
+	tenantID := uuid.New()
+	agentID := uuid.New()
+	src := sharedDoc(tenantID, "Source", "src.md")
+	tool, ws := newVaultReadTestTool(t, src)
+	writeFile(t, ws, "src.md", "body")
+	tool.vaultStore.(*fakeVaultStore).outLinkErr = os.ErrInvalid
+
+	res := tool.Execute(makeCtx(tenantID, agentID), map[string]any{"doc_id": src.ID})
+	if res.IsError {
+		t.Fatalf("store error must not fail read: %s", res.ForLLM)
+	}
+	if !strings.Contains(res.ForLLM, "body") {
+		t.Fatalf("body missing: %s", res.ForLLM)
+	}
+	if strings.Contains(res.ForLLM, "## Links") {
+		t.Fatalf("footer must be absent on store error: %s", res.ForLLM)
 	}
 }
 
