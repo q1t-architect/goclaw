@@ -206,6 +206,12 @@ func (t *MessageTool) Execute(ctx context.Context, args map[string]any) *Result 
 			}
 		}
 		t.msgBus.PublishOutbound(outMsg)
+		// Mark each embedded media path as delivered.
+		if dm := DeliveredMediaFromCtx(ctx); dm != nil {
+			for _, att := range embeddedMedia {
+				dm.Mark(att.URL)
+			}
+		}
 		return noticeOnSuccess(SilentResult(fmt.Sprintf(`{"status":"sent","channel":"%s","target":"%s"}`, channel, target)))
 	}
 
@@ -293,6 +299,10 @@ func (t *MessageTool) sendMedia(ctx context.Context, channel, target, filePath s
 		Media:    []bus.MediaAttachment{{URL: filePath, ContentType: mimeFromPath(filePath)}},
 		Metadata: meta,
 	})
+	// Mark delivered so subsequent send_file or message(MEDIA:) calls detect the duplicate.
+	if dm := DeliveredMediaFromCtx(ctx); dm != nil {
+		dm.Mark(filePath)
+	}
 	out, _ := json.Marshal(map[string]string{
 		"status":  "sent",
 		"channel": channel,
