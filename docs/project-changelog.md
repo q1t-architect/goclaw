@@ -4,6 +4,27 @@ Significant changes, features, and fixes in reverse chronological order.
 
 ---
 
+## 2026-04-24
+
+### Tools: Config-driven shell deny-groups + read_audio routing fixes
+
+**Features**
+
+- **`shellDenyGroups` runtime config:** `config.tools.shellDenyGroups` (map[string]bool) allows operators to toggle shell deny-groups (e.g. `package_install`, `env_dump`) from the /config Web UI without restarting. Merged with per-agent overrides with per-key agent precedence; multi-tenant invariant preserved. Subscribed to `bus.TopicConfigChanged` for live reload.
+
+**Fixes**
+
+- **Credentialed CLI wording scope:** "operation requires admin approval" error wording now scoped to `[CREDENTIALED EXEC]` marker only — was over-applied to generic shell failures, causing unjustified LLM pre-refusals.
+- **read_audio transcription routing:** Fixed silent fallback on missing API credentials for transcription/gemini/openai paths — now hard-errors with clear message. Fixed openai_compat providers (e.g. DashScope) not reaching `/v1/audio/transcriptions` endpoint; moved transcription model check above provider type switch.
+
+**Tests**
+
+- 6 unit tests for shell deny-groups merge/defensive-copy semantics.
+- 3 pub/sub dispatch tests for config reload lifecycle.
+- 3 regression tests for read_audio fail-fast paths.
+
+---
+
 ## 2026-04-22
 
 ### Providers: Native image generation for Codex + OpenAI-compat
