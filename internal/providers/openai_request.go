@@ -181,7 +181,10 @@ func (p *OpenAIProvider) buildRequestBody(model string, req ChatRequest, stream 
 		// This is a model-level constraint, not provider-specific — applies to both OpenAI and Azure.
 		// Note: gpt-5.X flagship models (gpt-5.1, gpt-5.4) DO support temperature;
 		// only the mini/nano reasoning variants reject it.
-		skipTemp := strings.HasPrefix(capabilityModel, "gpt-5-mini") || strings.HasPrefix(capabilityModel, "gpt-5-nano") || strings.HasPrefix(capabilityModel, "o1") || strings.HasPrefix(capabilityModel, "o3") || strings.HasPrefix(capabilityModel, "o4")
+		// Kimi Code API (kimi-k2.5) returns 400 "only 1 is allowed for this model" — skip and let server default apply.
+		lowFam := strings.ToLower(capabilityModel)
+		lowFull := strings.ToLower(model)
+		skipTemp := strings.HasPrefix(capabilityModel, "gpt-5-mini") || strings.HasPrefix(capabilityModel, "gpt-5-nano") || strings.HasPrefix(capabilityModel, "o1") || strings.HasPrefix(capabilityModel, "o3") || strings.HasPrefix(capabilityModel, "o4") || strings.Contains(lowFam, "kimi") || strings.Contains(lowFull, "kimi")
 		if !skipTemp {
 			body["temperature"] = v
 		}
