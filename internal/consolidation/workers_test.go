@@ -172,6 +172,16 @@ func (m *mockKGStore) ListEntitiesTemporal(context.Context, string, string, stor
 func (m *mockKGStore) SupersedeEntity(context.Context, *store.Entity, *store.Entity) error { return nil }
 func (m *mockKGStore) SetEmbeddingProvider(store.EmbeddingProvider) {}
 func (m *mockKGStore) Close() error { return nil }
+func (m *mockKGStore) UpdateEntity(context.Context, string, string, string, map[string]any) (*store.Entity, error) { return nil, nil }
+func (m *mockKGStore) GetEntityTypes(context.Context, string) ([]store.EntityType, error) { return nil, nil }
+func (m *mockKGStore) UpsertEntityType(context.Context, *store.EntityType) error { return nil }
+func (m *mockKGStore) DeleteEntityType(context.Context, string, string) error { return nil }
+func (m *mockKGStore) CountEntitiesByType(context.Context, string, string) (int64, error) { return 0, nil }
+func (m *mockKGStore) GetRelationTypes(context.Context, string) ([]store.RelationType, error) { return nil, nil }
+func (m *mockKGStore) UpsertRelationType(context.Context, *store.RelationType) error { return nil }
+func (m *mockKGStore) DeleteRelationType(context.Context, string, string) error { return nil }
+func (m *mockKGStore) CountRelationsByType(context.Context, string, string) (int64, error) { return 0, nil }
+func (m *mockKGStore) SeedKGTypes(context.Context, string, string) error { return nil }
 
 // mockMemoryStore implements store.MemoryStore for testing.
 type mockMemoryStore struct {

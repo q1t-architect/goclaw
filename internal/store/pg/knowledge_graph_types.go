@@ -20,7 +20,7 @@ var ErrRelationTypeInUse = fmt.Errorf("relation type is in use")
 // --- Entity Types ---
 
 func (s *PGKnowledgeGraphStore) GetEntityTypes(ctx context.Context, agentID string) ([]store.EntityType, error) {
-	aid := mustParseUUID(agentID)
+	aid := parseUUIDOrNil(agentID)
 	rows, err := s.db.QueryContext(ctx, `
 		SELECT id, agent_id, name, display_name, color, icon, description,
 		       properties_schema, is_system, sort_order, created_at, updated_at
@@ -56,8 +56,8 @@ func (s *PGKnowledgeGraphStore) GetEntityTypes(ctx context.Context, agentID stri
 
 // CountEntitiesByType returns the number of entities using a given entity type.
 func (s *PGKnowledgeGraphStore) CountEntitiesByType(ctx context.Context, agentID, typeID string) (int64, error) {
-	aid := mustParseUUID(agentID)
-	tid := mustParseUUID(typeID)
+	aid := parseUUIDOrNil(agentID)
+	tid := parseUUIDOrNil(typeID)
 	var count int64
 	err := s.db.QueryRowContext(ctx,
 		`SELECT COUNT(*) FROM kg_entities WHERE agent_id = $1 AND entity_type = (SELECT name FROM kg_entity_types WHERE id = $2 AND agent_id = $1)`,
@@ -70,7 +70,7 @@ func (s *PGKnowledgeGraphStore) CountEntitiesByType(ctx context.Context, agentID
 }
 
 func (s *PGKnowledgeGraphStore) UpsertEntityType(ctx context.Context, et *store.EntityType) error {
-	aid := mustParseUUID(et.AgentID)
+	aid := parseUUIDOrNil(et.AgentID)
 	schema, _ := json.Marshal(et.PropertiesSchema)
 	if schema == nil {
 		schema = []byte("[]")
@@ -106,8 +106,8 @@ func (s *PGKnowledgeGraphStore) UpsertEntityType(ctx context.Context, et *store.
 }
 
 func (s *PGKnowledgeGraphStore) DeleteEntityType(ctx context.Context, agentID, typeID string) error {
-	aid := mustParseUUID(agentID)
-	tid := mustParseUUID(typeID)
+	aid := parseUUIDOrNil(agentID)
+	tid := parseUUIDOrNil(typeID)
 
 	// Prevent deletion of system types
 	var isSystem bool
@@ -148,7 +148,7 @@ func (s *PGKnowledgeGraphStore) DeleteEntityType(ctx context.Context, agentID, t
 // --- Relation Types ---
 
 func (s *PGKnowledgeGraphStore) GetRelationTypes(ctx context.Context, agentID string) ([]store.RelationType, error) {
-	aid := mustParseUUID(agentID)
+	aid := parseUUIDOrNil(agentID)
 	rows, err := s.db.QueryContext(ctx, `
 		SELECT id, agent_id, name, display_name, color, directed, description,
 		       properties_schema, is_system, sort_order, created_at, updated_at
@@ -184,8 +184,8 @@ func (s *PGKnowledgeGraphStore) GetRelationTypes(ctx context.Context, agentID st
 
 // CountRelationsByType returns the number of relations using a given relation type.
 func (s *PGKnowledgeGraphStore) CountRelationsByType(ctx context.Context, agentID, typeID string) (int64, error) {
-	aid := mustParseUUID(agentID)
-	tid := mustParseUUID(typeID)
+	aid := parseUUIDOrNil(agentID)
+	tid := parseUUIDOrNil(typeID)
 	var count int64
 	err := s.db.QueryRowContext(ctx,
 		`SELECT COUNT(*) FROM kg_relations WHERE agent_id = $1 AND relation_type = (SELECT name FROM kg_relation_types WHERE id = $2 AND agent_id = $1)`,
@@ -198,7 +198,7 @@ func (s *PGKnowledgeGraphStore) CountRelationsByType(ctx context.Context, agentI
 }
 
 func (s *PGKnowledgeGraphStore) UpsertRelationType(ctx context.Context, rt *store.RelationType) error {
-	aid := mustParseUUID(rt.AgentID)
+	aid := parseUUIDOrNil(rt.AgentID)
 	schema, _ := json.Marshal(rt.PropertiesSchema)
 	if schema == nil {
 		schema = []byte("[]")
@@ -234,8 +234,8 @@ func (s *PGKnowledgeGraphStore) UpsertRelationType(ctx context.Context, rt *stor
 }
 
 func (s *PGKnowledgeGraphStore) DeleteRelationType(ctx context.Context, agentID, typeID string) error {
-	aid := mustParseUUID(agentID)
-	tid := mustParseUUID(typeID)
+	aid := parseUUIDOrNil(agentID)
+	tid := parseUUIDOrNil(typeID)
 
 	// Prevent deletion of system types
 	var isSystem bool
@@ -276,7 +276,7 @@ func (s *PGKnowledgeGraphStore) DeleteRelationType(ctx context.Context, agentID,
 // --- Seed ---
 
 func (s *PGKnowledgeGraphStore) SeedKGTypes(ctx context.Context, agentID string, preset string) error {
-	aid := mustParseUUID(agentID)
+	aid := parseUUIDOrNil(agentID)
 	switch preset {
 	case "general":
 		_, err := s.db.ExecContext(ctx, `SELECT seed_kg_default_types($1)`, aid)

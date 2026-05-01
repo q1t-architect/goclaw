@@ -161,8 +161,22 @@ func (m *mockKGStore) CountRelationsByType(context.Context, string, string) (int
 	return 0, nil
 }
 
-func (m *mockKGStore) UpdateEntity(_ context.Context, _, _, _ string, _ map[string]any) (*store.Entity, error) {
-	return nil, nil
+func (m *mockKGStore) UpdateEntity(_ context.Context, _, _, entityID string, updates map[string]any) (*store.Entity, error) {
+	e, ok := m.entities[entityID]
+	if !ok {
+		return nil, fmt.Errorf("entity not found: %s", entityID)
+	}
+	if v, ok := updates["name"].(string); ok {
+		e.Name = v
+	}
+	if v, ok := updates["description"].(string); ok {
+		e.Description = v
+	}
+	if v, ok := updates["entity_type"].(string); ok {
+		e.EntityType = v
+	}
+	m.entities[entityID] = e
+	return &e, nil
 }
 
 func (m *mockKGStore) SetEmbeddingProvider(store.EmbeddingProvider) {}

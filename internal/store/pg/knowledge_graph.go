@@ -407,8 +407,8 @@ func (s *PGKnowledgeGraphStore) UpdateEntity(ctx context.Context, agentID, userI
 	// Always update updated_at
 	setClauses = append(setClauses, fmt.Sprintf("updated_at = NOW()"))
 
-	aid := mustParseUUID(agentID)
-	eid := mustParseUUID(entityID)
+	aid := parseUUIDOrNil(agentID)
+	eid := parseUUIDOrNil(entityID)
 
 	args = append(args, eid, aid)
 	whereIdx := idx
