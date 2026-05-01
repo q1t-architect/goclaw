@@ -10,12 +10,12 @@ import { useTranslation } from "react-i18next";
 import { useDeferredLoading } from "@/hooks/use-deferred-loading";
 import { useKnowledgeGraph, useKGStats, useKGGraph } from "../hooks/use-knowledge-graph";
 import { KGExtractDialog } from "./kg-extract-dialog";
-import { KGEntityFormDialog } from "./kg-entity-form-dialog";
-import { useKgRelationTypes } from "./hooks/use-kg-types";
+import { KGEntityFormDialog } from "../kg-entity-form-dialog";
+import { useKgRelationTypes } from "../hooks/use-kg-types";
 import { KGDedupDialog } from "./kg-dedup-dialog";
 import { KGGraphView } from "./kg-graph-view";
-import { KGTypesTab } from "./kg-types-tab";
-import { useKgEntityTypes } from "./hooks/use-kg-types";
+import { KGTypesTab } from "../kg-types-tab";
+import { useKgEntityTypes } from "../hooks/use-kg-types";
 import type { KGEntity } from "@/types/knowledge-graph";
 
 const KGEntityDetailDialog = lazy(() =>

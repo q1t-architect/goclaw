@@ -10,7 +10,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { ConfirmDialog } from "@/components/shared/confirm-dialog";
 import { GitFork, Plus, Trash2 } from "lucide-react";
-import { KGRelationFormDialog } from "./kg-relation-form-dialog";
+import { KGRelationFormDialog } from "../kg-relation-form-dialog";
 import type { KGRelationType } from "@/types/knowledge-graph";
 import { useTranslation } from "react-i18next";
 import { useHttp } from "@/hooks/use-ws";
