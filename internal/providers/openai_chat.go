@@ -31,8 +31,13 @@ func (p *OpenAIProvider) Chat(ctx context.Context, req ChatRequest) (*ChatRespon
 	// Drop user-visible reasoning for models flagged as leakers (e.g. Kimi,
 	// DeepSeek-Reasoner). Usage.ThinkingTokens is preserved so billing stays
 	// correct (Phase 1 depends on this).
+	//
+	// Exception: when the wire layer must echo reasoning_content back on the
+	// next turn (Kimi, DeepSeek), keep resp.Thinking populated. Otherwise the
+	// next assistant message in history has no reasoning_content and Kimi
+	// returns HTTP 400 "thinking is enabled but reasoning_content is missing".
 	if resp != nil {
-		if strip, _ := req.Options[OptStripThinking].(bool); strip {
+		if strip, _ := req.Options[OptStripThinking].(bool); strip && !openAIWireAssistantReasoningContent(model) {
 			resp.Thinking = ""
 		}
 	}
@@ -126,9 +131,15 @@ func (p *OpenAIProvider) ChatStream(ctx context.Context, req ChatRequest, onChun
 		if reasoning == "" {
 			reasoning = delta.Reasoning
 		}
-		if reasoning != "" && !stripThinking {
-			result.Thinking += reasoning
-			if onChunk != nil {
+		if reasoning != "" {
+			// Accumulate for replay regardless of strip when the model requires
+			// reasoning_content in history (Kimi/DeepSeek): wire layer reads
+			// result.Thinking on the next turn. Per-chunk UI emit still honors
+			// strip — the user never sees streaming reasoning when suppressed.
+			if !stripThinking || openAIWireAssistantReasoningContent(model) {
+				result.Thinking += reasoning
+			}
+			if !stripThinking && onChunk != nil {
 				onChunk(StreamChunk{Thinking: reasoning})
 			}
 		}
