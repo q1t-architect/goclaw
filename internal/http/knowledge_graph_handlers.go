@@ -1,6 +1,7 @@
 package http
 
 import (
+	"encoding/json"
 	"log/slog"
 	"net/http"
 	"strconv"
