@@ -17,6 +17,7 @@ type OpenAIProvider struct {
 	providerType string // DB provider_type (e.g. "gemini_native", "openai", "minimax_native")
 	siteURL      string // optional site URL for provider identification (e.g. OpenRouter HTTP-Referer)
 	siteTitle    string // optional site title for provider identification (e.g. OpenRouter X-Title)
+	userAgent    string // optional User-Agent override (e.g. "KimiCLI/1.5" for Kimi Code API allowlist)
 	client       *http.Client
 	retryConfig  RetryConfig
 	middlewares  RequestMiddleware // composed middleware chain (nil = no-op)
@@ -59,6 +60,14 @@ func (p *OpenAIProvider) WithAuthPrefix(prefix string) *OpenAIProvider {
 func (p *OpenAIProvider) WithSiteInfo(url, title string) *OpenAIProvider {
 	p.siteURL = url
 	p.siteTitle = title
+	return p
+}
+
+// WithUserAgent sets a custom User-Agent header for API requests.
+// Required for endpoints that allowlist client UAs (e.g. Kimi Code API rejects
+// Go-http-client/* with 403). Empty value preserves Go default.
+func (p *OpenAIProvider) WithUserAgent(ua string) *OpenAIProvider {
+	p.userAgent = ua
 	return p
 }
 

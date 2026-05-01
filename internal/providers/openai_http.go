@@ -43,6 +43,11 @@ func (p *OpenAIProvider) doRequest(ctx context.Context, body any) (io.ReadCloser
 	if p.siteTitle != "" {
 		httpReq.Header.Set("X-Title", p.siteTitle)
 	}
+	// Some providers (e.g. Kimi Code API) allowlist client User-Agents and reject
+	// Go default ("Go-http-client/*") with 403. Empty userAgent leaves default.
+	if p.userAgent != "" {
+		httpReq.Header.Set("User-Agent", p.userAgent)
+	}
 
 	resp, err := p.client.Do(httpReq)
 	if err != nil {
