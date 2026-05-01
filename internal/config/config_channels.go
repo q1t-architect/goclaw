@@ -218,6 +218,7 @@ type ProvidersConfig struct {
 	Novita         ProviderConfig  `json:"novita"`          // Novita AI (OpenAI-compatible endpoint)
 	BytePlus       ProviderConfig  `json:"byteplus"`        // BytePlus ModelArk (Seed 2.0)
 	BytePlusCoding ProviderConfig  `json:"byteplus_coding"` // BytePlus ModelArk Coding Plan
+	Kimi           ProviderConfig  `json:"kimi"`            // Kimi Code API (Moonshot Allegretto)
 }
 
 // OllamaConfig configures a local (or self-hosted) Ollama instance.
@@ -292,6 +293,8 @@ func (p *ProvidersConfig) APIBaseForType(providerType string) string {
 		return p.BytePlus.APIBase
 	case "byteplus_coding":
 		return p.BytePlusCoding.APIBase
+	case "kimi":
+		return p.Kimi.APIBase
 	default:
 		return ""
 	}
@@ -321,7 +324,8 @@ func (c *Config) HasAnyProvider() bool {
 		p.ACP.Binary != "" ||
 		p.Novita.APIKey != "" ||
 		p.BytePlus.APIKey != "" ||
-		p.BytePlusCoding.APIKey != ""
+		p.BytePlusCoding.APIKey != "" ||
+		p.Kimi.APIKey != ""
 }
 
 // QuotaWindow defines request limits per time window. Zero means unlimited.

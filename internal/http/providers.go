@@ -239,6 +239,14 @@ func (h *ProvidersHandler) registerInMemory(p *store.LLMProviderData) {
 			base = store.NovitaDefaultAPIBase
 		}
 		h.providerReg.RegisterForTenant(p.TenantID, providers.NewOpenAIProvider(p.Name, p.APIKey, base, store.NovitaDefaultModel))
+	case store.ProviderKimi:
+		base := apiBase
+		if base == "" {
+			base = store.KimiDefaultAPIBase
+		}
+		prov := providers.NewOpenAIProvider(p.Name, p.APIKey, base, store.KimiDefaultModel)
+		prov.WithProviderType(store.ProviderKimi).WithUserAgent(providers.KimiCLIUserAgent)
+		h.providerReg.RegisterForTenant(p.TenantID, prov)
 	default:
 		prov := providers.NewOpenAIProvider(p.Name, p.APIKey, apiBase, "")
 		if p.ProviderType == store.ProviderMiniMax {

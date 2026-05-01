@@ -174,6 +174,19 @@ func registerProviders(registry *providers.Registry, cfg *config.Config, modelRe
 		slog.Info("registered provider", "name", "byteplus-coding")
 	}
 
+	// Kimi Code API (Moonshot Allegretto consumer subscription).
+	// Requires the official KimiCLI User-Agent to bypass the endpoint allowlist.
+	if cfg.Providers.Kimi.APIKey != "" {
+		base := cfg.Providers.Kimi.APIBase
+		if base == "" {
+			base = store.KimiDefaultAPIBase
+		}
+		prov := providers.NewOpenAIProvider("kimi", cfg.Providers.Kimi.APIKey, base, store.KimiDefaultModel)
+		prov.WithProviderType(store.ProviderKimi).WithUserAgent(providers.KimiCLIUserAgent)
+		registry.Register(prov)
+		slog.Info("registered provider", "name", "kimi")
+	}
+
 	// Claude CLI provider (subscription-based, no API key needed)
 	if cfg.Providers.ClaudeCLI.CLIPath != "" {
 		cliPath := cfg.Providers.ClaudeCLI.CLIPath

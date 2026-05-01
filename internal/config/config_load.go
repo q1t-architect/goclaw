@@ -106,6 +106,8 @@ func (c *Config) applyEnvOverrides() {
 	envStr("GOCLAW_BAILIAN_API_KEY", &c.Providers.Bailian.APIKey)
 	envStr("GOCLAW_ZAI_API_KEY", &c.Providers.Zai.APIKey)
 	envStr("GOCLAW_ZAI_CODING_API_KEY", &c.Providers.ZaiCoding.APIKey)
+	envStr("GOCLAW_KIMI_API_KEY", &c.Providers.Kimi.APIKey)
+	envStr("GOCLAW_KIMI_API_BASE", &c.Providers.Kimi.APIBase)
 	envStr("GOCLAW_OLLAMA_HOST", &c.Providers.Ollama.Host)
 	envStr("GOCLAW_OLLAMA_CLOUD_API_KEY", &c.Providers.OllamaCloud.APIKey)
 	envStr("GOCLAW_OLLAMA_CLOUD_API_BASE", &c.Providers.OllamaCloud.APIBase)

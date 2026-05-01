@@ -33,6 +33,7 @@ const (
 	ProviderNovita          = "novita"          // Novita AI (OpenAI-compatible endpoint)
 	ProviderBytePlus        = "byteplus"        // BytePlus ModelArk (Seed 2.0 models)
 	ProviderBytePlusCoding  = "byteplus_coding" // BytePlus ModelArk Coding Plan
+	ProviderKimi            = "kimi"            // Kimi Code API (Moonshot Allegretto subscription)
 
 	// Novita AI defaults.
 	NovitaDefaultAPIBase = "https://api.novita.ai/openai"
@@ -42,6 +43,11 @@ const (
 	BytePlusDefaultAPIBase       = "https://ark.ap-southeast.bytepluses.com/api/v3"
 	BytePlusCodingDefaultAPIBase = "https://ark.ap-southeast.bytepluses.com/api/coding/v3"
 	BytePlusDefaultModel         = "seed-2-0-lite-260228"
+
+	// Kimi Code API defaults (Moonshot Allegretto consumer subscription).
+	// Endpoint allowlists client User-Agents — see providers.KimiCLIUserAgent.
+	KimiDefaultAPIBase = "https://api.kimi.com/coding/v1"
+	KimiDefaultModel   = "kimi-k2.5"
 )
 
 // ValidProviderTypes lists all accepted provider_type values.
@@ -70,6 +76,7 @@ var ValidProviderTypes = map[string]bool{
 	ProviderNovita:          true,
 	ProviderBytePlus:        true,
 	ProviderBytePlusCoding:  true,
+	ProviderKimi:            true,
 }
 
 // LLMProviderData represents an LLM provider configuration.
