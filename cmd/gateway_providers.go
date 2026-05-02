@@ -408,6 +408,14 @@ func registerProvidersFromDB(registry *providers.Registry, provStore store.Provi
 			prov := providers.NewOpenAIProvider(p.Name, p.APIKey, base, store.BytePlusDefaultModel)
 			prov.WithProviderType(p.ProviderType)
 			registry.RegisterForTenant(p.TenantID, prov)
+		case store.ProviderKimi:
+			base := p.APIBase
+			if base == "" {
+				base = store.KimiDefaultAPIBase
+			}
+			prov := providers.NewOpenAIProvider(p.Name, p.APIKey, base, store.KimiDefaultModel)
+			prov.WithProviderType(p.ProviderType).WithUserAgent(providers.KimiCLIUserAgent)
+			registry.RegisterForTenant(p.TenantID, prov)
 		default:
 			prov := providers.NewOpenAIProvider(p.Name, p.APIKey, p.APIBase, "")
 			prov.WithProviderType(p.ProviderType)
