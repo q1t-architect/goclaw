@@ -47,7 +47,7 @@ const (
 	// Kimi Code API defaults (Moonshot Allegretto consumer subscription).
 	// Endpoint allowlists client User-Agents — see providers.KimiCLIUserAgent.
 	KimiDefaultAPIBase = "https://api.kimi.com/coding/v1"
-	KimiDefaultModel   = "kimi-k2.5"
+	KimiDefaultModel   = "kimi-for-coding"
 )
 
 // ValidProviderTypes lists all accepted provider_type values.

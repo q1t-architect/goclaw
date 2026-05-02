@@ -96,3 +96,17 @@ func chatGPTOAuthModels() []ModelInfo {
 		{ID: "gpt-5.1", Name: "GPT-5.1"},
 	})
 }
+
+// kimiModels returns a hardcoded list of Kimi Code API models.
+// The Kimi Code API (api.kimi.com/coding/v1) allowlists client User-Agents
+// and does not expose a standard /v1/models endpoint for generic clients.
+// Note: kimi-for-coding is an alias that resolves to the latest model
+// (currently kimi-k2.6). Explicit IDs are provided for users who want
+// to pin a specific version.
+func kimiModels() []ModelInfo {
+	return []ModelInfo{
+		{ID: "kimi-for-coding", Name: "Kimi for Coding (latest)"},
+		{ID: "kimi-k2.6", Name: "Kimi K2.6"},
+		{ID: "kimi-k2.5", Name: "Kimi K2.5"},
+	}
+}
