@@ -293,10 +293,12 @@ func init() {
 		MsgPackagesUpdatesSourceGithub: "GitHub",
 		MsgPackagesUpdatesSourcePip:    "pip",
 		MsgPackagesUpdatesSourceNpm:    "npm",
+		MsgPackagesUpdatesSourceApk:    "apk",
 
 		// Package update availability messages
 		MsgPackagesUpdatesUnavailablePip: "pip not installed on this system",
 		MsgPackagesUpdatesUnavailableNpm: "npm not installed on this system",
+		MsgPackagesUpdatesUnavailableApk: "apk not available on this system",
 
 		// Package update failure reasons
 		MsgPackagesUpdatesReasonDependencyConflict: "Dependency conflict",
@@ -305,5 +307,8 @@ func init() {
 		MsgPackagesUpdatesReasonNotFound:           "Package not found",
 		MsgPackagesUpdatesReasonTargetMissing:      "Version not available",
 		MsgPackagesUpdatesReasonExternallyManaged:  "Environment externally managed",
+		MsgPackagesUpdatesReasonLocked:             "Package database is locked",
+		MsgPackagesUpdatesReasonDiskFull:           "Disk full",
+		MsgPackagesUpdatesReasonHelperUnavailable:  "Privileged helper unavailable",
 	})
 }
