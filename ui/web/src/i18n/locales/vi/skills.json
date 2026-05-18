@@ -138,6 +138,7 @@
     "update": "Cập nhật grant",
     "grant": "Grant",
     "save": "Lưu",
+    "revoke": "Thu hồi grant",
     "selectAgent": "Chọn agent",
     "allowManage": "Cho phép agent này sửa hoặc xóa skill",
     "canManage": "Được sửa",

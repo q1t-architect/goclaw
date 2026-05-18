@@ -138,6 +138,7 @@
     "update": "更新授权",
     "grant": "授权",
     "save": "保存",
+    "revoke": "撤销授权",
     "selectAgent": "选择 Agent",
     "allowManage": "允许此 Agent 编辑或删除 Skill",
     "canManage": "可编辑",

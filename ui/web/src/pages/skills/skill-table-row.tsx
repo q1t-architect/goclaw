@@ -65,13 +65,6 @@ export function SkillTableRow({
       {tab === "custom" && (
         <td className="px-4 py-3 text-sm text-muted-foreground">{skill.author || "—"}</td>
       )}
-      {tab === "custom" && (
-        <td className="px-4 py-3">
-          <span className="block max-w-[12rem] truncate font-mono text-xs text-muted-foreground">
-            {skill.owner_id || t("unknownOwner")}
-          </span>
-        </td>
-      )}
       <td className="px-4 py-3">
         <div className="flex flex-col gap-1">
           <Badge

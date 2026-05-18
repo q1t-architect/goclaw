@@ -116,11 +116,6 @@ export function SkillAgentGrantsDialog({
         </DialogHeader>
 
         <div className="space-y-4 overflow-y-auto min-h-0 pr-1">
-          <div className="rounded-md border p-3 text-sm">
-            <span className="text-muted-foreground">{t("owner")}:</span>{" "}
-            <span className="font-mono">{skill.owner_id || t("unknownOwner")}</span>
-          </div>
-
           <div className="space-y-2">
             <Label>{t("grants.current")}</Label>
             {grants.length === 0 ? (
@@ -140,7 +135,15 @@ export function SkillAgentGrantsDialog({
                         )}
                       </div>
                     </div>
-                    <Button variant="ghost" size="icon" className="h-8 w-8" disabled={loading} onClick={() => handleRevoke(grant)}>
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      className="h-8 w-8"
+                      disabled={loading}
+                      aria-label={t("grants.revoke")}
+                      title={t("grants.revoke")}
+                      onClick={() => handleRevoke(grant)}
+                    >
                       <Trash2 className="h-4 w-4 text-destructive" />
                     </Button>
                   </div>

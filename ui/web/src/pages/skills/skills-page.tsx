@@ -168,7 +168,6 @@ export function SkillsPage() {
                   <th className="px-4 py-3 text-left font-medium">{t("columns.name")}</th>
                   <th className="px-4 py-3 text-left font-medium">{t("columns.description")}</th>
                   {tab === "custom" && <th className="px-4 py-3 text-left font-medium">{t("columns.author")}</th>}
-                  {tab === "custom" && <th className="px-4 py-3 text-left font-medium">{t("columns.owner")}</th>}
                   <th className="px-4 py-3 text-left font-medium">{t("columns.status")}</th>
                   {tab === "custom" && <th className="px-4 py-3 text-left font-medium">{t("columns.visibility")}</th>}
                   <th className="px-4 py-3 text-right font-medium">{t("columns.actions")}</th>

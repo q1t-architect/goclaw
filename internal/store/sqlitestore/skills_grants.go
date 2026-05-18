@@ -5,6 +5,7 @@ package sqlitestore
 import (
 	"context"
 	"database/sql"
+	"fmt"
 	"log/slog"
 	"time"
 
@@ -29,6 +30,9 @@ func (s *SQLiteSkillStore) GrantToAgent(ctx context.Context, skillID, agentID uu
 	id := store.GenNewID()
 	now := time.Now().UTC()
 	tid := tenantIDForInsert(ctx)
+	if err := s.verifySkillGrantScope(ctx, skillID, agentID, tid); err != nil {
+		return err
+	}
 	var err error
 	if len(canManage) > 0 {
 		_, err = s.db.ExecContext(ctx,
@@ -56,8 +60,10 @@ func (s *SQLiteSkillStore) GrantToAgent(ctx context.Context, skillID, agentID uu
 
 	// Auto-promote: private → internal.
 	_, err = s.db.ExecContext(ctx,
-		`UPDATE skills SET visibility = 'internal', updated_at = ? WHERE id = ? AND visibility = 'private'`,
-		time.Now().UTC(), skillID)
+		`UPDATE skills
+		 SET visibility = 'internal', updated_at = ?
+		 WHERE id = ? AND visibility = 'private' AND (is_system = 1 OR tenant_id = ?)`,
+		time.Now().UTC(), skillID, tid)
 	if err != nil {
 		slog.Warn("skill_grants: failed to auto-promote visibility", "skill_id", skillID, "error", err)
 	}
@@ -68,6 +74,10 @@ func (s *SQLiteSkillStore) GrantToAgent(ctx context.Context, skillID, agentID uu
 
 // RevokeFromAgent revokes a skill grant from an agent.
 func (s *SQLiteSkillStore) RevokeFromAgent(ctx context.Context, skillID, agentID uuid.UUID) error {
+	tid := tenantIDForInsert(ctx)
+	if err := s.verifySkillInGrantScope(ctx, skillID, tid); err != nil {
+		return err
+	}
 	tClause, tArgs, err := scopeClause(ctx)
 	if err != nil {
 		return err
@@ -82,14 +92,45 @@ func (s *SQLiteSkillStore) RevokeFromAgent(ctx context.Context, skillID, agentID
 	// Auto-demote: internal → private when no grants remain.
 	_, err = s.db.ExecContext(ctx,
 		`UPDATE skills SET visibility = 'private', updated_at = ?
-		 WHERE id = ? AND visibility = 'internal'
+		 WHERE id = ? AND visibility = 'internal' AND (is_system = 1 OR tenant_id = ?)
 		   AND NOT EXISTS (SELECT 1 FROM skill_agent_grants WHERE skill_id = ?)`,
-		time.Now().UTC(), skillID, skillID)
+		time.Now().UTC(), skillID, tid, skillID)
 	if err != nil {
 		slog.Warn("skill_grants: failed to auto-demote visibility", "skill_id", skillID, "error", err)
 	}
 
 	s.BumpVersion()
+	return nil
+}
+
+func (s *SQLiteSkillStore) verifySkillGrantScope(ctx context.Context, skillID, agentID, tenantID uuid.UUID) error {
+	if err := s.verifySkillInGrantScope(ctx, skillID, tenantID); err != nil {
+		return err
+	}
+
+	var agentTenantID uuid.UUID
+	if err := s.db.QueryRowContext(ctx,
+		"SELECT tenant_id FROM agents WHERE id = ?", agentID,
+	).Scan(&agentTenantID); err != nil {
+		return fmt.Errorf("agent not found")
+	}
+	if agentTenantID != tenantID {
+		return fmt.Errorf("agent not found")
+	}
+	return nil
+}
+
+func (s *SQLiteSkillStore) verifySkillInGrantScope(ctx context.Context, skillID, tenantID uuid.UUID) error {
+	var skillTenantID uuid.UUID
+	var isSystem bool
+	if err := s.db.QueryRowContext(ctx,
+		"SELECT tenant_id, is_system FROM skills WHERE id = ?", skillID,
+	).Scan(&skillTenantID, &isSystem); err != nil {
+		return fmt.Errorf("skill not found")
+	}
+	if !isSystem && skillTenantID != tenantID {
+		return fmt.Errorf("skill not found")
+	}
 	return nil
 }
 
@@ -121,6 +162,9 @@ func (s *SQLiteSkillStore) ListAgentGrants(ctx context.Context, agentID uuid.UUI
 
 // ListAgentGrantsForSkill returns all agent grants for one skill.
 func (s *SQLiteSkillStore) ListAgentGrantsForSkill(ctx context.Context, skillID uuid.UUID) ([]store.SkillAgentGrantInfo, error) {
+	if err := s.verifySkillInGrantScope(ctx, skillID, tenantIDForInsert(ctx)); err != nil {
+		return nil, err
+	}
 	tClause, tArgs, err := scopeClause(ctx)
 	if err != nil {
 		return nil, err
@@ -147,6 +191,9 @@ func (s *SQLiteSkillStore) ListAgentGrantsForSkill(ctx context.Context, skillID 
 
 // AgentCanManageSkill reports whether an agent has explicit edit/delete rights for a skill.
 func (s *SQLiteSkillStore) AgentCanManageSkill(ctx context.Context, skillID, agentID uuid.UUID) (bool, error) {
+	if err := s.verifySkillInGrantScope(ctx, skillID, tenantIDForInsert(ctx)); err != nil {
+		return false, err
+	}
 	tClause, tArgs, err := scopeClause(ctx)
 	if err != nil {
 		return false, err

@@ -16,7 +16,7 @@ var schemaSQL string
 
 // SchemaVersion is the current SQLite schema version.
 // Bump this when adding new migration steps below.
-const SchemaVersion = 35
+const SchemaVersion = 36
 
 // migrations maps version → SQL to apply when upgrading FROM that version.
 // schema.sql always represents the LATEST full schema (for fresh DBs).
@@ -598,6 +598,17 @@ CREATE INDEX IF NOT EXISTS idx_ws_activity_retention   ON workstation_activity(c
 
 	// Version 34 → 35: agent skill grants can optionally allow skill management.
 	34: `ALTER TABLE skill_agent_grants ADD COLUMN can_manage INTEGER NOT NULL DEFAULT 0;`,
+
+	// Version 35 → 36: remove legacy cross-tenant skill-agent grant rows.
+	35: `DELETE FROM skill_agent_grants
+WHERE id IN (
+    SELECT sag.id
+    FROM skill_agent_grants sag
+    JOIN skills s ON sag.skill_id = s.id
+    JOIN agents a ON sag.agent_id = a.id
+    WHERE sag.tenant_id <> a.tenant_id
+       OR (s.is_system = 0 AND sag.tenant_id <> s.tenant_id)
+);`,
 
 	// Version 23 → 24: vault_documents scope/ownership consistency triggers.
 	// Mirrors PG migration 000055 CHECK constraint; SQLite cannot add CHECK via

@@ -12,7 +12,6 @@ export interface SkillInfo {
   enabled?: boolean;
   tenant_enabled?: boolean | null;
   author?: string;
-  owner_id?: string;
   missing_deps?: string[];
 }
 

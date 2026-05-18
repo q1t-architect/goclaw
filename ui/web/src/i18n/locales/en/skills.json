@@ -28,6 +28,7 @@
     "update": "Update grant",
     "grant": "Grant",
     "save": "Save",
+    "revoke": "Revoke grant",
     "selectAgent": "Select agent",
     "allowManage": "Allow this agent to edit or delete the skill",
     "canManage": "Can edit",
