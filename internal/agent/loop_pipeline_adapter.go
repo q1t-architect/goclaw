@@ -141,7 +141,10 @@ func (l *Loop) buildPipelineDeps(req *RunRequest, bridgeRS *runState) pipeline.P
 		ExecuteToolCall:   cb.executeToolCall,
 		ExecuteToolRaw:    cb.executeToolRaw,
 		ProcessToolResult: cb.processToolResult,
-		CheckReadOnly:     cb.checkReadOnly,
+		SequentialToolCall: func(tc providers.ToolCall) bool {
+			return l.resolveToolCallName(tc.Name) == "wait"
+		},
+		CheckReadOnly: cb.checkReadOnly,
 
 		// Observe: drain InjectCh
 		DrainInjectCh: func() []providers.Message {

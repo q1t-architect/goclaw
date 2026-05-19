@@ -747,7 +747,11 @@
       "selectToolsDeny": "Chọn công cụ để từ chối...",
       "selectToolsAlsoAllow": "Chọn công cụ bổ sung...",
       "toolCallPrefix": "Tiền tố Tool Call",
-      "toolCallPrefixHint": "Loại bỏ tiền tố này từ tên tool call của model trước khi tra cứu registry."
+      "toolCallPrefixHint": "Loại bỏ tiền tố này từ tên tool call của model trước khi tra cứu registry.",
+      "waitLimits": "Giới hạn công cụ wait",
+      "waitMinPlaceholder": "Min ms",
+      "waitMaxPlaceholder": "Max ms",
+      "waitLimitsHint": "Giới hạn riêng cho agent. Server vẫn kẹp wait trong khoảng 100-300000ms."
     },
     "workspaceSharing": {
       "title": "Chia sẻ Workspace",

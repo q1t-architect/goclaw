@@ -19,6 +19,20 @@ Significant changes, features, and fixes in reverse chronological order.
 
 ---
 
+### Tools: built-in wait delay
+
+**Features**
+
+- Added a built-in `wait` tool with bounded millisecond delays, cancellation support, per-agent min/max settings, and runtime policy visibility.
+- Preserved same-response ordering by making `wait` a sequential tool-call barrier.
+- Added Web agent settings controls so per-agent wait limits are not dropped on save.
+
+**Tests**
+
+- Added focused wait validation, cancellation, policy, builtin seed, config parsing, and tool-stage ordering coverage.
+
+---
+
 ### Providers: ChatGPT OAuth GPT-5.5 default
 
 **Changed**

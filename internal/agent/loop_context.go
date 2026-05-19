@@ -108,6 +108,11 @@ func (l *Loop) injectContext(ctx context.Context, req *RunRequest) (contextSetup
 	if l.memoryCfg != nil {
 		ctx = tools.WithMemoryConfig(ctx, l.memoryCfg)
 	}
+	var waitToolCfg *config.WaitToolPolicy
+	if l.agentToolPolicy != nil && l.agentToolPolicy.Wait != nil {
+		waitToolCfg = l.agentToolPolicy.Wait
+		ctx = tools.WithWaitToolConfig(ctx, waitToolCfg)
+	}
 	if l.sandboxCfg != nil {
 		ctx = tools.WithSandboxConfig(ctx, l.sandboxCfg)
 	}
@@ -371,6 +376,7 @@ func (l *Loop) injectContext(ctx context.Context, req *RunRequest) (contextSetup
 		ParentProvider:      providerName,
 		MemoryCfg:           l.memoryCfg,
 		SandboxCfg:          l.sandboxCfg,
+		WaitToolCfg:         waitToolCfg,
 		ShellDenyGroups:     l.shellDenyGroups,
 		Workspace:           tools.ToolWorkspaceFromCtx(ctx),
 		TeamWorkspace:       tools.ToolTeamWorkspaceFromCtx(ctx),

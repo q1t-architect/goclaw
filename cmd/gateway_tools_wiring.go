@@ -39,6 +39,7 @@ func wireExtraTools(
 
 	// DateTime tool (precise time for cron scheduling, memory timestamps, etc.)
 	toolsReg.Register(tools.NewDateTimeTool())
+	toolsReg.Register(tools.NewWaitTool())
 
 	// Cron tool (agent-facing)
 	toolsReg.Register(tools.NewCronTool(pgStores.Cron))
@@ -261,4 +262,3 @@ func wireWorkstationTools(
 	}
 	return func() {}
 }
-

@@ -762,7 +762,11 @@
       "selectToolsDeny": "Select tools to deny...",
       "selectToolsAlsoAllow": "Select additional tools...",
       "toolCallPrefix": "Tool Call Prefix",
-      "toolCallPrefixHint": "Strips this prefix from model's tool call names before registry lookup."
+      "toolCallPrefixHint": "Strips this prefix from model's tool call names before registry lookup.",
+      "waitLimits": "Wait Tool Bounds",
+      "waitMinPlaceholder": "Min ms",
+      "waitMaxPlaceholder": "Max ms",
+      "waitLimitsHint": "Optional per-agent bounds. Server safety limits still clamp waits to 100-300000ms."
     },
     "workspaceSharing": {
       "title": "Workspace Sharing",

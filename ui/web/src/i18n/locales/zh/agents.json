@@ -747,7 +747,11 @@
       "selectToolsDeny": "选择要拒绝的工具...",
       "selectToolsAlsoAllow": "选择附加工具...",
       "toolCallPrefix": "工具调用前缀",
-      "toolCallPrefixHint": "从模型的工具调用名称中去除此前缀后再查找注册表。"
+      "toolCallPrefixHint": "从模型的工具调用名称中去除此前缀后再查找注册表。",
+      "waitLimits": "Wait 工具边界",
+      "waitMinPlaceholder": "最小毫秒",
+      "waitMaxPlaceholder": "最大毫秒",
+      "waitLimitsHint": "可选的 Agent 专属边界。服务端仍会将等待限制在 100-300000 毫秒内。"
     },
     "workspaceSharing": {
       "title": "工作区共享",

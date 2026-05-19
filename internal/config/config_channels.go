@@ -444,9 +444,15 @@ type ToolPolicySpec struct {
 	Deny       []string                   `json:"deny,omitempty"`
 	AlsoAllow  []string                   `json:"alsoAllow,omitempty"`
 	ByProvider map[string]*ToolPolicySpec `json:"byProvider,omitempty"`
+	Wait       *WaitToolPolicy            `json:"wait,omitempty"`
 	ToolCallPrefix string `json:"toolCallPrefix,omitempty"` // prefix to strip from model's tool call names before registry lookup
 }
 
+// WaitToolPolicy configures per-agent safety bounds for the wait tool.
+type WaitToolPolicy struct {
+	MinMs int `json:"min_ms,omitempty"`
+	MaxMs int `json:"max_ms,omitempty"`
+}
 
 // SessionsConfig controls session behavior.
 // Matching TS src/config/sessions/types.ts + src/config/types.base.ts.

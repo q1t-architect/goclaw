@@ -7,7 +7,11 @@ export interface ToolPolicyConfig {
   allow?: string[];
   deny?: string[];
   alsoAllow?: string[];
-  byProvider?: Record<string, { profile?: string; allow?: string[]; deny?: string[]; alsoAllow?: string[] }>;
+  byProvider?: Record<string, ToolPolicyConfig>;
+  wait?: {
+    min_ms?: number;
+    max_ms?: number;
+  };
   toolCallPrefix?: string; // prefix to strip from model's tool call names
 }
 

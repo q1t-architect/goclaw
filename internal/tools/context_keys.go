@@ -358,6 +358,24 @@ func MemoryConfigFromCtx(ctx context.Context) *config.MemoryConfig {
 	return nil
 }
 
+// --- Per-agent wait tool config override ---
+
+const ctxWaitToolCfg toolContextKey = "tool_wait_config"
+
+func WithWaitToolConfig(ctx context.Context, cfg *config.WaitToolPolicy) context.Context {
+	return context.WithValue(ctx, ctxWaitToolCfg, cfg)
+}
+
+func WaitToolConfigFromCtx(ctx context.Context) *config.WaitToolPolicy {
+	if v, _ := ctx.Value(ctxWaitToolCfg).(*config.WaitToolPolicy); v != nil {
+		return v
+	}
+	if rc := store.RunContextFromCtx(ctx); rc != nil {
+		return rc.WaitToolCfg
+	}
+	return nil
+}
+
 // --- Team ID propagation (task dispatch → workspace tools) ---
 
 const ctxTeamID toolContextKey = "tool_team_id"

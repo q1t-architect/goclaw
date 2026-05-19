@@ -45,6 +45,7 @@ type RunContext struct {
 	ParentProvider      string
 	MemoryCfg           *config.MemoryConfig
 	SandboxCfg          *sandbox.Config
+	WaitToolCfg         *config.WaitToolPolicy
 	ShellDenyGroups     map[string]bool
 
 	// Workspace
