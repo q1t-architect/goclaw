@@ -30,6 +30,12 @@ Significant changes, features, and fixes in reverse chronological order.
 
 - Updated the host release-upgrade script to support beta asset filenames with a leading `v`.
 - Added checksum fallback to GitHub release asset SHA256 digests when beta releases do not publish `CHECKSUMS.sha256`.
+- Detached gateway-triggered upgrades into a transient `systemd-run` unit so stopping `goclaw` during deploy no longer kills the upgrade job.
+- Allowed stale upgrade `running` status records to be superseded after timeout and made the zuey deploy wait loop tolerate transient 502s during restart.
+
+**Tests**
+
+- Added regression coverage for stale gateway upgrade status recovery.
 
 ---
 

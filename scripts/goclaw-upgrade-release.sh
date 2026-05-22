@@ -9,6 +9,7 @@ STATUS_DIR="/var/lib/goclaw/update-jobs"
 STATUS_FILE="${STATUS_DIR}/current.json"
 STATUS_OWNER="${GOCLAW_STATUS_OWNER:-goclaw:goclaw}"
 DRY_RUN=0
+DETACHED="${GOCLAW_UPGRADE_DETACHED:-0}"
 
 log() { printf '[%s] %s\n' "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "$*"; }
 json_escape() { python3 -c 'import json,sys; print(json.dumps(sys.argv[1]))' "$1"; }
@@ -81,12 +82,42 @@ fi
 
 require_bin() { command -v "$1" >/dev/null 2>&1 || fail "missing dependency: $1"; }
 require_bin curl
-require_bin flock
 require_bin tar
 require_bin sha256sum
 require_bin python3
 
+detach_into_systemd() {
+  if [ "$DRY_RUN" = "1" ] || [ "$DETACHED" = "1" ]; then
+    return
+  fi
+  if ! command -v systemd-run >/dev/null 2>&1 || [ ! -d /run/systemd/system ]; then
+    return
+  fi
+  if ! grep -q 'goclaw.service' "/proc/$$/cgroup" 2>/dev/null; then
+    return
+  fi
+
+  local script_path unit_tag unit_name
+  script_path="$(readlink -f "$0" 2>/dev/null || true)"
+  if [ -z "$script_path" ]; then
+    script_path="$0"
+  fi
+  unit_tag="$(printf '%s' "$REQUESTED_TAG" | tr -c 'A-Za-z0-9_.-' '-')"
+  unit_name="goclaw-upgrade-${unit_tag}-$(date -u +%Y%m%dT%H%M%SZ)"
+  log "starting detached systemd upgrade unit=${unit_name}"
+  systemd-run \
+    --unit="$unit_name" \
+    --collect \
+    --property=Type=oneshot \
+    --setenv=GOCLAW_UPGRADE_DETACHED=1 \
+    "$script_path" "$REQUESTED_TAG"
+  exit 0
+}
+
+detach_into_systemd
+
 if [ "$DRY_RUN" != "1" ]; then
+  require_bin flock
   mkdir -p "$STATUS_DIR"
   exec 9>"${STATUS_DIR}/upgrade.lock"
   flock -n 9 || fail "gateway upgrade already running"

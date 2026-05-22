@@ -162,7 +162,7 @@ sudo /usr/local/bin/goclaw-upgrade-release latest
 sudo /usr/local/bin/goclaw-upgrade-release v3.12.0
 ```
 
-The script downloads the Linux amd64 GitHub Release tarball from `digitopvn/goclaw`, follows GitHub release redirects, verifies `CHECKSUMS.sha256` when present, falls back to the GitHub release asset SHA256 digest for beta assets without checksum files, extracts to `/opt/goclaw/releases/<tag>`, and calls `goclaw-deploy`.
+The script downloads the Linux amd64 GitHub Release tarball from `digitopvn/goclaw`, follows GitHub release redirects, verifies `CHECKSUMS.sha256` when present, falls back to the GitHub release asset SHA256 digest for beta assets without checksum files, extracts to `/opt/goclaw/releases/<tag>`, and calls `goclaw-deploy`. When invoked from the running gateway service, it first re-launches itself as a transient `systemd-run` unit so `goclaw-deploy` can stop/restart `goclaw` without killing the upgrade job.
 
 The HTTP API still accepts only `tag`; it does not accept repo names or custom download URLs.
 

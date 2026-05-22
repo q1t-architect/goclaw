@@ -377,12 +377,21 @@ jobs:
         run: |
           base_url="${GOCLAW_DEPLOY_URL%/}"
           for attempt in {1..90}; do
+            status_err="$(mktemp)"
             status_json="$(curl -fsS --retry 3 --retry-delay 2 \
               -H "Authorization: Bearer ${GOCLAW_GATEWAY_TOKEN}" \
               -H "X-GoClaw-Upgrade-Token: ${GOCLAW_UPGRADE_TOKEN}" \
               -H "X-GoClaw-User-Id: ${GOCLAW_DEPLOY_USER_ID}" \
-              "${base_url}/v1/system/gateway/upgrade/status")"
-            state="$(python3 -c 'import json,sys; print(json.load(sys.stdin).get("state", ""))' <<< "$status_json")"
+              "${base_url}/v1/system/gateway/upgrade/status" 2>"$status_err" || true)"
+            if [[ -z "$status_json" ]]; then
+              echo "upgrade status unavailable; attempt ${attempt}/90"
+              cat "$status_err"
+              rm -f "$status_err"
+              sleep 10
+              continue
+            fi
+            rm -f "$status_err"
+            state="$(python3 -c 'import json,sys; print(json.load(sys.stdin).get("state", ""))' <<< "$status_json" 2>/dev/null || true)"
             if [[ "$state" == "succeeded" ]]; then
               echo "$status_json"
               exit 0
