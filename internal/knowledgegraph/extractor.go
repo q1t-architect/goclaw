@@ -9,6 +9,7 @@ import (
 
 	"github.com/nextlevelbuilder/goclaw/internal/providers"
 	"github.com/nextlevelbuilder/goclaw/internal/store"
+	usagecaps "github.com/nextlevelbuilder/goclaw/internal/usage/caps"
 )
 
 // ExtractionResult holds entities and relations extracted from text.
@@ -24,6 +25,7 @@ type Extractor struct {
 	minConfidence float64
 	entityTypes   []store.EntityType
 	relationTypes []store.RelationType
+	usageCaps     *usagecaps.Service
 }
 
 // NewExtractor creates a new Extractor with the given provider, model, and confidence threshold.
@@ -41,6 +43,11 @@ func NewExtractorWithTypes(provider providers.Provider, model string, minConfide
 		minConfidence = 0.75
 	}
 	return &Extractor{provider: provider, model: model, minConfidence: minConfidence, entityTypes: entityTypes, relationTypes: relationTypes}
+}
+
+// SetUsageCapService enables cost enforcement for LLM extraction calls.
+func (e *Extractor) SetUsageCapService(s *usagecaps.Service) {
+	e.usageCaps = s
 }
 
 // systemPrompt returns the extraction prompt — dynamic if custom types are configured.
@@ -88,7 +95,11 @@ func (e *Extractor) extractChunk(ctx context.Context, text string) (*ExtractionR
 		},
 	}
 
-	resp, err := e.provider.Chat(ctx, req)
+	resp, err := e.usageCaps.Chat(ctx, e.provider, req, usagecaps.ChatOptions{
+		ModelID:         e.model,
+		Purpose:         "knowledge-graph-extract",
+		MaxOutputTokens: 8192,
+	})
 	if err != nil {
 		return nil, fmt.Errorf("kg extraction LLM call: %w", err)
 	}
@@ -101,7 +112,11 @@ func (e *Extractor) extractChunk(ctx context.Context, text string) (*ExtractionR
 			text = text[:retryMaxChars] + "\n\n[...truncated]"
 		}
 		req.Messages[1].Content = text
-		resp, err = e.provider.Chat(ctx, req)
+		resp, err = e.usageCaps.Chat(ctx, e.provider, req, usagecaps.ChatOptions{
+			ModelID:         e.model,
+			Purpose:         "knowledge-graph-extract-retry",
+			MaxOutputTokens: 8192,
+		})
 		if err != nil {
 			return nil, fmt.Errorf("kg extraction LLM retry: %w", err)
 		}
@@ -302,4 +317,3 @@ func stripCodeBlock(s string) string {
 	}
 	return strings.TrimSpace(s)
 }
-

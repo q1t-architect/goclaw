@@ -19,7 +19,9 @@ import { KGMutateSettingsForm } from "./kg-mutate-settings-form";
 import { WebFetchExtractorChainForm } from "./web-fetch-extractor-chain-form";
 import { WebSearchChainForm } from "./web-search-chain-form";
 import { SttProviderForm } from "./stt-provider-form";
+import { ExecSettingsForm } from "./exec-settings-form";
 
+const EXEC_TOOL = "exec";
 const KG_TOOL = "knowledge_graph_search";
 const KG_MUTATE_TOOL = "knowledge_graph_mutate";
 const WEB_FETCH_TOOL = "web_fetch";
@@ -64,6 +66,7 @@ export function BuiltinToolSettingsDialog({
   const isWebFetch = tool?.name === WEB_FETCH_TOOL;
   const isWebSearch = tool?.name === WEB_SEARCH_TOOL;
   const isStt = tool?.name === STT_TOOL;
+  const isExec = tool?.name === EXEC_TOOL;
   const wide = isMedia || isKG || isKGMutate || isWebFetch || isWebSearch;
 
   // Tenant-scope overlay: prefer the tenant override when present; fall back
@@ -86,7 +89,13 @@ export function BuiltinToolSettingsDialog({
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className={wide ? "sm:max-w-2xl" : "sm:max-w-md"}>
         {modeBadge}
-        {isWebSearch && tool ? (
+        {isExec && tool ? (
+          <ExecSettingsForm
+            initialSettings={initialSettings}
+            onSave={(settings) => onSave(tool.name, settings).then(() => onOpenChange(false))}
+            onCancel={() => onOpenChange(false)}
+          />
+        ) : isWebSearch && tool ? (
           <WebSearchChainForm
             initialSettings={initialSettings}
             secretsSet={tool.secrets_set}
