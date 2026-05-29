@@ -776,6 +776,91 @@ CREATE INDEX IF NOT EXISTS idx_channel_instances_agent ON channel_instances(agen
 CREATE INDEX IF NOT EXISTS idx_channel_instances_tenant ON channel_instances(tenant_id);
 
 -- ============================================================
+-- Tables: channel-context MCP and Secure CLI capabilities
+-- ============================================================
+
+CREATE TABLE IF NOT EXISTS mcp_context_grants (
+    id                  TEXT NOT NULL PRIMARY KEY,
+    tenant_id           TEXT NOT NULL REFERENCES tenants(id) ON DELETE CASCADE,
+    channel_instance_id TEXT NOT NULL REFERENCES channel_instances(id) ON DELETE CASCADE,
+    scope_type          VARCHAR(32) NOT NULL,
+    scope_key           VARCHAR(255) NOT NULL DEFAULT '',
+    server_id           TEXT NOT NULL REFERENCES mcp_servers(id) ON DELETE CASCADE,
+    enabled             BOOLEAN NOT NULL DEFAULT 1,
+    tool_allow          TEXT,
+    tool_deny           TEXT,
+    config_overrides    TEXT,
+    granted_by          VARCHAR(255) NOT NULL,
+    created_at          TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+    updated_at          TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+    UNIQUE(tenant_id, channel_instance_id, scope_type, scope_key, server_id)
+);
+
+CREATE INDEX IF NOT EXISTS idx_mcp_context_grants_scope ON mcp_context_grants(tenant_id, channel_instance_id, scope_type, scope_key);
+CREATE INDEX IF NOT EXISTS idx_mcp_context_grants_server ON mcp_context_grants(server_id);
+
+CREATE TABLE IF NOT EXISTS mcp_context_credentials (
+    id                  TEXT NOT NULL PRIMARY KEY,
+    tenant_id           TEXT NOT NULL REFERENCES tenants(id) ON DELETE CASCADE,
+    channel_instance_id TEXT NOT NULL REFERENCES channel_instances(id) ON DELETE CASCADE,
+    scope_type          VARCHAR(32) NOT NULL,
+    scope_key           VARCHAR(255) NOT NULL DEFAULT '',
+    server_id           TEXT NOT NULL REFERENCES mcp_servers(id) ON DELETE CASCADE,
+    api_key             TEXT,
+    headers             BLOB,
+    env                 BLOB,
+    created_by          VARCHAR(255) NOT NULL,
+    created_at          TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+    updated_at          TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+    UNIQUE(tenant_id, channel_instance_id, scope_type, scope_key, server_id)
+);
+
+CREATE INDEX IF NOT EXISTS idx_mcp_context_credentials_scope ON mcp_context_credentials(tenant_id, channel_instance_id, scope_type, scope_key);
+CREATE INDEX IF NOT EXISTS idx_mcp_context_credentials_server ON mcp_context_credentials(server_id);
+
+CREATE TABLE IF NOT EXISTS secure_cli_context_grants (
+    id                  TEXT NOT NULL PRIMARY KEY,
+    tenant_id           TEXT NOT NULL REFERENCES tenants(id) ON DELETE CASCADE,
+    channel_instance_id TEXT NOT NULL REFERENCES channel_instances(id) ON DELETE CASCADE,
+    scope_type          VARCHAR(32) NOT NULL,
+    scope_key           VARCHAR(255) NOT NULL DEFAULT '',
+    binary_id           TEXT NOT NULL REFERENCES secure_cli_binaries(id) ON DELETE CASCADE,
+    deny_args           TEXT,
+    deny_verbose        TEXT,
+    timeout_seconds     INTEGER,
+    tips                TEXT,
+    encrypted_env       BLOB,
+    enabled             BOOLEAN NOT NULL DEFAULT 1,
+    granted_by          VARCHAR(255) NOT NULL,
+    created_at          TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+    updated_at          TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+    UNIQUE(tenant_id, channel_instance_id, scope_type, scope_key, binary_id)
+);
+
+CREATE INDEX IF NOT EXISTS idx_secure_cli_context_grants_scope ON secure_cli_context_grants(tenant_id, channel_instance_id, scope_type, scope_key);
+CREATE INDEX IF NOT EXISTS idx_secure_cli_context_grants_binary ON secure_cli_context_grants(binary_id);
+
+CREATE TABLE IF NOT EXISTS secure_cli_context_credentials (
+    id                  TEXT NOT NULL PRIMARY KEY,
+    tenant_id           TEXT NOT NULL REFERENCES tenants(id) ON DELETE CASCADE,
+    channel_instance_id TEXT NOT NULL REFERENCES channel_instances(id) ON DELETE CASCADE,
+    scope_type          VARCHAR(32) NOT NULL,
+    scope_key           VARCHAR(255) NOT NULL DEFAULT '',
+    binary_id           TEXT NOT NULL REFERENCES secure_cli_binaries(id) ON DELETE CASCADE,
+    encrypted_env       BLOB NOT NULL,
+    metadata            TEXT NOT NULL DEFAULT '{}',
+    credential_type     TEXT,
+    host_scope          TEXT,
+    created_by          VARCHAR(255) NOT NULL,
+    created_at          TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+    updated_at          TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+    UNIQUE(tenant_id, channel_instance_id, scope_type, scope_key, binary_id)
+);
+
+CREATE INDEX IF NOT EXISTS idx_secure_cli_context_credentials_scope ON secure_cli_context_credentials(tenant_id, channel_instance_id, scope_type, scope_key);
+CREATE INDEX IF NOT EXISTS idx_secure_cli_context_credentials_binary ON secure_cli_context_credentials(binary_id);
+
+-- ============================================================
 -- Table: config_secrets
 -- PK changed to (key, tenant_id) in migration 27 Phase I
 -- ============================================================

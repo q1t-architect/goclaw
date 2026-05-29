@@ -16,7 +16,7 @@ var schemaSQL string
 
 // SchemaVersion is the current SQLite schema version.
 // Bump this when adding new migration steps below.
-const SchemaVersion = 42
+const SchemaVersion = 43
 
 // migrations maps version → SQL to apply when upgrading FROM that version.
 // schema.sql always represents the LATEST full schema (for fresh DBs).
@@ -772,7 +772,87 @@ CREATE INDEX IF NOT EXISTS idx_browser_cookies_expires_at
 	40: `ALTER TABLE secure_cli_user_credentials ADD COLUMN host_scope TEXT;`,
 	// Version 41 → 42: credential adapter framework — adapter_name on binaries.
 	41: `ALTER TABLE secure_cli_binaries ADD COLUMN adapter_name TEXT;`,
+	// Version 42 → 43: channel-context MCP and Secure CLI grants/credentials.
+	42: addChannelContextCapabilityTables,
 }
+
+const addChannelContextCapabilityTables = `
+CREATE TABLE IF NOT EXISTS mcp_context_grants (
+    id                  TEXT NOT NULL PRIMARY KEY,
+    tenant_id           TEXT NOT NULL REFERENCES tenants(id) ON DELETE CASCADE,
+    channel_instance_id TEXT NOT NULL REFERENCES channel_instances(id) ON DELETE CASCADE,
+    scope_type          VARCHAR(32) NOT NULL,
+    scope_key           VARCHAR(255) NOT NULL DEFAULT '',
+    server_id           TEXT NOT NULL REFERENCES mcp_servers(id) ON DELETE CASCADE,
+    enabled             BOOLEAN NOT NULL DEFAULT 1,
+    tool_allow          TEXT,
+    tool_deny           TEXT,
+    config_overrides    TEXT,
+    granted_by          VARCHAR(255) NOT NULL,
+    created_at          TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+    updated_at          TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+    UNIQUE(tenant_id, channel_instance_id, scope_type, scope_key, server_id)
+);
+CREATE INDEX IF NOT EXISTS idx_mcp_context_grants_scope ON mcp_context_grants(tenant_id, channel_instance_id, scope_type, scope_key);
+CREATE INDEX IF NOT EXISTS idx_mcp_context_grants_server ON mcp_context_grants(server_id);
+
+CREATE TABLE IF NOT EXISTS mcp_context_credentials (
+    id                  TEXT NOT NULL PRIMARY KEY,
+    tenant_id           TEXT NOT NULL REFERENCES tenants(id) ON DELETE CASCADE,
+    channel_instance_id TEXT NOT NULL REFERENCES channel_instances(id) ON DELETE CASCADE,
+    scope_type          VARCHAR(32) NOT NULL,
+    scope_key           VARCHAR(255) NOT NULL DEFAULT '',
+    server_id           TEXT NOT NULL REFERENCES mcp_servers(id) ON DELETE CASCADE,
+    api_key             TEXT,
+    headers             BLOB,
+    env                 BLOB,
+    created_by          VARCHAR(255) NOT NULL,
+    created_at          TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+    updated_at          TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+    UNIQUE(tenant_id, channel_instance_id, scope_type, scope_key, server_id)
+);
+CREATE INDEX IF NOT EXISTS idx_mcp_context_credentials_scope ON mcp_context_credentials(tenant_id, channel_instance_id, scope_type, scope_key);
+CREATE INDEX IF NOT EXISTS idx_mcp_context_credentials_server ON mcp_context_credentials(server_id);
+
+CREATE TABLE IF NOT EXISTS secure_cli_context_grants (
+    id                  TEXT NOT NULL PRIMARY KEY,
+    tenant_id           TEXT NOT NULL REFERENCES tenants(id) ON DELETE CASCADE,
+    channel_instance_id TEXT NOT NULL REFERENCES channel_instances(id) ON DELETE CASCADE,
+    scope_type          VARCHAR(32) NOT NULL,
+    scope_key           VARCHAR(255) NOT NULL DEFAULT '',
+    binary_id           TEXT NOT NULL REFERENCES secure_cli_binaries(id) ON DELETE CASCADE,
+    deny_args           TEXT,
+    deny_verbose        TEXT,
+    timeout_seconds     INTEGER,
+    tips                TEXT,
+    encrypted_env       BLOB,
+    enabled             BOOLEAN NOT NULL DEFAULT 1,
+    granted_by          VARCHAR(255) NOT NULL,
+    created_at          TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+    updated_at          TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+    UNIQUE(tenant_id, channel_instance_id, scope_type, scope_key, binary_id)
+);
+CREATE INDEX IF NOT EXISTS idx_secure_cli_context_grants_scope ON secure_cli_context_grants(tenant_id, channel_instance_id, scope_type, scope_key);
+CREATE INDEX IF NOT EXISTS idx_secure_cli_context_grants_binary ON secure_cli_context_grants(binary_id);
+
+CREATE TABLE IF NOT EXISTS secure_cli_context_credentials (
+    id                  TEXT NOT NULL PRIMARY KEY,
+    tenant_id           TEXT NOT NULL REFERENCES tenants(id) ON DELETE CASCADE,
+    channel_instance_id TEXT NOT NULL REFERENCES channel_instances(id) ON DELETE CASCADE,
+    scope_type          VARCHAR(32) NOT NULL,
+    scope_key           VARCHAR(255) NOT NULL DEFAULT '',
+    binary_id           TEXT NOT NULL REFERENCES secure_cli_binaries(id) ON DELETE CASCADE,
+    encrypted_env       BLOB NOT NULL,
+    metadata            TEXT NOT NULL DEFAULT '{}',
+    credential_type     TEXT,
+    host_scope          TEXT,
+    created_by          VARCHAR(255) NOT NULL,
+    created_at          TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+    updated_at          TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+    UNIQUE(tenant_id, channel_instance_id, scope_type, scope_key, binary_id)
+);
+CREATE INDEX IF NOT EXISTS idx_secure_cli_context_credentials_scope ON secure_cli_context_credentials(tenant_id, channel_instance_id, scope_type, scope_key);
+CREATE INDEX IF NOT EXISTS idx_secure_cli_context_credentials_binary ON secure_cli_context_credentials(binary_id);`
 
 // addHooksTables is the SQLite incremental migration for schema v19 → v20.
 // Mirrors PG migrations 000052–000055 (consolidated — desktop never shipped
