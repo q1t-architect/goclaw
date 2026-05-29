@@ -138,7 +138,7 @@ func (s *fakeChannelCapabilityCLIStore) ListUserCredentials(context.Context, uui
 func TestChannelContextCapabilitiesExposeOnlyCredentialMetadata(t *testing.T) {
 	token := "channel-capabilities-key"
 	setupTestCache(t, map[string]*store.APIKeyData{
-		crypto.HashAPIKey(token): {Scopes: []string{"operator.write"}, OwnerID: "caller"},
+		crypto.HashAPIKey(token): {Scopes: []string{"operator.write"}, OwnerID: "tenant-user-1"},
 	})
 
 	instID := uuid.New()
@@ -182,7 +182,7 @@ func TestChannelContextCapabilitiesExposeOnlyCredentialMetadata(t *testing.T) {
 	mux := http.NewServeMux()
 	handler.RegisterRoutes(mux)
 
-	req := httptest.NewRequest(http.MethodGet, "/v1/channels/instances/"+instID.String()+"/contexts/channel/"+channelName+"/capabilities?user_id=tenant-user-1", nil)
+	req := httptest.NewRequest(http.MethodGet, "/v1/channels/instances/"+instID.String()+"/contexts/channel/"+channelName+"/capabilities", nil)
 	req.Header.Set("Authorization", "Bearer "+token)
 	rec := httptest.NewRecorder()
 	mux.ServeHTTP(rec, req)

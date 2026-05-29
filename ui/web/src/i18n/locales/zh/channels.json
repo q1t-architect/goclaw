@@ -170,12 +170,31 @@
       "allTools": "全部工具",
       "scopedCount": "{{count}} 个作用域覆盖",
       "scopedCount_plural": "{{count}} 个作用域覆盖",
+      "live": "实时",
+      "grant": "授权",
+      "revoke": "撤销",
+      "manageCapability": "管理能力",
+      "scopedCredential": "作用域凭据",
+      "apiKeyPlaceholder": "API key（仅 MCP）",
+      "envPlaceholder": "环境变量 JSON，例如 {\"TOKEN\":\"...\"}",
+      "secretHint": "值会加密保存，保存后不会返回。",
+      "saveCredential": "保存凭据",
+      "deleteCredential": "删除凭据",
+      "grantSaved": "上下文授权已保存",
+      "grantDeleted": "上下文授权已删除",
+      "credentialSaved": "上下文凭据已保存",
+      "credentialDeleted": "上下文凭据已删除",
+      "invalidEnv": "环境变量必须是字符串值的 JSON 对象。",
+      "envRequired": "Secure CLI 凭据需要环境变量 JSON。",
+      "credentialRequired": "请输入 API key 或环境变量 JSON。",
+      "actionFailed": "操作失败",
       "columns": {
         "name": "名称",
         "type": "类型",
         "source": "来源",
         "credentials": "凭据",
-        "tools": "工具"
+        "tools": "工具",
+        "actions": "操作"
       }
     },
     "timeline": {

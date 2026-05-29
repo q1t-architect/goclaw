@@ -226,8 +226,10 @@ func (m *Manager) resolveServerCredentials(ctx context.Context, info store.MCPAc
 
 	var contextCreds *store.MCPContextCredentials
 	if contextStore, ok := m.store.(store.MCPContextAdminStore); ok {
-		if scope, hasScope := store.ChannelContextScopeFromContext(ctx); hasScope {
-			contextCreds, _ = contextStore.GetContextCredentialsForScope(ctx, scope, srv.ID)
+		for _, scope := range store.ChannelContextScopeChainFromContext(ctx) {
+			if creds, _ := contextStore.GetContextCredentialsForScope(ctx, scope, srv.ID); creds != nil {
+				contextCreds = creds
+			}
 		}
 	}
 

@@ -171,12 +171,31 @@
       "allTools": "All tools",
       "scopedCount": "{{count}} scoped override",
       "scopedCount_plural": "{{count}} scoped overrides",
+      "live": "Live",
+      "grant": "Grant",
+      "revoke": "Revoke",
+      "manageCapability": "Manage capability",
+      "scopedCredential": "Scoped credential",
+      "apiKeyPlaceholder": "API key (MCP only)",
+      "envPlaceholder": "Environment JSON, for example {\"TOKEN\":\"...\"}",
+      "secretHint": "Values are encrypted and never returned after save.",
+      "saveCredential": "Save credential",
+      "deleteCredential": "Delete credential",
+      "grantSaved": "Context grant saved",
+      "grantDeleted": "Context grant deleted",
+      "credentialSaved": "Context credential saved",
+      "credentialDeleted": "Context credential deleted",
+      "invalidEnv": "Environment must be a JSON object with string values.",
+      "envRequired": "Secure CLI credentials require environment JSON.",
+      "credentialRequired": "Enter an API key or environment JSON.",
+      "actionFailed": "Action failed",
       "columns": {
         "name": "Name",
         "type": "Type",
         "source": "Source",
         "credentials": "Credentials",
-        "tools": "Tools"
+        "tools": "Tools",
+        "actions": "Actions"
       }
     },
     "timeline": {

@@ -54,9 +54,9 @@ export interface ChannelInstanceInput {
 export interface ChannelContextData {
   scope_type: "channel" | "group" | "user" | "role";
   scope_key: string;
-  label: string;
+  display_name: string;
   source: string;
-  live_members: boolean;
+  live_members_supported: boolean;
   member_count?: number;
   last_seen_at?: string;
 }

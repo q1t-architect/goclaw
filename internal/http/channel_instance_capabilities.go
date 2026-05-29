@@ -41,9 +41,12 @@ func (h *ChannelInstancesHandler) handleListContextCapabilities(w http.ResponseW
 	userID := r.URL.Query().Get("user_id")
 	if userID == "" {
 		userID = store.CredentialUserIDFromContext(r.Context())
+	} else if userID != store.CredentialUserIDFromContext(r.Context()) && !h.requireContextAdmin(w, r) {
+		return
 	}
 
 	scope := store.ChannelContextScope{ChannelInstanceID: inst.ID, ChannelInstanceName: inst.Name, ScopeType: scopeType, ScopeKey: scopeKey}
+	r = r.WithContext(store.WithChannelContextScope(r.Context(), scope))
 
 	mcpRows, err := h.listChannelMCPRows(r, inst, scope, userID)
 	if err != nil {
@@ -79,22 +82,26 @@ func (h *ChannelInstancesHandler) listChannelMCPRows(r *http.Request, inst *stor
 	}
 	contextGrants := map[uuidString]store.MCPContextGrant{}
 	if h.mcpContextStore != nil {
-		grants, err := h.mcpContextStore.ListContextGrants(r.Context(), inst.ID, scope.ScopeType, scope.ScopeKey)
-		if err != nil {
-			return nil, err
-		}
-		for _, grant := range grants {
-			contextGrants[uuidString(grant.ServerID.String())] = grant
+		for _, chainedScope := range store.ChannelContextScopeChainFromContext(r.Context()) {
+			grants, err := h.mcpContextStore.ListContextGrants(r.Context(), inst.ID, chainedScope.ScopeType, chainedScope.ScopeKey)
+			if err != nil {
+				return nil, err
+			}
+			for _, grant := range grants {
+				contextGrants[uuidString(grant.ServerID.String())] = grant
+			}
 		}
 	}
 	contextCreds := map[uuidString]store.MCPContextCredentials{}
 	if h.mcpContextStore != nil {
-		creds, err := h.mcpContextStore.ListContextCredentials(r.Context(), inst.ID, scope.ScopeType, scope.ScopeKey)
-		if err != nil {
-			return nil, err
-		}
-		for _, cred := range creds {
-			contextCreds[uuidString(cred.ServerID.String())] = cred
+		for _, chainedScope := range store.ChannelContextScopeChainFromContext(r.Context()) {
+			creds, err := h.mcpContextStore.ListContextCredentials(r.Context(), inst.ID, chainedScope.ScopeType, chainedScope.ScopeKey)
+			if err != nil {
+				return nil, err
+			}
+			for _, cred := range creds {
+				contextCreds[uuidString(cred.ServerID.String())] = cred
+			}
 		}
 	}
 	rows := make([]channelCapabilityDTO, 0, len(accessible))
@@ -106,7 +113,7 @@ func (h *ChannelInstancesHandler) listChannelMCPRows(r *http.Request, inst *stor
 		hasCredential := info.Server.APIKey != "" || len(info.Server.Headers) > 0 || len(info.Server.Env) > 0
 		contextCredential := false
 		if cred, ok := contextCreds[idKey]; ok {
-			credentialSource = scope.ScopeType
+			credentialSource = cred.ScopeType
 			hasCredential = cred.APIKey != "" || len(cred.Headers) > 0 || len(cred.Env) > 0
 			contextCredential = true
 		}
@@ -124,7 +131,7 @@ func (h *ChannelInstancesHandler) listChannelMCPRows(r *http.Request, inst *stor
 		toolDeny := info.ToolDeny
 		contextGrant := false
 		if grant, ok := contextGrants[idKey]; ok {
-			source = scope.ScopeType
+			source = grant.ScopeType
 			enabled = grant.Enabled
 			toolAllow = decodeStringList(grant.ToolAllow)
 			toolDeny = decodeStringList(grant.ToolDeny)
@@ -155,16 +162,20 @@ func (h *ChannelInstancesHandler) listChannelMCPRows(r *http.Request, inst *stor
 			continue
 		}
 		cred, hasCredRow := contextCreds[idKey]
+		credentialSource := grant.ScopeType
+		if hasCredRow {
+			credentialSource = cred.ScopeType
+		}
 		rows = append(rows, channelCapabilityDTO{
 			Type:               "mcp_server",
 			ID:                 server.ID.String(),
 			Name:               server.Name,
 			DisplayName:        server.DisplayName,
 			Enabled:            server.Enabled && grant.Enabled,
-			Source:             scope.ScopeType,
+			Source:             grant.ScopeType,
 			ToolAllow:          decodeStringList(grant.ToolAllow),
 			ToolDeny:           decodeStringList(grant.ToolDeny),
-			CredentialSource:   scope.ScopeType,
+			CredentialSource:   credentialSource,
 			HasCredential:      hasCredRow && (cred.APIKey != "" || len(cred.Headers) > 0 || len(cred.Env) > 0),
 			ContextGrant:       true,
 			ContextCredentials: hasCredRow,
@@ -183,22 +194,26 @@ func (h *ChannelInstancesHandler) listChannelCLIRows(r *http.Request, inst *stor
 	}
 	contextGrants := map[uuidString]store.SecureCLIContextGrant{}
 	if h.cliContextStore != nil {
-		grants, err := h.cliContextStore.ListContextGrants(r.Context(), inst.ID, scope.ScopeType, scope.ScopeKey)
-		if err != nil {
-			return nil, err
-		}
-		for _, grant := range grants {
-			contextGrants[uuidString(grant.BinaryID.String())] = grant
+		for _, chainedScope := range store.ChannelContextScopeChainFromContext(r.Context()) {
+			grants, err := h.cliContextStore.ListContextGrants(r.Context(), inst.ID, chainedScope.ScopeType, chainedScope.ScopeKey)
+			if err != nil {
+				return nil, err
+			}
+			for _, grant := range grants {
+				contextGrants[uuidString(grant.BinaryID.String())] = grant
+			}
 		}
 	}
 	contextCreds := map[uuidString]store.SecureCLIContextCredentials{}
 	if h.cliContextStore != nil {
-		creds, err := h.cliContextStore.ListContextCredentials(r.Context(), inst.ID, scope.ScopeType, scope.ScopeKey)
-		if err != nil {
-			return nil, err
-		}
-		for _, cred := range creds {
-			contextCreds[uuidString(cred.BinaryID.String())] = cred
+		for _, chainedScope := range store.ChannelContextScopeChainFromContext(r.Context()) {
+			creds, err := h.cliContextStore.ListContextCredentials(r.Context(), inst.ID, chainedScope.ScopeType, chainedScope.ScopeKey)
+			if err != nil {
+				return nil, err
+			}
+			for _, cred := range creds {
+				contextCreds[uuidString(cred.BinaryID.String())] = cred
+			}
 		}
 	}
 	rows := make([]channelCapabilityDTO, 0, len(binaries))
@@ -214,13 +229,13 @@ func (h *ChannelInstancesHandler) listChannelCLIRows(r *http.Request, inst *stor
 		hasCredential := len(b.EncryptedEnv) > 0
 		contextGrant := false
 		if grant, ok := contextGrants[idKey]; ok {
-			source = scope.ScopeType
+			source = grant.ScopeType
 			contextGrant = true
 			b.Enabled = b.Enabled && grant.Enabled
 		}
 		contextCredential := false
 		if cred, ok := contextCreds[idKey]; ok {
-			credentialSource = scope.ScopeType
+			credentialSource = cred.ScopeType
 			hasCredential = len(cred.EncryptedEnv) > 0
 			contextCredential = true
 		}
@@ -253,14 +268,18 @@ func (h *ChannelInstancesHandler) listChannelCLIRows(r *http.Request, inst *stor
 			continue
 		}
 		_, hasCredRow := contextCreds[idKey]
+		credentialSource := grant.ScopeType
+		if cred, ok := contextCreds[idKey]; ok {
+			credentialSource = cred.ScopeType
+		}
 		rows = append(rows, channelCapabilityDTO{
 			Type:               "secure_cli",
 			ID:                 binary.ID.String(),
 			Name:               binary.BinaryName,
 			DisplayName:        binary.Description,
 			Enabled:            binary.Enabled && grant.Enabled,
-			Source:             scope.ScopeType,
-			CredentialSource:   scope.ScopeType,
+			Source:             grant.ScopeType,
+			CredentialSource:   credentialSource,
 			HasCredential:      hasCredRow,
 			ContextGrant:       true,
 			ContextCredentials: hasCredRow,

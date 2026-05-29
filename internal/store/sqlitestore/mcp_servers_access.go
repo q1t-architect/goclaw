@@ -238,47 +238,49 @@ func (s *SQLiteMCPServerStore) ListAccessible(ctx context.Context, agentID uuid.
 }
 
 func (s *SQLiteMCPServerStore) applyContextMCPAccess(ctx context.Context, result []store.MCPAccessInfo) ([]store.MCPAccessInfo, error) {
-	scope, ok := store.ChannelContextScopeFromContext(ctx)
-	if !ok {
+	scopes := store.ChannelContextScopeChainFromContext(ctx)
+	if len(scopes) == 0 {
 		return result, nil
 	}
-	grants, err := s.ListContextGrantsForScope(ctx, scope)
-	if err != nil {
-		return nil, err
-	}
-	if len(grants) == 0 {
-		return result, nil
-	}
-	byServer := make(map[uuid.UUID]int, len(result))
-	for i := range result {
-		byServer[result[i].Server.ID] = i
-	}
-	for _, grant := range grants {
-		if idx, exists := byServer[grant.ServerID]; exists {
-			if !grant.Enabled {
-				result = append(result[:idx], result[idx+1:]...)
-				byServer = make(map[uuid.UUID]int, len(result))
-				for i := range result {
-					byServer[result[i].Server.ID] = i
+	for _, scope := range scopes {
+		grants, err := s.ListContextGrantsForScope(ctx, scope)
+		if err != nil {
+			return nil, err
+		}
+		if len(grants) == 0 {
+			continue
+		}
+		byServer := make(map[uuid.UUID]int, len(result))
+		for i := range result {
+			byServer[result[i].Server.ID] = i
+		}
+		for _, grant := range grants {
+			if idx, exists := byServer[grant.ServerID]; exists {
+				if !grant.Enabled {
+					result = append(result[:idx], result[idx+1:]...)
+					byServer = make(map[uuid.UUID]int, len(result))
+					for i := range result {
+						byServer[result[i].Server.ID] = i
+					}
+					continue
 				}
+				result[idx].ToolAllow = decodeGrantStringList(grant.ToolAllow)
+				result[idx].ToolDeny = decodeGrantStringList(grant.ToolDeny)
 				continue
 			}
-			result[idx].ToolAllow = decodeGrantStringList(grant.ToolAllow)
-			result[idx].ToolDeny = decodeGrantStringList(grant.ToolDeny)
-			continue
+			if !grant.Enabled {
+				continue
+			}
+			server, err := s.GetServer(ctx, grant.ServerID)
+			if err != nil || server == nil || !server.Enabled {
+				continue
+			}
+			result = append(result, store.MCPAccessInfo{
+				Server:    *server,
+				ToolAllow: decodeGrantStringList(grant.ToolAllow),
+				ToolDeny:  decodeGrantStringList(grant.ToolDeny),
+			})
 		}
-		if !grant.Enabled {
-			continue
-		}
-		server, err := s.GetServer(ctx, grant.ServerID)
-		if err != nil || server == nil || !server.Enabled {
-			continue
-		}
-		result = append(result, store.MCPAccessInfo{
-			Server:    *server,
-			ToolAllow: decodeGrantStringList(grant.ToolAllow),
-			ToolDeny:  decodeGrantStringList(grant.ToolDeny),
-		})
 	}
 	return result, nil
 }

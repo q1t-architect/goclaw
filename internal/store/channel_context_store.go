@@ -49,6 +49,33 @@ func ChannelContextScopeFromContext(ctx context.Context) (ChannelContextScope, b
 	return ChannelContextScope{}, false
 }
 
+// ChannelContextScopeChainFromContext returns context scopes ordered from
+// broadest to most specific. Applying the chain in order gives channel
+// defaults first, then group/user/role overrides.
+func ChannelContextScopeChainFromContext(ctx context.Context) []ChannelContextScope {
+	scope, ok := ChannelContextScopeFromContext(ctx)
+	if !ok {
+		return nil
+	}
+	if scope.ScopeType == ChannelScopeTypeChannel {
+		return []ChannelContextScope{scope}
+	}
+	channelKey := scope.ChannelInstanceName
+	if channelKey == "" && scope.ScopeType == ChannelScopeTypeChannel {
+		channelKey = scope.ScopeKey
+	}
+	if channelKey == "" {
+		return []ChannelContextScope{scope}
+	}
+	channelScope := ChannelContextScope{
+		ChannelInstanceID:   scope.ChannelInstanceID,
+		ChannelInstanceName: scope.ChannelInstanceName,
+		ScopeType:           ChannelScopeTypeChannel,
+		ScopeKey:            channelKey,
+	}
+	return []ChannelContextScope{channelScope, scope}
+}
+
 type MCPContextGrant struct {
 	ID                uuid.UUID       `json:"id" db:"id"`
 	ChannelInstanceID uuid.UUID       `json:"channel_instance_id" db:"channel_instance_id"`

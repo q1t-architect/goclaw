@@ -1,15 +1,24 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
-import { ChevronDown, ChevronRight, Loader2, RefreshCw, ShieldCheck, Users } from "lucide-react";
+import { ChevronDown, ChevronRight, Loader2, RefreshCw, Settings2, ShieldCheck, Users } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { EmptyState } from "@/components/shared/empty-state";
 import type { ChannelCapability, ChannelContextData, ChannelContextMember } from "@/types/channel";
+import {
+  ChannelContextCapabilityAdminDialog,
+  type ChannelContextCapabilityTarget,
+} from "./channel-context-capability-admin-dialog";
+import type { ChannelCredentialPayload } from "../hooks/use-channel-detail";
 
 interface ChannelContextsTabProps {
   listContexts: () => Promise<ChannelContextData[]>;
   listContextMembers: (scopeType: string, scopeKey: string) => Promise<ChannelContextMember[]>;
   listContextCapabilities: (scopeType: string, scopeKey: string) => Promise<ChannelCapability[]>;
+  onGrantCapability: (target: ChannelContextCapabilityTarget) => Promise<void>;
+  onRevokeCapability: (target: ChannelContextCapabilityTarget) => Promise<void>;
+  onSaveCredentials: (target: ChannelContextCapabilityTarget, payload: ChannelCredentialPayload) => Promise<void>;
+  onDeleteCredentials: (target: ChannelContextCapabilityTarget) => Promise<void>;
 }
 
 function contextKey(ctx: ChannelContextData) {
@@ -24,6 +33,10 @@ export function ChannelContextsTab({
   listContexts,
   listContextMembers,
   listContextCapabilities,
+  onGrantCapability,
+  onRevokeCapability,
+  onSaveCredentials,
+  onDeleteCredentials,
 }: ChannelContextsTabProps) {
   const { t } = useTranslation("channels");
   const [contexts, setContexts] = useState<ChannelContextData[]>([]);
@@ -32,6 +45,7 @@ export function ChannelContextsTab({
   const [members, setMembers] = useState<Record<string, ChannelContextMember[]>>({});
   const [capabilities, setCapabilities] = useState<Record<string, ChannelCapability[]>>({});
   const [loadingRows, setLoadingRows] = useState<Record<string, boolean>>({});
+  const [adminTarget, setAdminTarget] = useState<ChannelContextCapabilityTarget | null>(null);
 
   const refresh = useCallback(async () => {
     setLoading(true);
@@ -118,9 +132,10 @@ export function ChannelContextsTab({
                   }
                   <div className="min-w-0 flex-1">
                     <div className="flex flex-wrap items-center gap-2">
-                      <span className="truncate text-sm font-medium">{ctx.label || ctx.scope_key}</span>
+                      <span className="truncate text-sm font-medium">{ctx.display_name || ctx.scope_key}</span>
                       <Badge variant="outline">{ctx.scope_type}</Badge>
                       {ctx.source && <Badge variant="secondary">{ctx.source}</Badge>}
+                      {ctx.live_members_supported && <Badge variant="success">{t("detail.contexts.live")}</Badge>}
                     </div>
                     <div className="mt-1 truncate font-mono text-xs text-muted-foreground">{ctx.scope_key}</div>
                   </div>
@@ -154,6 +169,7 @@ export function ChannelContextsTab({
                                     <th className="px-3 py-2 text-left text-xs font-medium uppercase text-muted-foreground">{t("detail.contexts.columns.source")}</th>
                                     <th className="px-3 py-2 text-left text-xs font-medium uppercase text-muted-foreground">{t("detail.contexts.columns.credentials")}</th>
                                     <th className="px-3 py-2 text-left text-xs font-medium uppercase text-muted-foreground">{t("detail.contexts.columns.tools")}</th>
+                                    <th className="px-3 py-2 text-right text-xs font-medium uppercase text-muted-foreground">{t("detail.contexts.columns.actions")}</th>
                                   </tr>
                                 </thead>
                                 <tbody>
@@ -172,6 +188,17 @@ export function ChannelContextsTab({
                                       </td>
                                       <td className="px-3 py-2 text-xs text-muted-foreground">
                                         {(cap.tool_allow?.length ?? 0) > 0 ? cap.tool_allow?.join(", ") : t("detail.contexts.allTools")}
+                                      </td>
+                                      <td className="px-3 py-2 text-right">
+                                        <Button
+                                          type="button"
+                                          variant="ghost"
+                                          size="icon-sm"
+                                          onClick={() => setAdminTarget({ context: ctx, capability: cap })}
+                                          aria-label={t("detail.contexts.manageCapability")}
+                                        >
+                                          <Settings2 className="h-4 w-4" />
+                                        </Button>
                                       </td>
                                     </tr>
                                   ))}
@@ -213,6 +240,27 @@ export function ChannelContextsTab({
           })}
         </div>
       )}
+      <ChannelContextCapabilityAdminDialog
+        target={adminTarget}
+        open={!!adminTarget}
+        onOpenChange={(open) => { if (!open) setAdminTarget(null); }}
+        onGrant={async (target) => {
+          await onGrantCapability(target);
+          await loadContextDetail(target.context);
+        }}
+        onRevoke={async (target) => {
+          await onRevokeCapability(target);
+          await loadContextDetail(target.context);
+        }}
+        onSaveCredentials={async (target, payload) => {
+          await onSaveCredentials(target, payload);
+          await loadContextDetail(target.context);
+        }}
+        onDeleteCredentials={async (target) => {
+          await onDeleteCredentials(target);
+          await loadContextDetail(target.context);
+        }}
+      />
     </div>
   );
 }

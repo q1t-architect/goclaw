@@ -110,7 +110,7 @@ func (h *ChannelInstancesHandler) handleListContextMembers(w http.ResponseWriter
 		}
 	}
 
-	if h.contactStore != nil {
+	if h.contactStore != nil && scopeType != store.ChannelScopeTypeGroup && scopeType != "topic" {
 		contacts, err := h.contactStore.ListContacts(r.Context(), store.ContactListOpts{
 			ChannelType:     inst.ChannelType,
 			ChannelInstance: inst.Name,

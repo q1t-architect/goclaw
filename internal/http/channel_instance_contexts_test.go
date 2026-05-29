@@ -133,7 +133,7 @@ func TestChannelContextsListUsesStoredGroupsAndMasksToContextShape(t *testing.T)
 	}
 }
 
-func TestChannelContextMembersUseStoredContactsWhenLiveProviderUnavailable(t *testing.T) {
+func TestChannelContextMembersDoNotShowChannelWideContactsAsGroupMembers(t *testing.T) {
 	token := "channel-context-members-key"
 	setupTestCache(t, map[string]*store.APIKeyData{
 		crypto.HashAPIKey(token): {Scopes: []string{"operator.write"}, OwnerID: "caller"},
@@ -181,9 +181,9 @@ func TestChannelContextMembersUseStoredContactsWhenLiveProviderUnavailable(t *te
 		t.Fatal(err)
 	}
 	if body.LiveMembersSupported || body.Source != "stored_contacts" {
-		t.Fatalf("expected stored contact fallback, got %+v", body)
+		t.Fatalf("expected unsupported stored contact response, got %+v", body)
 	}
-	if len(body.Members) != 1 || body.Members[0].UserID != userID || body.Members[0].PlatformID != "386246614" {
+	if len(body.Members) != 0 {
 		t.Fatalf("members = %+v", body.Members)
 	}
 }

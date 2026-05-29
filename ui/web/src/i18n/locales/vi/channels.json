@@ -170,12 +170,31 @@
       "allTools": "Tất cả tools",
       "scopedCount": "{{count}} override theo scope",
       "scopedCount_plural": "{{count}} override theo scope",
+      "live": "Live",
+      "grant": "Grant",
+      "revoke": "Revoke",
+      "manageCapability": "Quản lý quyền năng",
+      "scopedCredential": "Xác thực theo scope",
+      "apiKeyPlaceholder": "API key (chỉ MCP)",
+      "envPlaceholder": "JSON môi trường, ví dụ {\"TOKEN\":\"...\"}",
+      "secretHint": "Giá trị được mã hóa và không bao giờ trả về sau khi lưu.",
+      "saveCredential": "Lưu xác thực",
+      "deleteCredential": "Xóa xác thực",
+      "grantSaved": "Đã lưu grant theo ngữ cảnh",
+      "grantDeleted": "Đã xóa grant theo ngữ cảnh",
+      "credentialSaved": "Đã lưu xác thực theo ngữ cảnh",
+      "credentialDeleted": "Đã xóa xác thực theo ngữ cảnh",
+      "invalidEnv": "Môi trường phải là JSON object với giá trị dạng chuỗi.",
+      "envRequired": "Secure CLI credential cần JSON môi trường.",
+      "credentialRequired": "Nhập API key hoặc JSON môi trường.",
+      "actionFailed": "Thao tác thất bại",
       "columns": {
         "name": "Tên",
         "type": "Loại",
         "source": "Nguồn",
         "credentials": "Xác thực",
-        "tools": "Tools"
+        "tools": "Tools",
+        "actions": "Thao tác"
       }
     },
     "timeline": {

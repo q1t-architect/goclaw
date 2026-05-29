@@ -64,6 +64,10 @@ export function ChannelDetailPage({
     listContexts,
     listContextMembers,
     listContextCapabilities,
+    upsertContextGrant,
+    deleteContextGrant,
+    setContextCredentials,
+    deleteContextCredentials,
   } = useChannelDetail(instanceId);
   const { agents } = useAgents();
   const { channels } = useChannels();
@@ -240,6 +244,26 @@ export function ChannelDetailPage({
                 listContexts={listContexts}
                 listContextMembers={listContextMembers}
                 listContextCapabilities={listContextCapabilities}
+                onGrantCapability={(target) => upsertContextGrant({
+                  scopeType: target.context.scope_type,
+                  scopeKey: target.context.scope_key,
+                  capability: target.capability,
+                })}
+                onRevokeCapability={(target) => deleteContextGrant({
+                  scopeType: target.context.scope_type,
+                  scopeKey: target.context.scope_key,
+                  capability: target.capability,
+                })}
+                onSaveCredentials={(target, payload) => setContextCredentials({
+                  scopeType: target.context.scope_type,
+                  scopeKey: target.context.scope_key,
+                  capability: target.capability,
+                }, payload)}
+                onDeleteCredentials={(target) => deleteContextCredentials({
+                  scopeType: target.context.scope_type,
+                  scopeKey: target.context.scope_key,
+                  capability: target.capability,
+                })}
               />
             </TabsContent>
 

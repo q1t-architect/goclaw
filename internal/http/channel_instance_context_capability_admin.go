@@ -54,6 +54,9 @@ func (h *ChannelInstancesHandler) handleListContextMCPGrants(w http.ResponseWrit
 		writeJSON(w, http.StatusNotImplemented, map[string]string{"error": "MCP context store is not available"})
 		return
 	}
+	if !h.requireContextAdmin(w, r) {
+		return
+	}
 	path, ok := h.resolveContextPath(w, r)
 	if !ok {
 		return
@@ -171,6 +174,9 @@ func (h *ChannelInstancesHandler) handleListContextMCPCredentials(w http.Respons
 		writeJSON(w, http.StatusNotImplemented, map[string]string{"error": "MCP context store is not available"})
 		return
 	}
+	if !h.requireContextAdmin(w, r) {
+		return
+	}
 	path, ok := h.resolveContextPath(w, r)
 	if !ok {
 		return
@@ -265,6 +271,9 @@ type contextCLIGrantRequest struct {
 func (h *ChannelInstancesHandler) handleListContextCLIGrants(w http.ResponseWriter, r *http.Request) {
 	if h.cliContextStore == nil {
 		writeJSON(w, http.StatusNotImplemented, map[string]string{"error": "Secure CLI context store is not available"})
+		return
+	}
+	if !h.requireContextAdmin(w, r) {
 		return
 	}
 	path, ok := h.resolveContextPath(w, r)
@@ -419,6 +428,9 @@ func summarizeCLICredentials(creds store.SecureCLIContextCredentials) contextCLI
 func (h *ChannelInstancesHandler) handleListContextCLICredentials(w http.ResponseWriter, r *http.Request) {
 	if h.cliContextStore == nil {
 		writeJSON(w, http.StatusNotImplemented, map[string]string{"error": "Secure CLI context store is not available"})
+		return
+	}
+	if !h.requireContextAdmin(w, r) {
 		return
 	}
 	path, ok := h.resolveContextPath(w, r)
