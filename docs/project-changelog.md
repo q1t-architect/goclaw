@@ -4,6 +4,30 @@ Significant changes, features, and fixes in reverse chronological order.
 
 ---
 
+## 2026-05-29
+
+### CLI Credentials git preset null-env crash (issue #93)
+
+**Fixes**
+
+- Stopped `/v1/cli-credentials/presets` from returning nullable preset arrays
+  for adapter-managed CLIs such as `git`; frontend now also normalizes older
+  `null` payloads defensively.
+- Allowed the `git` preset to create a SecureCLI binary without legacy env
+  vars and persisted its `adapter_name=git`, so the PAT/SSH user credential
+  flow activates after creation.
+- Guarded the preset env-var renderer against nullish `env_vars` to keep the
+  Runtime & Packages → CLI Credentials tab renderable.
+
+**Tests**
+
+- Added backend regression coverage for stable preset arrays and git preset
+  creation without legacy env.
+- Added frontend normalization coverage for nullable adapter-managed preset
+  arrays.
+
+---
+
 ## 2026-05-28
 
 ### CLI credential adapter framework + git adapter (issue #82)
