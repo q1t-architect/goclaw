@@ -500,6 +500,83 @@ func TestThinkStage_ContextOverflow_TriggersCompaction(t *testing.T) {
 	}
 }
 
+func TestThinkStage_EmptyLengthResponse_TriggersCompaction(t *testing.T) {
+	t.Parallel()
+	compacted := false
+
+	deps := &PipelineDeps{
+		Config: PipelineConfig{MaxIterations: 10, MaxTokens: 1000},
+		CallLLM: func(_ context.Context, _ *RunState, _ providers.ChatRequest) (*providers.ChatResponse, error) {
+			return &providers.ChatResponse{
+				FinishReason: "length",
+				Usage: &providers.Usage{
+					PromptTokens:     271_343,
+					CompletionTokens: 203,
+					TotalTokens:      271_546,
+					ThinkingTokens:   203,
+				},
+			}, nil
+		},
+		CompactMessages: func(_ context.Context, _ []providers.Message, _ string) ([]providers.Message, error) {
+			compacted = true
+			return []providers.Message{{Role: "user", Content: "[Summary]"}}, nil
+		},
+	}
+
+	stage := NewThinkStage(deps)
+	state := defaultState()
+	state.Messages.SetHistory([]providers.Message{{Role: "user", Content: "long history"}})
+
+	err := stage.Execute(context.Background(), state)
+	if err != nil {
+		t.Fatalf("Execute() error: %v", err)
+	}
+	if !compacted {
+		t.Fatal("expected empty length response to trigger compaction")
+	}
+	if state.Think.LastResponse != nil {
+		t.Fatal("LastResponse should stay nil so ObserveStage does not finalize empty content")
+	}
+	if state.Think.OverflowRetries != 1 {
+		t.Errorf("OverflowRetries = %d, want 1", state.Think.OverflowRetries)
+	}
+	if state.Think.TotalUsage.TotalTokens != 271_546 {
+		t.Errorf("TotalTokens = %d, want failed-call usage recorded", state.Think.TotalUsage.TotalTokens)
+	}
+	if got := state.Messages.History(); len(got) != 1 || got[0].Content != "[Summary]" {
+		t.Fatalf("history after compaction = %#v", got)
+	}
+	if stage.Result() != Continue {
+		t.Errorf("Result() = %v, want Continue", stage.Result())
+	}
+}
+
+func TestThinkStage_EmptyLengthResponse_FailsAfterOneRetry(t *testing.T) {
+	t.Parallel()
+
+	deps := &PipelineDeps{
+		Config: PipelineConfig{MaxIterations: 10, MaxTokens: 1000},
+		CallLLM: func(_ context.Context, _ *RunState, _ providers.ChatRequest) (*providers.ChatResponse, error) {
+			return &providers.ChatResponse{FinishReason: "length"}, nil
+		},
+		CompactMessages: func(_ context.Context, _ []providers.Message, _ string) ([]providers.Message, error) {
+			return []providers.Message{{Role: "user", Content: "[Summary]"}}, nil
+		},
+	}
+
+	stage := NewThinkStage(deps)
+	state := defaultState()
+	state.Think.OverflowRetries = 1
+
+	err := stage.Execute(context.Background(), state)
+	if err == nil {
+		t.Fatal("expected error after repeated empty length response")
+	}
+	if !strings.Contains(err.Error(), "truncated before content after compaction") {
+		t.Fatalf("unexpected error: %v", err)
+	}
+}
+
 func TestThinkStage_ContextOverflow_FailsAfterOneRetry(t *testing.T) {
 	t.Parallel()
 	deps := &PipelineDeps{
