@@ -4,6 +4,32 @@ Significant changes, features, and fixes in reverse chronological order.
 
 ---
 
+## 2026-06-09
+
+### Behavior UX sidecar delivery overrides (issue #144)
+
+**Changes**
+
+- Removed user-facing Tool Status Messages from Behavior settings and disabled
+  deterministic tool-status channel text.
+- Added sidecar-generated Quick Acknowledgement and Intermediate Replies with
+  optional provider/model, timeout, token, and char caps.
+- Added Channel > Agent > Workspace delivery-behavior resolution. Agent
+  overrides use `other_config.delivery_behavior` without a schema migration.
+- Kept legacy `block_reply` readable as a default for Intermediate Replies while
+  removing its separate Web UI controls.
+- Kept Show Reasoning as a separate debug/testing feature.
+
+**Tests**
+
+- Added config resolution coverage for Channel > Agent > Workspace and Quick
+  Ack independent from Intermediate Replies.
+- Added channel event coverage for sidecar quick ack, sidecar tool progress, and
+  retired tool-status messages.
+- Added Web UI schema coverage for sidecar delivery override fields.
+
+---
+
 ## 2026-06-01
 
 ### Telegram Show Reasoning delivery modes (issues #132, #133)

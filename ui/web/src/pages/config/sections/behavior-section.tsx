@@ -28,8 +28,6 @@ export function BehaviorSection({ config, onPatch, saving }: Props) {
 
   // UX toggles (from gateway + agents.defaults)
   const [ux, setUx] = useState({
-    tool_status: gw.tool_status !== false,
-    block_reply: gw.block_reply ?? false,
     intent_classify: ag.intent_classify !== false,
   });
 
@@ -63,8 +61,6 @@ export function BehaviorSection({ config, onPatch, saving }: Props) {
   // Reset drafts when external config changes
   useEffect(() => {
     setUx({
-      tool_status: gw.tool_status !== false,
-      block_reply: gw.block_reply ?? false,
       intent_classify: ag.intent_classify !== false,
     });
     setRate({
@@ -88,8 +84,6 @@ export function BehaviorSection({ config, onPatch, saving }: Props) {
   const handleSave = () => {
     onPatch({
       gateway: {
-        tool_status: ux.tool_status,
-        block_reply: ux.block_reply,
         max_message_chars: rate.max_message_chars,
         rate_limit_rpm: rate.rate_limit_rpm,
         inbound_debounce_ms: rate.inbound_debounce_ms,
@@ -130,9 +124,23 @@ function normalizeChatBehavior(value: any): ChatBehaviorValues {
     enabled: value?.enabled ?? false,
     quick_ack: {
       enabled: value?.quick_ack?.enabled ?? true,
-      mode: value?.quick_ack?.mode ?? "llm_generated",
+      mode: value?.quick_ack?.mode ?? "sidecar_generated",
       min_delay_ms: value?.quick_ack?.min_delay_ms ?? 1000,
+      provider: value?.quick_ack?.provider ?? "",
+      model: value?.quick_ack?.model ?? "",
+      timeout_ms: value?.quick_ack?.timeout_ms ?? 2500,
+      max_tokens: value?.quick_ack?.max_tokens ?? 40,
+      max_chars: value?.quick_ack?.max_chars ?? 120,
       templates: value?.quick_ack?.templates ?? ["Got it. Working on it..."],
+    },
+    intermediate_replies: {
+      enabled: value?.intermediate_replies?.enabled ?? false,
+      mode: value?.intermediate_replies?.mode ?? "sidecar_generated",
+      provider: value?.intermediate_replies?.provider ?? "",
+      model: value?.intermediate_replies?.model ?? "",
+      timeout_ms: value?.intermediate_replies?.timeout_ms ?? 2500,
+      max_tokens: value?.intermediate_replies?.max_tokens ?? 60,
+      max_chars: value?.intermediate_replies?.max_chars ?? 180,
     },
     final_split: {
       enabled: value?.final_split?.enabled ?? true,

@@ -11,8 +11,10 @@ import { Switch } from "@/components/ui/switch";
 import { Textarea } from "@/components/ui/textarea";
 import { InfoLabel } from "@/components/shared/info-label";
 
-const quickAckModeValues = ["llm_generated", "fixed_template", "off"] as const;
+const quickAckModeValues = ["sidecar_generated", "llm_generated", "fixed_template", "off"] as const;
 type QuickAckMode = (typeof quickAckModeValues)[number];
+const intermediateModeValues = ["sidecar_generated", "off"] as const;
+type IntermediateMode = (typeof intermediateModeValues)[number];
 
 export interface ChatBehaviorValues {
   enabled?: boolean;
@@ -20,7 +22,21 @@ export interface ChatBehaviorValues {
     enabled?: boolean;
     mode?: QuickAckMode;
     min_delay_ms?: number;
+    provider?: string;
+    model?: string;
+    timeout_ms?: number;
+    max_tokens?: number;
+    max_chars?: number;
     templates?: string[];
+  };
+  intermediate_replies?: {
+    enabled?: boolean;
+    mode?: IntermediateMode;
+    provider?: string;
+    model?: string;
+    timeout_ms?: number;
+    max_tokens?: number;
+    max_chars?: number;
   };
   final_split?: {
     enabled?: boolean;
@@ -73,6 +89,8 @@ export function BehaviorChatCard({ value, onChange }: Props) {
   const patch = (updates: ChatBehaviorValues) => onChange({ ...value, ...updates });
   const patchAck = (updates: NonNullable<ChatBehaviorValues["quick_ack"]>) =>
     patch({ quick_ack: { ...(value.quick_ack ?? {}), ...updates } });
+  const patchIntermediate = (updates: NonNullable<ChatBehaviorValues["intermediate_replies"]>) =>
+    patch({ intermediate_replies: { ...(value.intermediate_replies ?? {}), ...updates } });
   const patchSplit = (updates: NonNullable<ChatBehaviorValues["final_split"]>) =>
     patch({ final_split: { ...(value.final_split ?? {}), ...updates } });
 
@@ -94,7 +112,7 @@ export function BehaviorChatCard({ value, onChange }: Props) {
           <Switch checked={value.enabled ?? false} onCheckedChange={(enabled) => patch({ enabled })} />
         </div>
 
-        <div className="grid gap-4 md:grid-cols-2">
+        <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
           <div className="space-y-3 rounded-md border p-3">
             <div className="flex items-start justify-between gap-4">
               <div>
@@ -128,6 +146,7 @@ export function BehaviorChatCard({ value, onChange }: Props) {
               <Label htmlFor="chat-behavior-ack-delay">{t("behavior.quickAckDelay")}</Label>
               <Input
                 id="chat-behavior-ack-delay"
+                className="text-base md:text-sm"
                 type="number"
                 min={0}
                 value={value.quick_ack?.min_delay_ms ?? 1000}
@@ -135,15 +154,65 @@ export function BehaviorChatCard({ value, onChange }: Props) {
                 disabled={!value.enabled}
               />
             </div>
+            <div className="grid gap-3 sm:grid-cols-2">
+              <TextField label={t("behavior.provider")} value={value.quick_ack?.provider ?? ""} disabled={!value.enabled} placeholder={t("behavior.providerPlaceholder")} onChange={(provider) => patchAck({ provider })} />
+              <TextField label={t("behavior.model")} value={value.quick_ack?.model ?? ""} disabled={!value.enabled} placeholder={t("behavior.modelPlaceholder")} onChange={(model) => patchAck({ model })} />
+            </div>
+            <div className="grid grid-cols-3 gap-3">
+              <NumberField label={t("behavior.timeoutMs")} value={value.quick_ack?.timeout_ms ?? 2500} disabled={!value.enabled} onChange={(timeout_ms) => patchAck({ timeout_ms })} />
+              <NumberField label={t("behavior.maxTokens")} value={value.quick_ack?.max_tokens ?? 40} disabled={!value.enabled} onChange={(max_tokens) => patchAck({ max_tokens })} />
+              <NumberField label={t("behavior.maxChars")} value={value.quick_ack?.max_chars ?? 120} disabled={!value.enabled} onChange={(max_chars) => patchAck({ max_chars })} />
+            </div>
             <div className="grid gap-1.5">
               <Label htmlFor="chat-behavior-ack-templates">{t("behavior.quickAckTemplates")}</Label>
               <Textarea
                 id="chat-behavior-ack-templates"
+                className="text-base md:text-sm"
                 rows={3}
                 value={templatesText}
                 onChange={(e) => patchAck({ templates: e.target.value.split("\n").map((v) => v.trim()).filter(Boolean) })}
                 disabled={!value.enabled}
               />
+            </div>
+          </div>
+
+          <div className="space-y-3 rounded-md border p-3">
+            <div className="flex items-start justify-between gap-4">
+              <div>
+                <InfoLabel tip={t("behavior.intermediatePurpose")}>{t("behavior.intermediate")}</InfoLabel>
+                <p className="text-xs text-muted-foreground">{t("behavior.intermediateHint")}</p>
+              </div>
+              <Switch
+                checked={value.intermediate_replies?.enabled ?? false}
+                onCheckedChange={(enabled) => patchIntermediate({ enabled })}
+                disabled={!value.enabled}
+              />
+            </div>
+            <div className="grid gap-1.5">
+              <Label htmlFor="chat-behavior-intermediate-mode">{t("behavior.intermediateMode")}</Label>
+              <Select
+                value={value.intermediate_replies?.mode ?? "sidecar_generated"}
+                onValueChange={(mode) => patchIntermediate({ mode: mode as IntermediateMode })}
+                disabled={!value.enabled}
+              >
+                <SelectTrigger id="chat-behavior-intermediate-mode" className="text-base md:text-sm">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {intermediateModeValues.map((mode) => (
+                    <SelectItem key={mode} value={mode}>{t(`behavior.intermediateMode.${mode}`)}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="grid gap-3 sm:grid-cols-2">
+              <TextField label={t("behavior.provider")} value={value.intermediate_replies?.provider ?? ""} disabled={!value.enabled} placeholder={t("behavior.providerPlaceholder")} onChange={(provider) => patchIntermediate({ provider })} />
+              <TextField label={t("behavior.model")} value={value.intermediate_replies?.model ?? ""} disabled={!value.enabled} placeholder={t("behavior.modelPlaceholder")} onChange={(model) => patchIntermediate({ model })} />
+            </div>
+            <div className="grid grid-cols-3 gap-3">
+              <NumberField label={t("behavior.timeoutMs")} value={value.intermediate_replies?.timeout_ms ?? 2500} disabled={!value.enabled} onChange={(timeout_ms) => patchIntermediate({ timeout_ms })} />
+              <NumberField label={t("behavior.maxTokens")} value={value.intermediate_replies?.max_tokens ?? 60} disabled={!value.enabled} onChange={(max_tokens) => patchIntermediate({ max_tokens })} />
+              <NumberField label={t("behavior.maxChars")} value={value.intermediate_replies?.max_chars ?? 180} disabled={!value.enabled} onChange={(max_chars) => patchIntermediate({ max_chars })} />
             </div>
           </div>
 
@@ -191,11 +260,20 @@ function formatAckPreview(preview: PreviewResponse | null, t: (key: string, opti
   return `${t("behavior.previewAck")}: ${ack.content ?? ""}`;
 }
 
+function TextField({ label, value, disabled, placeholder, onChange }: { label: string; value: string; disabled: boolean; placeholder?: string; onChange: (v: string) => void }) {
+  return (
+    <div className="grid gap-1.5">
+      <Label>{label}</Label>
+      <Input className="text-base md:text-sm" value={value} disabled={disabled} placeholder={placeholder} onChange={(e) => onChange(e.target.value)} />
+    </div>
+  );
+}
+
 function NumberField({ label, value, disabled, onChange }: { label: string; value: number; disabled: boolean; onChange: (v: number) => void }) {
   return (
     <div className="grid gap-1.5">
       <Label>{label}</Label>
-      <Input type="number" min={0} value={value} disabled={disabled} onChange={(e) => onChange(Number(e.target.value))} />
+      <Input className="text-base md:text-sm" type="number" min={0} value={value} disabled={disabled} onChange={(e) => onChange(Number(e.target.value))} />
     </div>
   );
 }

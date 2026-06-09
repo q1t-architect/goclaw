@@ -73,19 +73,37 @@ Normal channel messages pass through the shared inbound debouncer before agent e
 
 ### Human-like Delivery
 
-`gateway.chat_behavior` controls optional channel-only delivery polish:
+`gateway.chat_behavior` controls optional channel-only delivery polish. Delivery
+text is not added to session history or the main provider messages.
 
-- `quick_ack.mode = "llm_generated"` uses the existing main-turn `block.reply` event as the natural progress response for non-streaming channel runs. It does not make a separate LLM call.
-- `quick_ack.templates` are fallback messages. In generated mode, the first template is sent only if no generated `block.reply` arrives before `quick_ack.min_delay_ms`.
-- `quick_ack.mode = "fixed_template"` preserves the older fixed-template acknowledgement behavior.
-- `quick_ack.mode = "off"` disables chat-behavior quick acknowledgement. When explicit `gateway.block_reply` is on, the first generic pre-tool `block.reply` is treated as the immediate acknowledgement and suppressed; model-generated tool progress still delivers before tool execution because it is part of Intermediate Replies.
-- If a model requests tools without assistant text, the pipeline does not emit a synthetic Intermediate Reply. This avoids repetitive server templates; visible progress messages come from the LLM and should match the user's language.
-- `final_split` splits long final text replies into a bounded number of paragraph messages.
-- Per-channel `chat_behavior` overrides inherit the gateway config unless a field is explicitly set.
+- `quick_ack` sends one short receipt for non-streaming channel runs.
+  `mode="sidecar_generated"` uses a bounded sidecar LLM call;
+  `mode="llm_generated"` is kept as a backward-compatible alias;
+  `mode="fixed_template"` sends the first template; `mode="off"` disables it.
+- `quick_ack.provider/model` can choose a cheaper sidecar provider/model. If
+  unset, the delivery generator falls back to the agent provider/model. Timeout,
+  max token, and max char limits bound the call; templates are fallback output on
+  errors, timeouts, or empty sidecar text.
+- `intermediate_replies` sends sidecar-generated progress during tool phases. It
+  is independent from `quick_ack`: either feature can be enabled or disabled
+  alone.
+- Sidecar progress uses bounded delivery metadata only: message preview, locale,
+  channel/peer, agent label, and tool phase. It does not receive session
+  history, tool arguments, tool output, tool schemas, memory, or system prompts.
+- Deterministic Tool Status Messages no longer emit channel text. Platform
+  reactions and explicit Show Reasoning delivery remain separate behavior.
+- `final_split` splits long final text replies into a bounded number of
+  paragraph messages.
+- Override order is Channel > Agent > Workspace. Agent overrides live in
+  `agents.other_config.delivery_behavior`; channel overrides continue under
+  `chat_behavior`.
+- Legacy `gateway.block_reply` and channel `block_reply` values are still read
+  as inherited `intermediate_replies.enabled` defaults when the newer
+  `chat_behavior.intermediate_replies.enabled` field is unset.
 
 Splitting is intentionally conservative. Replies containing fenced code, tables, lists, quotes, JSON/XML-ish blocks, or URL-only paragraphs remain a single message. Media replies and streaming deliveries are not split.
 
-Progress messages are not added to session history by this behavior. Existing run timeline handling for `block.reply` remains unchanged.
+Progress messages are not added to session history by this behavior. Existing run timeline handling for explicit `block.reply` remains unchanged.
 
 ### Reasoning Delivery
 

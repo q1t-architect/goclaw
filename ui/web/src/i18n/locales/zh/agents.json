@@ -1106,6 +1106,20 @@
     "changeFile": "更换文件",
     "startImport": "开始导入"
   },
+  "delivery": {
+    "title": "投递行为",
+    "description": "Agent 级 Quick Acknowledgement 和 Intermediate Replies 覆盖。Channel 设置仍然优先。",
+    "inherit": "继承",
+    "custom": "自定义",
+    "quickAck": "快速确认",
+    "intermediate": "中间回复",
+    "provider": "Provider",
+    "providerPlaceholder": "使用 agent provider",
+    "model": "Model",
+    "modelPlaceholder": "使用 agent model",
+    "quickAckDelay": "确认延迟（毫秒）",
+    "timeoutMs": "超时（毫秒）"
+  },
   "toast": {
     "created": "代理已创建",
     "createFailed": "创建代理失败",

@@ -1106,6 +1106,20 @@
     "changeFile": "Đổi file",
     "startImport": "Bắt đầu nhập"
   },
+  "delivery": {
+    "title": "Hành vi gửi tin",
+    "description": "Ghi đè cấp Agent cho Xác nhận nhanh và Phản hồi trung gian. Cấu hình Channel vẫn có ưu tiên cao hơn.",
+    "inherit": "Kế thừa",
+    "custom": "Tuỳ chỉnh",
+    "quickAck": "Xác nhận nhanh",
+    "intermediate": "Phản hồi trung gian",
+    "provider": "Provider",
+    "providerPlaceholder": "Dùng provider của agent",
+    "model": "Model",
+    "modelPlaceholder": "Dùng model của agent",
+    "quickAckDelay": "Độ trễ ack (ms)",
+    "timeoutMs": "Timeout (ms)"
+  },
   "toast": {
     "created": "Đã tạo agent",
     "createFailed": "Không thể tạo agent",

@@ -21,7 +21,7 @@ export interface FieldDef {
 
 // --- Shared option lists ---
 
-const blockReplyOptions = [
+const inheritToggleOptions = [
   { value: "inherit", label: "Inherit from gateway" },
   { value: "true", label: "Enabled" },
   { value: "false", label: "Disabled" },
@@ -29,16 +29,29 @@ const blockReplyOptions = [
 
 const quickAckModeOptions = [
   { value: "inherit", label: "Inherit from gateway" },
-  { value: "llm_generated", label: "LLM-generated with fallback" },
+  { value: "sidecar_generated", label: "Sidecar-generated with fallback" },
+  { value: "llm_generated", label: "Legacy generated with fallback" },
   { value: "fixed_template", label: "Fixed template" },
   { value: "off", label: "Off" },
 ];
 
 const chatBehaviorOverrideFields: FieldDef[] = [
-  { key: "chat_behavior.enabled", label: "Human-like Delivery", type: "select", options: blockReplyOptions, defaultValue: "inherit", help: "Override gateway quick acknowledgement and final reply splitting." },
-  { key: "chat_behavior.quick_ack.enabled", label: "Quick Acknowledgement", type: "select", options: blockReplyOptions, defaultValue: "inherit", help: "Override quick acknowledgement for this channel." },
-  { key: "chat_behavior.quick_ack.mode", label: "Quick Ack Mode", type: "select", options: quickAckModeOptions, defaultValue: "inherit", help: "Generated uses the main LLM block reply; templates are fallback only." },
-  { key: "chat_behavior.final_split.enabled", label: "Final Reply Splitting", type: "select", options: blockReplyOptions, defaultValue: "inherit", help: "Override final multi-message splitting for this channel." },
+  { key: "chat_behavior.enabled", label: "Human-like Delivery", type: "select", options: inheritToggleOptions, defaultValue: "inherit", help: "Override gateway acknowledgement, intermediate progress, and final reply splitting." },
+  { key: "chat_behavior.intermediate_replies.enabled", label: "Intermediate Replies", type: "select", options: inheritToggleOptions, defaultValue: "inherit", help: "Send natural sidecar progress updates during tool phases without adding them to session history." },
+  { key: "chat_behavior.intermediate_replies.mode", label: "Intermediate Reply Mode", type: "select", options: [{ value: "inherit", label: "Inherit from gateway" }, { value: "sidecar_generated", label: "Sidecar-generated" }, { value: "off", label: "Off" }], defaultValue: "inherit" },
+  { key: "chat_behavior.intermediate_replies.provider", label: "Intermediate Provider", type: "text", placeholder: "Use agent provider", help: "Optional cheap provider for sidecar progress updates." },
+  { key: "chat_behavior.intermediate_replies.model", label: "Intermediate Model", type: "text", placeholder: "Use agent model" },
+  { key: "chat_behavior.intermediate_replies.timeout_ms", label: "Intermediate Timeout (ms)", type: "number", defaultValue: 2500 },
+  { key: "chat_behavior.intermediate_replies.max_tokens", label: "Intermediate Max Tokens", type: "number", defaultValue: 60 },
+  { key: "chat_behavior.intermediate_replies.max_chars", label: "Intermediate Max Chars", type: "number", defaultValue: 180 },
+  { key: "chat_behavior.quick_ack.enabled", label: "Quick Acknowledgement", type: "select", options: inheritToggleOptions, defaultValue: "inherit", help: "Override quick acknowledgement for this channel." },
+  { key: "chat_behavior.quick_ack.mode", label: "Quick Ack Mode", type: "select", options: quickAckModeOptions, defaultValue: "inherit", help: "Generated acknowledgement uses a sidecar provider/model; templates are fallback only." },
+  { key: "chat_behavior.quick_ack.provider", label: "Quick Ack Provider", type: "text", placeholder: "Use agent provider", help: "Optional cheap provider for quick acknowledgements." },
+  { key: "chat_behavior.quick_ack.model", label: "Quick Ack Model", type: "text", placeholder: "Use agent model" },
+  { key: "chat_behavior.quick_ack.timeout_ms", label: "Quick Ack Timeout (ms)", type: "number", defaultValue: 2500 },
+  { key: "chat_behavior.quick_ack.max_tokens", label: "Quick Ack Max Tokens", type: "number", defaultValue: 40 },
+  { key: "chat_behavior.quick_ack.max_chars", label: "Quick Ack Max Chars", type: "number", defaultValue: 120 },
+  { key: "chat_behavior.final_split.enabled", label: "Final Reply Splitting", type: "select", options: inheritToggleOptions, defaultValue: "inherit", help: "Override final multi-message splitting for this channel." },
 ];
 
 const dmPolicyOptions = [
@@ -143,7 +156,6 @@ export const configSchema: Record<string, FieldDef[]> = {
     { key: "media_max_mb", label: "Max Media Size (MB)", type: "number", defaultValue: 20, help: "Default: 20 MB (cloud API). Increase when using local Bot API server." },
     { key: "link_preview", label: "Link Preview", type: "boolean", defaultValue: true },
     { key: "allow_from", label: "Allowed Users", type: "tags", help: "User IDs or @usernames, one per line or comma-separated" },
-    { key: "block_reply", label: "Block Reply", type: "select", options: blockReplyOptions, defaultValue: "inherit", help: "Deliver intermediate text during tool iterations" },
     ...chatBehaviorOverrideFields,
   ],
   discord: [
@@ -152,7 +164,6 @@ export const configSchema: Record<string, FieldDef[]> = {
     { key: "require_mention", label: "Require @mention in groups", type: "boolean", defaultValue: true },
     { key: "history_limit", label: "Group History Limit", type: "number", defaultValue: 50, help: "Max pending group messages for context (0 = disabled)" },
     { key: "allow_from", label: "Allowed Users", type: "tags", help: "Discord user IDs" },
-    { key: "block_reply", label: "Block Reply", type: "select", options: blockReplyOptions, defaultValue: "inherit", help: "Deliver intermediate text during tool iterations" },
     ...chatBehaviorOverrideFields,
   ],
   slack: [
@@ -167,7 +178,6 @@ export const configSchema: Record<string, FieldDef[]> = {
     { key: "thread_ttl", label: "Thread Participation TTL (hours)", type: "number", defaultValue: 24, help: "Hours before bot stops auto-replying in threads it participated in. 0 = always require @mention." },
     { key: "reaction_level", label: "Reaction Level", type: "select", options: [{ value: "off", label: "Off" }, { value: "minimal", label: "Minimal (thinking + done)" }, { value: "full", label: "Full (all status emoji)" }], defaultValue: "off", help: "Show emoji reactions on user messages during agent processing" },
     { key: "allow_from", label: "Allowed Users", type: "tags", help: "Slack user IDs (U...) allowed to interact; empty = no allowlist filter" },
-    { key: "block_reply", label: "Block Reply", type: "select", options: blockReplyOptions, defaultValue: "inherit", help: "Deliver intermediate text during tool iterations" },
     ...chatBehaviorOverrideFields,
   ],
   feishu: [
@@ -186,7 +196,6 @@ export const configSchema: Record<string, FieldDef[]> = {
     { key: "reaction_level", label: "Reaction Level", type: "select", options: [{ value: "off", label: "Off" }, { value: "minimal", label: "Minimal" }, { value: "full", label: "Full" }], defaultValue: "off", help: "Typing emoji reaction on user messages while bot is processing" },
     { key: "allow_from", label: "Allowed Users", type: "tags", help: "Lark open_ids (ou_...)" },
     { key: "group_allow_from", label: "Group Allowed Users", type: "tags", help: "Separate allowlist for group senders" },
-    { key: "block_reply", label: "Block Reply", type: "select", options: blockReplyOptions, defaultValue: "inherit", help: "Deliver intermediate text during tool iterations" },
     ...chatBehaviorOverrideFields,
   ],
   zalo_oa: [
@@ -194,7 +203,6 @@ export const configSchema: Record<string, FieldDef[]> = {
     { key: "webhook_url", label: "Webhook URL", type: "text", placeholder: "https://..." },
     { key: "media_max_mb", label: "Max Media Size (MB)", type: "number", defaultValue: 5 },
     { key: "allow_from", label: "Allowed Users", type: "tags", help: "Zalo user IDs" },
-    { key: "block_reply", label: "Block Reply", type: "select", options: blockReplyOptions, defaultValue: "inherit", help: "Deliver intermediate text during tool iterations" },
     ...chatBehaviorOverrideFields,
   ],
   zalo_personal: [
@@ -202,7 +210,6 @@ export const configSchema: Record<string, FieldDef[]> = {
     { key: "group_policy", label: "Group Policy", type: "select", options: groupPolicyOptions, defaultValue: "allowlist" },
     { key: "require_mention", label: "Require @mention in groups", type: "boolean", defaultValue: true },
     { key: "allow_from", label: "Allowed Users", type: "tags", help: "Zalo user IDs or group IDs" },
-    { key: "block_reply", label: "Block Reply", type: "select", options: blockReplyOptions, defaultValue: "inherit", help: "Deliver intermediate text during tool iterations" },
     ...chatBehaviorOverrideFields,
   ],
   whatsapp: [
@@ -210,7 +217,6 @@ export const configSchema: Record<string, FieldDef[]> = {
     { key: "group_policy", label: "Group Policy", type: "select", options: groupPolicyOptions, defaultValue: "pairing" },
     { key: "require_mention", label: "Require @Mention in Groups", type: "boolean", help: "Only respond in group chats when the bot is explicitly @mentioned" },
     { key: "allow_from", label: "Allowed Users", type: "tags", help: "WhatsApp user IDs" },
-    { key: "block_reply", label: "Block Reply", type: "select", options: blockReplyOptions, defaultValue: "inherit", help: "Deliver intermediate text during tool iterations" },
     ...chatBehaviorOverrideFields,
   ],
   facebook: [
@@ -224,7 +230,6 @@ export const configSchema: Record<string, FieldDef[]> = {
     { key: "post_context_cache_ttl", label: "Post Cache TTL", type: "text", placeholder: "e.g. 15m" },
     { key: "first_inbox_message", label: "First Inbox DM Text", type: "textarea", help: "Custom DM sent to first-time commenters. Defaults to Vietnamese if empty." },
     { key: "allow_from", label: "Allowed Users", type: "tags", help: "Facebook user IDs" },
-    { key: "block_reply", label: "Block Reply", type: "select", options: blockReplyOptions, defaultValue: "inherit" },
   ],
   pancake: [
     { key: "page_id", label: "Page ID", type: "text", required: true, help: "Pancake internal page ID (numeric, from Pancake dashboard)" },
@@ -258,7 +263,6 @@ export const configSchema: Record<string, FieldDef[]> = {
       showWhen: { key: "features.auto_react", value: "true" },
       help: "Never react to comments from these user IDs." },
     { key: "allow_from", label: "Allowed Users", type: "tags", help: "Sender IDs to whitelist. Empty = accept all." },
-    { key: "block_reply", label: "Block Reply", type: "select", options: blockReplyOptions, defaultValue: "inherit" },
     ...chatBehaviorOverrideFields,
   ],
   bitrix24: [
@@ -282,7 +286,6 @@ export const configSchema: Record<string, FieldDef[]> = {
     { key: "media_max_mb", label: "Max Media Size (MB)", type: "number", defaultValue: 20, help: "Max inbound media download size." },
     { key: "allow_from", label: "Allowed Users (DM)", type: "tags", help: "Bitrix24 user IDs allowed to DM the bot. Empty = no allowlist filter." },
     { key: "group_allow_from", label: "Allowed Users (Group)", type: "tags", help: "Separate allowlist for group senders." },
-    { key: "block_reply", label: "Block Reply", type: "select", options: blockReplyOptions, defaultValue: "inherit", help: "Deliver intermediate text during tool iterations." },
     ...chatBehaviorOverrideFields,
     { key: "mcp_server_name", label: "MCP Server Name", type: "text", advanced: true, placeholder: "bitrix24-prod", help: "Optional — name from mcp_servers table. Must be set together with MCP Base URL to enable per-user MCP credential auto-onboard. Leave both empty to disable." },
     { key: "mcp_base_url", label: "MCP Base URL", type: "text", advanced: true, placeholder: "https://mcp.example.com", help: "Optional — HTTPS root of the partner MCP server. Channel POSTs {mcp_base_url}/api/auto-onboard to mint per-user credentials on first-sight. The MCP server authenticates each call via the caller's Bitrix access_token, so no admin secret is required." },

@@ -114,21 +114,9 @@ func (m *Manager) HandleAgentEvent(eventType, runID string, payload any) {
 				// stuck at tool status text. Only run.completed finalizes.
 			}
 
-			// Show tool status by editing placeholder message (non-streaming only).
-			// Streaming channels show tool status via reaction emoji instead —
-			// editing the placeholder would overwrite streamed content.
 			toolName := extractPayloadString(payload, "name")
-			if toolName != "" && rc.ToolStatusEnabled && !rc.Streaming {
-				statusText := formatToolStatus(toolName)
-				outMeta := copyRoutingMeta(rc.Metadata)
-				outMeta["placeholder_update"] = "true"
-				m.bus.PublishOutbound(bus.OutboundMessage{
-					Channel:  rc.ChannelName,
-					ChatID:   rc.ChatID,
-					Content:  statusText,
-					Metadata: outMeta,
-					TenantID: rc.TenantID,
-				})
+			if toolName != "" && ShouldDeliverGeneratedProgress(rc.ChatBehavior, rc.Streaming) {
+				go m.sendIntermediateProgress(rc, toolName)
 			}
 		case protocol.ChatEventChunk:
 			// Accumulate chunk deltas into full text.
@@ -307,6 +295,13 @@ func (m *Manager) HandleAgentEvent(eventType, runID string, payload any) {
 		}
 	}
 
+	if eventType == protocol.AgentEventToolCall {
+		toolName := extractPayloadString(payload, "name")
+		if toolName != "" && ShouldDeliverGeneratedProgress(rc.ChatBehavior, rc.Streaming) {
+			go m.sendIntermediateProgress(rc, toolName)
+		}
+	}
+
 	if !rc.Streaming && rc.ReasoningDelivery.BubbleDelivery {
 		switch eventType {
 		case protocol.ChatEventThinking:
@@ -347,12 +342,11 @@ func (m *Manager) HandleAgentEvent(eventType, runID string, payload any) {
 		if streaming {
 			return // streaming already delivered via chunks
 		}
-		generatedProgress := ShouldDeliverGeneratedProgress(chatBehavior, streaming)
-		if !blockReplyEnabled && !generatedProgress {
+		if !blockReplyEnabled {
 			return
 		}
 		isToolAnnouncement := source == protocol.BlockReplySourceToolAnnouncement
-		if isInitialBlockReply && !isToolAnnouncement && blockReplyEnabled && !generatedProgress && ShouldSuppressInitialBlockReply(chatBehavior, streaming) {
+		if isInitialBlockReply && !isToolAnnouncement && blockReplyEnabled && ShouldSuppressInitialBlockReply(chatBehavior, streaming) {
 			return
 		}
 
@@ -475,8 +469,24 @@ func (m *Manager) sendQuickAck(rc *RunContext) {
 		return
 	}
 	content := rc.ChatBehavior.QuickAck.Templates[0]
+	mode := effectiveQuickAckMode(rc.ChatBehavior.QuickAck.Mode)
+	generator := rc.Delivery.QuickAckGenerator
+	request := rc.deliveryRequestLocked(DeliveryPurposeQuickAck, "")
 	rc.ackSent = true
 	rc.ackTimer = nil
+	rc.mu.Unlock()
+
+	if generator != nil && (mode == QuickAckModeLLMGenerated || mode == QuickAckModeSidecar) {
+		if generated, err := generator.GenerateDeliveryMessage(context.Background(), request); err == nil && generated != "" {
+			content = generated
+		}
+	}
+
+	rc.mu.Lock()
+	if rc.ackCancelled || rc.blockReplySent {
+		rc.mu.Unlock()
+		return
+	}
 	rc.mu.Unlock()
 
 	m.bus.PublishOutbound(bus.OutboundMessage{
@@ -486,6 +496,71 @@ func (m *Manager) sendQuickAck(rc *RunContext) {
 		Metadata: copyRoutingMeta(rc.Metadata),
 		TenantID: rc.TenantID,
 	})
+}
+
+func (m *Manager) sendIntermediateProgress(rc *RunContext, toolName string) {
+	rc.mu.Lock()
+	if rc.ackCancelled || rc.blockReplySent || !ShouldDeliverGeneratedProgress(rc.ChatBehavior, rc.Streaming) {
+		rc.mu.Unlock()
+		return
+	}
+	generator := rc.Delivery.ProgressGenerator
+	request := rc.deliveryRequestLocked(DeliveryPurposeProgress, toolName)
+	rc.mu.Unlock()
+
+	if generator == nil {
+		return
+	}
+	content, err := generator.GenerateDeliveryMessage(context.Background(), request)
+	if err != nil || content == "" {
+		return
+	}
+
+	rc.mu.Lock()
+	if rc.ackCancelled || rc.blockReplySent {
+		rc.mu.Unlock()
+		return
+	}
+	rc.ackCancelled = true
+	if rc.ackTimer != nil {
+		rc.ackTimer.Stop()
+		rc.ackTimer = nil
+	}
+	rc.blockReplySent = true
+	rc.interimDelivered++
+	rc.lastInterimReply = content
+	rc.mu.Unlock()
+
+	m.bus.PublishOutbound(bus.OutboundMessage{
+		Channel:  rc.ChannelName,
+		ChatID:   rc.ChatID,
+		Content:  content,
+		Metadata: copyRoutingMeta(rc.Metadata),
+		TenantID: rc.TenantID,
+	})
+}
+
+func (rc *RunContext) deliveryRequestLocked(purpose, toolName string) DeliveryMessageRequest {
+	maxTokens := rc.ChatBehavior.QuickAck.MaxTokens
+	maxChars := rc.ChatBehavior.QuickAck.MaxChars
+	timeout := rc.ChatBehavior.QuickAck.Timeout
+	if purpose == DeliveryPurposeProgress {
+		maxTokens = rc.ChatBehavior.IntermediateReplies.MaxTokens
+		maxChars = rc.ChatBehavior.IntermediateReplies.MaxChars
+		timeout = rc.ChatBehavior.IntermediateReplies.Timeout
+	}
+	return DeliveryMessageRequest{
+		Purpose:     purpose,
+		UserMessage: rc.Delivery.Inbound,
+		Locale:      rc.Delivery.Locale,
+		PeerKind:    rc.Delivery.PeerKind,
+		ChannelType: rc.Delivery.Channel,
+		AgentName:   rc.Delivery.AgentName,
+		ToolName:    toolName,
+		MaxTokens:   maxTokens,
+		MaxChars:    maxChars,
+		Timeout:     timeout,
+	}
 }
 
 // extractPayloadString extracts a string field from a payload (map[string]string or map[string]interface{}).

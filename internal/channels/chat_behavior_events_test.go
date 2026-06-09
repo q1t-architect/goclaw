@@ -62,7 +62,7 @@ func TestUnregisterRun_CancelsPendingQuickAck(t *testing.T) {
 		QuickAck: ResolvedQuickAckConfig{
 			Enabled:    true,
 			Mode:       QuickAckModeFixedTemplate,
-			MinDelayMs: 50,
+			MinDelayMs: 500,
 			Templates:  []string{"On it."},
 		},
 	})
@@ -106,10 +106,16 @@ func TestCancelQuickAck_BlocksInFlightSend(t *testing.T) {
 func TestHandleAgentEvent_GeneratedProgressCancelsFallback(t *testing.T) {
 	behavior := ResolvedChatBehavior{
 		Enabled: true,
+		IntermediateReplies: ResolvedIntermediateRepliesConfig{
+			Enabled:   true,
+			Mode:      IntermediateModeSidecar,
+			MaxTokens: 20,
+			MaxChars:  120,
+		},
 		QuickAck: ResolvedQuickAckConfig{
 			Enabled:    true,
 			Mode:       QuickAckModeLLMGenerated,
-			MinDelayMs: 50,
+			MinDelayMs: 500,
 			Templates:  []string{"Fallback."},
 		},
 	}
@@ -117,10 +123,12 @@ func TestHandleAgentEvent_GeneratedProgressCancelsFallback(t *testing.T) {
 	mb := bus.New()
 	mgr := NewManager(mb)
 	mgr.RegisterChannel("test", &chatBehaviorTestChannel{name: "test"})
-	mgr.RegisterRunWithBehavior("run-1", "test", "chat-1", "msg-1", map[string]string{"local_key": "chat-1/topic"}, uuid.Nil, false, false, true, behavior)
+	mgr.RegisterRunWithDelivery("run-1", "test", "chat-1", "msg-1", map[string]string{"local_key": "chat-1/topic"}, uuid.Nil, false, false, true, behavior, DeliveryRuntime{
+		ProgressGenerator: fakeDeliveryGenerator{content: "Mình đang kiểm tra tiếp."},
+	})
 
 	mgr.HandleAgentEvent(protocol.AgentEventRunStarted, "run-1", nil)
-	mgr.HandleAgentEvent(protocol.AgentEventBlockReply, "run-1", map[string]string{"content": "I will check that now."})
+	mgr.HandleAgentEvent(protocol.AgentEventToolCall, "run-1", map[string]string{"name": "skill_search"})
 
 	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
 	defer cancel()
@@ -128,7 +136,7 @@ func TestHandleAgentEvent_GeneratedProgressCancelsFallback(t *testing.T) {
 	if !ok {
 		t.Fatal("expected generated progress outbound message")
 	}
-	if got.Content != "I will check that now." || got.Metadata["local_key"] != "chat-1/topic" {
+	if got.Content != "Mình đang kiểm tra tiếp." || got.Metadata["local_key"] != "chat-1/topic" {
 		t.Fatalf("generated progress outbound = %+v, want generated content and routing metadata", got)
 	}
 
@@ -136,6 +144,21 @@ func TestHandleAgentEvent_GeneratedProgressCancelsFallback(t *testing.T) {
 	defer cancel()
 	if got, ok := mb.SubscribeOutbound(ctx); ok {
 		t.Fatalf("fallback emitted after generated progress: %+v", got)
+	}
+}
+
+func TestHandleAgentEvent_ToolStatusMessagesRetired(t *testing.T) {
+	mb := bus.New()
+	mgr := NewManager(mb)
+	mgr.RegisterChannel("test", &chatBehaviorTestChannel{name: "test"})
+	mgr.RegisterRunWithBehavior("run-1", "test", "chat-1", "msg-1", nil, uuid.Nil, false, false, true, ResolvedChatBehavior{})
+
+	mgr.HandleAgentEvent(protocol.AgentEventToolCall, "run-1", map[string]string{"name": "skill_search"})
+
+	ctx, cancel := context.WithTimeout(context.Background(), 25*time.Millisecond)
+	defer cancel()
+	if got, ok := mb.SubscribeOutbound(ctx); ok {
+		t.Fatalf("tool status emitted outbound message: %+v", got)
 	}
 }
 
@@ -165,6 +188,41 @@ func TestHandleAgentEvent_GeneratedModeFallsBackWithoutBlockReply(t *testing.T) 
 	}
 	if got.Content != "Fallback." {
 		t.Fatalf("fallback content = %q, want Fallback.", got.Content)
+	}
+}
+
+func TestHandleAgentEvent_GeneratedQuickAckUsesSidecarGenerator(t *testing.T) {
+	behavior := ResolvedChatBehavior{
+		Enabled: true,
+		QuickAck: ResolvedQuickAckConfig{
+			Enabled:    true,
+			Mode:       QuickAckModeLLMGenerated,
+			MinDelayMs: 0,
+			MaxTokens:  20,
+			MaxChars:   80,
+			Templates:  []string{"Fallback."},
+		},
+	}
+
+	mb := bus.New()
+	mgr := NewManager(mb)
+	mgr.RegisterChannel("test", &chatBehaviorTestChannel{name: "test"})
+	mgr.RegisterRunWithDelivery("run-1", "test", "chat-1", "msg-1", nil, uuid.Nil, false, false, true, behavior, DeliveryRuntime{
+		QuickAckGenerator: fakeDeliveryGenerator{content: "Mình nhận rồi, để mình xử lý."},
+		Inbound:           "kiểm tra giúp tôi",
+		Locale:            "vi",
+	})
+
+	mgr.HandleAgentEvent(protocol.AgentEventRunStarted, "run-1", nil)
+
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
+	defer cancel()
+	got, ok := mb.SubscribeOutbound(ctx)
+	if !ok {
+		t.Fatal("expected generated quick acknowledgement")
+	}
+	if got.Content != "Mình nhận rồi, để mình xử lý." {
+		t.Fatalf("quick ack content = %q, want generated content", got.Content)
 	}
 }
 
@@ -320,4 +378,13 @@ func TestHandleAgentEvent_ToolAnnouncementBypassesInitialQuickAckSuppression(t *
 			}
 		})
 	}
+}
+
+type fakeDeliveryGenerator struct {
+	content string
+	err     error
+}
+
+func (g fakeDeliveryGenerator) GenerateDeliveryMessage(context.Context, DeliveryMessageRequest) (string, error) {
+	return g.content, g.err
 }

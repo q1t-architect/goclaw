@@ -2,13 +2,17 @@ import { useState, useEffect } from "react";
 import { useTranslation } from "react-i18next";
 import { Save, Settings, Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Switch } from "@/components/ui/switch";
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle,
 } from "@/components/ui/dialog";
 import { ConfigGroupHeader } from "@/components/shared/config-group-header";
 import type {
-  AgentData, ChatGPTOAuthRoutingConfig, CompactionConfig, ContextPruningConfig,
-  ModelFallbackConfig, ReasoningOverrideMode,
+	  AgentData, ChatGPTOAuthRoutingConfig, CompactionConfig, ContextPruningConfig,
+  DeliveryBehaviorConfig, ModelFallbackConfig, ReasoningOverrideMode,
   SandboxConfig, WorkspaceSharingConfig,
 } from "@/types/agent";
 import {
@@ -57,6 +61,8 @@ export function AgentAdvancedDialog({ open, onOpenChange, agent, onUpdate }: Age
   const [chatgptRouting, setChatgptRouting] = useState<ChatGPTOAuthRoutingConfig>(init.chatgptRouting);
   const [modelFallback, setModelFallback] = useState<ModelFallbackConfig>(init.modelFallback);
   const [comp, setComp] = useState<CompactionConfig>(init.comp);
+  const [deliveryBehaviorMode, setDeliveryBehaviorMode] = useState(init.deliveryBehaviorMode);
+  const [deliveryBehavior, setDeliveryBehavior] = useState<DeliveryBehaviorConfig>(init.deliveryBehavior);
   const [inboundDebounceMode, setInboundDebounceMode] = useState(init.inboundDebounceMode);
   const [inboundDebounceMs, setInboundDebounceMs] = useState(init.inboundDebounceMs);
   const [pruneEnabled, setPruneEnabled] = useState(init.pruneEnabled);
@@ -78,6 +84,8 @@ export function AgentAdvancedDialog({ open, onOpenChange, agent, onUpdate }: Age
     setModelFallback(s.modelFallback);
     setWsSharing(s.wsSharing);
     setComp(s.comp);
+    setDeliveryBehaviorMode(s.deliveryBehaviorMode);
+    setDeliveryBehavior(s.deliveryBehavior);
     setInboundDebounceMode(s.inboundDebounceMode);
     setInboundDebounceMs(s.inboundDebounceMs);
     setPruneEnabled(s.pruneEnabled);
@@ -133,6 +141,8 @@ export function AgentAdvancedDialog({ open, onOpenChange, agent, onUpdate }: Age
         modelFallback,
         wsSharing,
         comp,
+        deliveryBehaviorMode,
+        deliveryBehavior,
         inboundDebounceMode,
         inboundDebounceMs,
         pruneEnabled,
@@ -228,6 +238,13 @@ export function AgentAdvancedDialog({ open, onOpenChange, agent, onUpdate }: Age
             onChange={setModelFallback}
           />
 
+          <DeliveryBehaviorSection
+            value={deliveryBehavior}
+            mode={deliveryBehaviorMode}
+            onModeChange={setDeliveryBehaviorMode}
+            onChange={setDeliveryBehavior}
+          />
+
           {/* Performance */}
           <ConfigGroupHeader
             title={t("configGroups.performance")}
@@ -268,5 +285,100 @@ export function AgentAdvancedDialog({ open, onOpenChange, agent, onUpdate }: Age
         </div>
       </DialogContent>
     </Dialog>
+  );
+}
+
+function DeliveryBehaviorSection({
+  value,
+  mode,
+  onModeChange,
+  onChange,
+}: {
+  value: DeliveryBehaviorConfig;
+  mode: "inherit" | "custom";
+  onModeChange: (mode: "inherit" | "custom") => void;
+  onChange: (value: DeliveryBehaviorConfig) => void;
+}) {
+  const { t } = useTranslation("agents");
+  const disabled = mode === "inherit";
+  const patch = (updates: DeliveryBehaviorConfig) => onChange({ ...value, ...updates });
+  const patchQuick = (updates: NonNullable<DeliveryBehaviorConfig["quick_ack"]>) =>
+    patch({ quick_ack: { ...(value.quick_ack ?? {}), ...updates } });
+  const patchIntermediate = (updates: NonNullable<DeliveryBehaviorConfig["intermediate_replies"]>) =>
+    patch({ intermediate_replies: { ...(value.intermediate_replies ?? {}), ...updates } });
+
+  return (
+    <div className="space-y-3 rounded-md border p-4">
+      <div className="flex items-start justify-between gap-4">
+        <div>
+          <h3 className="text-sm font-medium">{t("delivery.title")}</h3>
+          <p className="text-xs text-muted-foreground">{t("delivery.description")}</p>
+        </div>
+        <Select value={mode} onValueChange={(next) => onModeChange(next as "inherit" | "custom")}>
+          <SelectTrigger className="w-32 text-base md:text-sm">
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="inherit">{t("delivery.inherit")}</SelectItem>
+            <SelectItem value="custom">{t("delivery.custom")}</SelectItem>
+          </SelectContent>
+        </Select>
+      </div>
+      <div className="grid gap-4 md:grid-cols-2">
+        <div className="space-y-3">
+          <div className="flex items-center justify-between gap-3">
+            <Label>{t("delivery.quickAck")}</Label>
+            <Switch checked={value.quick_ack?.enabled ?? true} disabled={disabled} onCheckedChange={(enabled) => patchQuick({ enabled })} />
+          </div>
+          <DeliveryProviderFields
+            disabled={disabled}
+            provider={value.quick_ack?.provider ?? ""}
+            model={value.quick_ack?.model ?? ""}
+            onProvider={(provider) => patchQuick({ provider })}
+            onModel={(model) => patchQuick({ model })}
+          />
+          <NumberField label={t("delivery.quickAckDelay")} value={value.quick_ack?.min_delay_ms ?? 1000} disabled={disabled} onChange={(min_delay_ms) => patchQuick({ min_delay_ms })} />
+        </div>
+        <div className="space-y-3">
+          <div className="flex items-center justify-between gap-3">
+            <Label>{t("delivery.intermediate")}</Label>
+            <Switch checked={value.intermediate_replies?.enabled ?? false} disabled={disabled} onCheckedChange={(enabled) => patchIntermediate({ enabled })} />
+          </div>
+          <DeliveryProviderFields
+            disabled={disabled}
+            provider={value.intermediate_replies?.provider ?? ""}
+            model={value.intermediate_replies?.model ?? ""}
+            onProvider={(provider) => patchIntermediate({ provider })}
+            onModel={(model) => patchIntermediate({ model })}
+          />
+          <NumberField label={t("delivery.timeoutMs")} value={value.intermediate_replies?.timeout_ms ?? 2500} disabled={disabled} onChange={(timeout_ms) => patchIntermediate({ timeout_ms })} />
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function DeliveryProviderFields({ disabled, provider, model, onProvider, onModel }: { disabled: boolean; provider: string; model: string; onProvider: (value: string) => void; onModel: (value: string) => void }) {
+  const { t } = useTranslation("agents");
+  return (
+    <div className="grid gap-3 sm:grid-cols-2">
+      <div className="grid gap-1.5">
+        <Label>{t("delivery.provider")}</Label>
+        <Input className="text-base md:text-sm" value={provider} disabled={disabled} placeholder={t("delivery.providerPlaceholder")} onChange={(e) => onProvider(e.target.value)} />
+      </div>
+      <div className="grid gap-1.5">
+        <Label>{t("delivery.model")}</Label>
+        <Input className="text-base md:text-sm" value={model} disabled={disabled} placeholder={t("delivery.modelPlaceholder")} onChange={(e) => onModel(e.target.value)} />
+      </div>
+    </div>
+  );
+}
+
+function NumberField({ label, value, disabled, onChange }: { label: string; value: number; disabled: boolean; onChange: (value: number) => void }) {
+  return (
+    <div className="grid gap-1.5">
+      <Label>{label}</Label>
+      <Input className="text-base md:text-sm" type="number" min={0} value={value} disabled={disabled} onChange={(e) => onChange(Number(e.target.value))} />
+    </div>
   );
 }

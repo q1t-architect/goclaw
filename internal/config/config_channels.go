@@ -3,9 +3,10 @@ package config
 // ChatBehaviorConfig controls optional human-like channel delivery behavior.
 // Pointer fields allow per-channel overrides to inherit gateway defaults.
 type ChatBehaviorConfig struct {
-	Enabled    *bool             `json:"enabled,omitempty"`
-	QuickAck   *QuickAckConfig   `json:"quick_ack,omitempty"`
-	FinalSplit *FinalSplitConfig `json:"final_split,omitempty"`
+	Enabled             *bool                      `json:"enabled,omitempty"`
+	IntermediateReplies *IntermediateRepliesConfig `json:"intermediate_replies,omitempty"`
+	QuickAck            *QuickAckConfig            `json:"quick_ack,omitempty"`
+	FinalSplit          *FinalSplitConfig          `json:"final_split,omitempty"`
 }
 
 // QuickAckConfig controls one short acknowledgement before longer non-streaming runs.
@@ -13,7 +14,23 @@ type QuickAckConfig struct {
 	Enabled    *bool    `json:"enabled,omitempty"`
 	Mode       *string  `json:"mode,omitempty"`
 	MinDelayMs *int     `json:"min_delay_ms,omitempty"`
+	Provider   string   `json:"provider,omitempty"`
+	Model      string   `json:"model,omitempty"`
+	TimeoutMs  *int     `json:"timeout_ms,omitempty"`
+	MaxTokens  *int     `json:"max_tokens,omitempty"`
+	MaxChars   *int     `json:"max_chars,omitempty"`
 	Templates  []string `json:"templates,omitempty"`
+}
+
+// IntermediateRepliesConfig controls delivery-only progress messages during tool phases.
+type IntermediateRepliesConfig struct {
+	Enabled   *bool   `json:"enabled,omitempty"`
+	Mode      *string `json:"mode,omitempty"`
+	Provider  string  `json:"provider,omitempty"`
+	Model     string  `json:"model,omitempty"`
+	TimeoutMs *int    `json:"timeout_ms,omitempty"`
+	MaxTokens *int    `json:"max_tokens,omitempty"`
+	MaxChars  *int    `json:"max_chars,omitempty"`
 }
 
 // FinalSplitConfig controls semantic splitting of final channel replies.

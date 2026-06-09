@@ -1,21 +1,32 @@
 package channels
 
 import (
+	"encoding/json"
 	"strings"
+	"time"
 
 	"github.com/nextlevelbuilder/goclaw/internal/config"
 )
 
 const (
 	defaultQuickAckDelayMs = 1000
+	defaultDeliveryTimeout = 2500
+	defaultQuickAckTokens  = 40
+	defaultQuickAckChars   = 120
+	defaultProgressTokens  = 60
+	defaultProgressChars   = 180
 	defaultFinalSplitMin   = 1200
 	defaultFinalSplitMax   = 3
 	defaultFinalSplitDelay = 500
 	defaultAckTemplate     = "Got it. Working on it..."
 
 	QuickAckModeLLMGenerated  = "llm_generated"
+	QuickAckModeSidecar       = "sidecar_generated"
 	QuickAckModeFixedTemplate = "fixed_template"
 	QuickAckModeOff           = "off"
+
+	IntermediateModeSidecar = "sidecar_generated"
+	IntermediateModeOff     = "off"
 
 	QuickAckSourceGenerated = "generated"
 	QuickAckSourceTemplate  = "template"
@@ -23,16 +34,32 @@ const (
 )
 
 type ResolvedChatBehavior struct {
-	Enabled    bool
-	QuickAck   ResolvedQuickAckConfig
-	FinalSplit ResolvedFinalSplitConfig
+	Enabled             bool
+	IntermediateReplies ResolvedIntermediateRepliesConfig
+	QuickAck            ResolvedQuickAckConfig
+	FinalSplit          ResolvedFinalSplitConfig
 }
 
 type ResolvedQuickAckConfig struct {
 	Enabled    bool
 	Mode       string
 	MinDelayMs int
+	Provider   string
+	Model      string
+	Timeout    time.Duration
+	MaxTokens  int
+	MaxChars   int
 	Templates  []string
+}
+
+type ResolvedIntermediateRepliesConfig struct {
+	Enabled   bool
+	Mode      string
+	Provider  string
+	Model     string
+	Timeout   time.Duration
+	MaxTokens int
+	MaxChars  int
 }
 
 type ResolvedFinalSplitConfig struct {
@@ -67,10 +94,23 @@ type SplitPreview struct {
 }
 
 func ResolveChatBehavior(global, override *config.ChatBehaviorConfig) ResolvedChatBehavior {
+	return ResolveChatBehaviorWithAgent(global, nil, override)
+}
+
+func ResolveChatBehaviorWithAgent(global, agentOverride, channelOverride *config.ChatBehaviorConfig) ResolvedChatBehavior {
 	resolved := ResolvedChatBehavior{
+		IntermediateReplies: ResolvedIntermediateRepliesConfig{
+			Mode:      IntermediateModeSidecar,
+			Timeout:   time.Duration(defaultDeliveryTimeout) * time.Millisecond,
+			MaxTokens: defaultProgressTokens,
+			MaxChars:  defaultProgressChars,
+		},
 		QuickAck: ResolvedQuickAckConfig{
 			Mode:       QuickAckModeLLMGenerated,
 			MinDelayMs: defaultQuickAckDelayMs,
+			Timeout:    time.Duration(defaultDeliveryTimeout) * time.Millisecond,
+			MaxTokens:  defaultQuickAckTokens,
+			MaxChars:   defaultQuickAckChars,
 			Templates:  []string{defaultAckTemplate},
 		},
 		FinalSplit: ResolvedFinalSplitConfig{
@@ -80,8 +120,10 @@ func ResolveChatBehavior(global, override *config.ChatBehaviorConfig) ResolvedCh
 		},
 	}
 	applyChatBehavior(&resolved, global)
-	applyChatBehavior(&resolved, override)
+	applyChatBehavior(&resolved, agentOverride)
+	applyChatBehavior(&resolved, channelOverride)
 	if !resolved.Enabled {
+		resolved.IntermediateReplies.Enabled = false
 		resolved.QuickAck.Enabled = false
 		resolved.FinalSplit.Enabled = false
 	}
@@ -91,12 +133,89 @@ func ResolveChatBehavior(global, override *config.ChatBehaviorConfig) ResolvedCh
 	return resolved
 }
 
+func ParseAgentDeliveryBehaviorConfig(raw json.RawMessage) *config.ChatBehaviorConfig {
+	if len(raw) == 0 {
+		return nil
+	}
+	var envelope struct {
+		DeliveryBehavior *config.ChatBehaviorConfig `json:"delivery_behavior"`
+	}
+	if err := json.Unmarshal(raw, &envelope); err != nil {
+		return nil
+	}
+	return envelope.DeliveryBehavior
+}
+
+func ChatBehaviorConfigWithIntermediateDefault(src *config.ChatBehaviorConfig, enabled *bool) *config.ChatBehaviorConfig {
+	if enabled == nil {
+		return src
+	}
+	clone := cloneChatBehaviorConfig(src)
+	if clone == nil {
+		clone = &config.ChatBehaviorConfig{}
+	}
+	if *enabled && clone.Enabled == nil {
+		clone.Enabled = enabled
+	}
+	if clone.IntermediateReplies == nil {
+		clone.IntermediateReplies = &config.IntermediateRepliesConfig{}
+	}
+	if clone.IntermediateReplies.Enabled == nil {
+		clone.IntermediateReplies.Enabled = enabled
+	}
+	return clone
+}
+
+func cloneChatBehaviorConfig(src *config.ChatBehaviorConfig) *config.ChatBehaviorConfig {
+	if src == nil {
+		return nil
+	}
+	clone := *src
+	if src.IntermediateReplies != nil {
+		v := *src.IntermediateReplies
+		clone.IntermediateReplies = &v
+	}
+	if src.QuickAck != nil {
+		v := *src.QuickAck
+		v.Templates = append([]string(nil), src.QuickAck.Templates...)
+		clone.QuickAck = &v
+	}
+	if src.FinalSplit != nil {
+		v := *src.FinalSplit
+		clone.FinalSplit = &v
+	}
+	return &clone
+}
+
 func applyChatBehavior(dst *ResolvedChatBehavior, src *config.ChatBehaviorConfig) {
 	if src == nil {
 		return
 	}
 	if src.Enabled != nil {
 		dst.Enabled = *src.Enabled
+	}
+	if src.IntermediateReplies != nil {
+		if src.IntermediateReplies.Enabled != nil {
+			dst.IntermediateReplies.Enabled = *src.IntermediateReplies.Enabled
+		}
+		if src.IntermediateReplies.Mode != nil {
+			dst.IntermediateReplies.Mode = normalizeIntermediateMode(*src.IntermediateReplies.Mode)
+		}
+		if src.IntermediateReplies.Provider != "" {
+			dst.IntermediateReplies.Provider = strings.TrimSpace(src.IntermediateReplies.Provider)
+		}
+		if src.IntermediateReplies.Model != "" {
+			dst.IntermediateReplies.Model = strings.TrimSpace(src.IntermediateReplies.Model)
+		}
+		if src.IntermediateReplies.TimeoutMs != nil {
+			dst.IntermediateReplies.Timeout = time.Duration(max(0, *src.IntermediateReplies.TimeoutMs)) * time.Millisecond
+		}
+		if src.IntermediateReplies.MaxTokens != nil {
+			dst.IntermediateReplies.MaxTokens = max(1, *src.IntermediateReplies.MaxTokens)
+		}
+		if src.IntermediateReplies.MaxChars != nil {
+			dst.IntermediateReplies.MaxChars = max(1, *src.IntermediateReplies.MaxChars)
+		}
 	}
 	if src.QuickAck != nil {
 		if src.QuickAck.Enabled != nil {
@@ -107,6 +226,21 @@ func applyChatBehavior(dst *ResolvedChatBehavior, src *config.ChatBehaviorConfig
 		}
 		if src.QuickAck.MinDelayMs != nil {
 			dst.QuickAck.MinDelayMs = max(0, *src.QuickAck.MinDelayMs)
+		}
+		if src.QuickAck.Provider != "" {
+			dst.QuickAck.Provider = strings.TrimSpace(src.QuickAck.Provider)
+		}
+		if src.QuickAck.Model != "" {
+			dst.QuickAck.Model = strings.TrimSpace(src.QuickAck.Model)
+		}
+		if src.QuickAck.TimeoutMs != nil {
+			dst.QuickAck.Timeout = time.Duration(max(0, *src.QuickAck.TimeoutMs)) * time.Millisecond
+		}
+		if src.QuickAck.MaxTokens != nil {
+			dst.QuickAck.MaxTokens = max(1, *src.QuickAck.MaxTokens)
+		}
+		if src.QuickAck.MaxChars != nil {
+			dst.QuickAck.MaxChars = max(1, *src.QuickAck.MaxChars)
 		}
 		if len(src.QuickAck.Templates) > 0 {
 			dst.QuickAck.Templates = cleanTemplates(src.QuickAck.Templates)
@@ -160,7 +294,7 @@ func ShouldSendQuickAck(behavior ResolvedChatBehavior, streaming bool) bool {
 		return false
 	}
 	switch effectiveQuickAckMode(behavior.QuickAck.Mode) {
-	case QuickAckModeLLMGenerated, QuickAckModeFixedTemplate:
+	case QuickAckModeLLMGenerated, QuickAckModeSidecar, QuickAckModeFixedTemplate:
 		return true
 	default:
 		return false
@@ -169,9 +303,9 @@ func ShouldSendQuickAck(behavior ResolvedChatBehavior, streaming bool) bool {
 
 func ShouldDeliverGeneratedProgress(behavior ResolvedChatBehavior, streaming bool) bool {
 	return behavior.Enabled &&
-		behavior.QuickAck.Enabled &&
+		behavior.IntermediateReplies.Enabled &&
 		!streaming &&
-		effectiveQuickAckMode(behavior.QuickAck.Mode) == QuickAckModeLLMGenerated
+		effectiveIntermediateMode(behavior.IntermediateReplies.Mode) == IntermediateModeSidecar
 }
 
 func ShouldSuppressInitialBlockReply(behavior ResolvedChatBehavior, streaming bool) bool {
@@ -183,6 +317,8 @@ func ShouldSuppressInitialBlockReply(behavior ResolvedChatBehavior, streaming bo
 
 func normalizeQuickAckMode(mode string) string {
 	switch strings.TrimSpace(mode) {
+	case QuickAckModeLLMGenerated, QuickAckModeSidecar:
+		return strings.TrimSpace(mode)
 	case QuickAckModeFixedTemplate:
 		return QuickAckModeFixedTemplate
 	case QuickAckModeOff:
@@ -192,11 +328,29 @@ func normalizeQuickAckMode(mode string) string {
 	}
 }
 
+func normalizeIntermediateMode(mode string) string {
+	switch strings.TrimSpace(mode) {
+	case QuickAckModeLLMGenerated, IntermediateModeSidecar:
+		return IntermediateModeSidecar
+	case IntermediateModeOff:
+		return IntermediateModeOff
+	default:
+		return IntermediateModeSidecar
+	}
+}
+
 func effectiveQuickAckMode(mode string) string {
 	if strings.TrimSpace(mode) == "" {
 		return QuickAckModeLLMGenerated
 	}
 	return normalizeQuickAckMode(mode)
+}
+
+func effectiveIntermediateMode(mode string) string {
+	if strings.TrimSpace(mode) == "" {
+		return IntermediateModeSidecar
+	}
+	return normalizeIntermediateMode(mode)
 }
 
 func buildAckPreview(behavior ResolvedChatBehavior, streaming, hasToolCalls bool) AckPreview {

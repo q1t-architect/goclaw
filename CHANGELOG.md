@@ -6,6 +6,11 @@ All notable changes to GoClaw are documented here. For full documentation, see [
 
 ### Added
 
+- **Behavior UX sidecar delivery overrides** — Adds sidecar-generated Quick
+  Acknowledgement and Intermediate Replies with provider/model, timeout, token,
+  and char caps. Effective config resolves Channel > Agent > Workspace, with
+  agent overrides stored in `other_config.delivery_behavior`.
+
 - **Built-in skill `workspace-organizing`** — closes #71. Discipline skill that
   teaches agents to keep personal, team, and delegate workspaces tidy.
   Enforces a purpose-based folder convention with two modes: flat
@@ -40,10 +45,12 @@ All notable changes to GoClaw are documented here. For full documentation, see [
 
 ### Changed
 
-- **Config Behavior explanations** — Adds purpose tooltips for Tool Status
-  Messages, Intermediate Replies, and Quick Acknowledgement so admins can
-  distinguish debug progress, natural intermediate updates, and receipt-only
-  acknowledgement behavior in the web UI.
+- **Behavior UX simplification** — Retires user-facing Tool Status Messages and
+  deterministic tool-status channel text. Show Reasoning remains separate for
+  debugging/testing, while Quick Acknowledgement and Intermediate Replies are
+  delivery-only sidecar messages. Legacy `block_reply` config remains readable
+  as an inherited Intermediate Replies default but is no longer exposed as a
+  separate Web UI control.
 
 - **ChatGPT Subscription (OAuth)** — default model and backend-owned model catalog
   now prefer `gpt-5.5`, with reasoning metadata and context-window defaults updated
@@ -51,11 +58,14 @@ All notable changes to GoClaw are documented here. For full documentation, see [
 
 ### Fixed
 
-- **Intermediate Replies are model-generated** — Tool-call progress no longer
-  appends fixed "I'll use ..." text or emits synthetic fallback bubbles when the
-  model returns tool calls without assistant text. The system prompt now nudges
-  the model to write any short progress sentence naturally in the user's
-  language without mentioning internal tool names.
+- **Quick Acknowledgement generated mode** — Generated acknowledgements now use
+  the sidecar delivery generator instead of always falling back to fixed
+  templates. Sidecar failures stay non-blocking and fall back to templates.
+
+- **Intermediate Replies are sidecar-generated** — Tool-call progress no longer
+  appends fixed "I'll use ..." text or relies on main-pipeline assistant content.
+  Visible progress is generated from bounded delivery metadata and is kept out
+  of session history.
 
 - **Multi-attachment messages no longer trigger N agent replies (#63).**
   Three coalescing surfaces hardened so a single user action produces ONE

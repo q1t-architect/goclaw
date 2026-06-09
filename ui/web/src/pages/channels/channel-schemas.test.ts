@@ -22,6 +22,18 @@ describe("telegram configSchema", () => {
       reasoning_delivery: "always_bubbles",
     });
   });
+
+  it("exposes independent sidecar delivery overrides", () => {
+    const keys = new Set(telegramConfig.map((field) => field.key));
+    expect(keys.has("chat_behavior.intermediate_replies.enabled")).toBe(true);
+    expect(keys.has("chat_behavior.intermediate_replies.provider")).toBe(true);
+    expect(keys.has("chat_behavior.intermediate_replies.model")).toBe(true);
+    expect(keys.has("chat_behavior.quick_ack.provider")).toBe(true);
+    expect(keys.has("chat_behavior.quick_ack.model")).toBe(true);
+    const quickMode = telegramConfig.find((field) => field.key === "chat_behavior.quick_ack.mode")!;
+    expect(quickMode.help).not.toMatch(/main LLM block reply/i);
+    expect(quickMode.options!.map((option) => option.value)).toContain("sidecar_generated");
+  });
 });
 
 describe("pancake configSchema", () => {

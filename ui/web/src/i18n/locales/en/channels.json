@@ -346,10 +346,6 @@
     "media_max_mb": { "label": "Max Media Size (MB)" },
     "link_preview": { "label": "Link Preview" },
     "allow_from": { "label": "Allowed Users" },
-    "block_reply": {
-      "label": "Block Reply",
-      "help": "Deliver tool announcements and intermediate text around tool iterations"
-    },
     "domain": { "label": "Domain" },
     "connection_mode": {
       "label": "Connection Mode",
@@ -410,11 +406,6 @@
     }
   },
   "fieldOptions": {
-    "block_reply": {
-      "inherit": "Inherit from gateway",
-      "true": "Enabled",
-      "false": "Disabled"
-    },
     "dm_policy": {
       "pairing": "Pairing (require code)",
       "open": "Open (accept all)",

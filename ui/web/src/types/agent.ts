@@ -52,6 +52,24 @@ export interface ContextPruningConfig {
   };
 }
 
+export interface DeliveryGeneratorConfig {
+  enabled?: boolean;
+  mode?: "sidecar_generated" | "llm_generated" | "fixed_template" | "off";
+  provider?: string;
+  model?: string;
+  timeout_ms?: number;
+  max_tokens?: number;
+  max_chars?: number;
+  min_delay_ms?: number;
+  templates?: string[];
+}
+
+export interface DeliveryBehaviorConfig {
+  enabled?: boolean;
+  intermediate_replies?: DeliveryGeneratorConfig;
+  quick_ack?: DeliveryGeneratorConfig;
+}
+
 export interface SandboxConfig {
   mode?: "off" | "non-main" | "all";
   image?: string;

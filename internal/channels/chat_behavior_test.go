@@ -63,14 +63,116 @@ func TestResolveChatBehavior_DefaultQuickAckModeIsLLMGenerated(t *testing.T) {
 	if got.QuickAck.Mode != QuickAckModeLLMGenerated {
 		t.Fatalf("QuickAck.Mode = %q, want %q", got.QuickAck.Mode, QuickAckModeLLMGenerated)
 	}
-	if !ShouldDeliverGeneratedProgress(got, false) {
-		t.Fatal("generated progress disabled for non-streaming llm_generated mode")
+	if ShouldDeliverGeneratedProgress(got, false) {
+		t.Fatal("generated progress coupled to quick ack; want independent intermediate_replies gate")
 	}
 	if !ShouldSendQuickAck(got, false) {
 		t.Fatal("fallback quick ack disabled for non-streaming llm_generated mode")
 	}
 	if got.QuickAck.Templates[0] != "Fallback." {
 		t.Fatalf("fallback template = %q, want configured fallback", got.QuickAck.Templates[0])
+	}
+}
+
+func TestResolveChatBehavior_IntermediateRepliesIndependentFromQuickAck(t *testing.T) {
+	mode := IntermediateModeSidecar
+	global := &config.ChatBehaviorConfig{
+		Enabled: new(true),
+		IntermediateReplies: &config.IntermediateRepliesConfig{
+			Enabled: new(true),
+			Mode:    &mode,
+		},
+		QuickAck: &config.QuickAckConfig{Enabled: new(false), Templates: []string{"Fallback."}},
+	}
+
+	got := ResolveChatBehavior(global, nil)
+
+	if !ShouldDeliverGeneratedProgress(got, false) {
+		t.Fatal("intermediate replies disabled when quick ack is off")
+	}
+	if ShouldSendQuickAck(got, false) {
+		t.Fatal("quick ack enabled despite explicit false")
+	}
+}
+
+func TestResolveChatBehaviorWithAgent_ChannelBeatsAgentBeatsWorkspace(t *testing.T) {
+	global := &config.ChatBehaviorConfig{
+		Enabled: new(true),
+		IntermediateReplies: &config.IntermediateRepliesConfig{
+			Enabled:  new(false),
+			Provider: "workspace-provider",
+		},
+		QuickAck: &config.QuickAckConfig{Enabled: new(false), Provider: "workspace-provider"},
+	}
+	agentOverride := &config.ChatBehaviorConfig{
+		IntermediateReplies: &config.IntermediateRepliesConfig{
+			Enabled:  new(true),
+			Provider: "agent-provider",
+		},
+		QuickAck: &config.QuickAckConfig{Enabled: new(true), Provider: "agent-provider"},
+	}
+	channelOverride := &config.ChatBehaviorConfig{
+		QuickAck: &config.QuickAckConfig{Enabled: new(false), Provider: "channel-provider"},
+	}
+
+	got := ResolveChatBehaviorWithAgent(global, agentOverride, channelOverride)
+
+	if !got.IntermediateReplies.Enabled || got.IntermediateReplies.Provider != "agent-provider" {
+		t.Fatalf("intermediate = %+v, want agent override", got.IntermediateReplies)
+	}
+	if got.QuickAck.Enabled || got.QuickAck.Provider != "channel-provider" {
+		t.Fatalf("quick ack = %+v, want channel override", got.QuickAck)
+	}
+}
+
+func TestChatBehaviorConfigWithIntermediateDefault_UsesLegacyBlockReplyOnlyWhenUnset(t *testing.T) {
+	legacyEnabled := true
+	explicitDisabled := false
+	base := &config.ChatBehaviorConfig{
+		IntermediateReplies: &config.IntermediateRepliesConfig{Enabled: &explicitDisabled},
+	}
+
+	got := ChatBehaviorConfigWithIntermediateDefault(base, &legacyEnabled)
+	if got.IntermediateReplies == nil || got.IntermediateReplies.Enabled == nil || *got.IntermediateReplies.Enabled {
+		t.Fatalf("intermediate enabled = %#v, want explicit false to win", got.IntermediateReplies)
+	}
+	if base.IntermediateReplies.Enabled == nil || *base.IntermediateReplies.Enabled {
+		t.Fatalf("mutated source config = %#v", base.IntermediateReplies)
+	}
+
+	got = ChatBehaviorConfigWithIntermediateDefault(nil, &legacyEnabled)
+	if got == nil || got.IntermediateReplies == nil || got.IntermediateReplies.Enabled == nil || !*got.IntermediateReplies.Enabled {
+		t.Fatalf("legacy default not applied: %#v", got)
+	}
+	if got.Enabled == nil || !*got.Enabled {
+		t.Fatalf("legacy block_reply=true did not enable chat behavior: %#v", got)
+	}
+}
+
+func TestResolveChatBehaviorWithAgent_ChannelBlockReplySeedsIntermediateDefault(t *testing.T) {
+	global := &config.ChatBehaviorConfig{Enabled: new(true)}
+	globalBlockReply := true
+	channelBlockReply := false
+	mgr := NewManager(bus.New())
+	mgr.RegisterChannel("test", &chatBehaviorTestChannel{name: "test", blockReply: &channelBlockReply})
+
+	got := mgr.ResolveChatBehaviorWithAgent("test", ChatBehaviorConfigWithIntermediateDefault(global, &globalBlockReply), nil)
+
+	if got.IntermediateReplies.Enabled {
+		t.Fatalf("intermediate enabled = true, want legacy channel block_reply=false to win")
+	}
+}
+
+func TestParseAgentDeliveryBehaviorConfig(t *testing.T) {
+	raw := []byte(`{"unrelated":true,"delivery_behavior":{"enabled":true,"quick_ack":{"enabled":true,"provider":"groq"},"intermediate_replies":{"enabled":false}}}`)
+
+	got := ParseAgentDeliveryBehaviorConfig(raw)
+
+	if got == nil || got.QuickAck == nil || got.QuickAck.Provider != "groq" {
+		t.Fatalf("agent delivery behavior = %#v, want quick ack provider", got)
+	}
+	if got.IntermediateReplies == nil || got.IntermediateReplies.Enabled == nil || *got.IntermediateReplies.Enabled {
+		t.Fatalf("intermediate override = %#v, want enabled=false", got.IntermediateReplies)
 	}
 }
 
@@ -232,8 +334,9 @@ func TestManagerResolveChatBehavior_UsesChannelOverride(t *testing.T) {
 }
 
 type chatBehaviorTestChannel struct {
-	name     string
-	behavior *config.ChatBehaviorConfig
+	name       string
+	behavior   *config.ChatBehaviorConfig
+	blockReply *bool
 }
 
 func (c *chatBehaviorTestChannel) Name() string                                    { return c.name }
@@ -244,3 +347,4 @@ func (c *chatBehaviorTestChannel) Send(context.Context, bus.OutboundMessage) err
 func (c *chatBehaviorTestChannel) IsRunning() bool                                 { return true }
 func (c *chatBehaviorTestChannel) IsAllowed(string) bool                           { return true }
 func (c *chatBehaviorTestChannel) ChatBehaviorConfig() *config.ChatBehaviorConfig  { return c.behavior }
+func (c *chatBehaviorTestChannel) BlockReplyEnabled() *bool                        { return c.blockReply }

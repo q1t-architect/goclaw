@@ -38,6 +38,7 @@ type RunContext struct {
 	BlockReplyEnabled    bool              // whether block.reply delivery is enabled for this run (resolved at RegisterRun time)
 	ToolStatusEnabled    bool              // whether tool name shows in streaming preview during tool execution
 	ChatBehavior         ResolvedChatBehavior
+	Delivery             DeliveryRuntime
 	ReasoningDelivery    ResolvedReasoningDelivery
 	mu                   sync.Mutex
 	ackTimer             *time.Timer

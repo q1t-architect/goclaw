@@ -242,14 +242,17 @@ func processNormalMessage(
 	if lk := msg.Metadata["local_key"]; lk != "" {
 		chatIDForRun = lk
 	}
-	blockReply := deps.ChannelMgr != nil && deps.ChannelMgr.ResolveBlockReply(msg.Channel, deps.Cfg.Gateway.BlockReply)
 	chatBehavior := channels.ResolvedChatBehavior{}
 	if deps.ChannelMgr != nil {
-		chatBehavior = deps.ChannelMgr.ResolveChatBehavior(msg.Channel, deps.Cfg.Gateway.ChatBehavior)
+		workspaceBehavior := channels.ChatBehaviorConfigWithIntermediateDefault(deps.Cfg.Gateway.ChatBehavior, deps.Cfg.Gateway.BlockReply)
+		agentBehavior := channels.ParseAgentDeliveryBehaviorConfig(agentLoop.OtherConfig())
+		chatBehavior = deps.ChannelMgr.ResolveChatBehaviorWithAgent(msg.Channel, workspaceBehavior, agentBehavior)
 	}
+	blockReply := deps.ChannelMgr != nil && chatBehavior.IntermediateReplies.Enabled
+	deliveryRuntime := buildDeliveryRuntime(ctx, deps, agentLoop, chatBehavior, msg, peerKind, resolveChannelType(deps.ChannelMgr, msg.Channel), agentID)
 	toolStatus := deps.Cfg.Gateway.ToolStatus == nil || *deps.Cfg.Gateway.ToolStatus // default true
 	if deps.ChannelMgr != nil {
-		deps.ChannelMgr.RegisterRunWithBehavior(runID, msg.Channel, chatIDForRun, messageID, outMeta, msg.TenantID, channelStream, blockReply, toolStatus, chatBehavior, reasoningDelivery)
+		deps.ChannelMgr.RegisterRunWithDelivery(runID, msg.Channel, chatIDForRun, messageID, outMeta, msg.TenantID, channelStream, blockReply, toolStatus, chatBehavior, deliveryRuntime, reasoningDelivery)
 	}
 
 	// Group-aware system prompt: help the LLM adapt tone and behavior for group chats.
@@ -606,6 +609,60 @@ func processNormalMessage(
 			go autoSetFollowup(ctx, deps.TeamStore, deps.AgentStore, agentKey, channel, chatID, replyContent)
 		}
 	}(agentID, msg.Channel, msg.ChatID, sessionKey, runID, peerKind, msg.Content, outMeta, blockReply, chatBehavior, channelStream, ptd, msg.TenantID, agentLoop.UUID(), agentLoop.OtherConfig())
+}
+
+func buildDeliveryRuntime(ctx context.Context, deps *ConsumerDeps, agentLoop agent.Agent, behavior channels.ResolvedChatBehavior, msg bus.InboundMessage, peerKind, channelType, agentKey string) channels.DeliveryRuntime {
+	locale := msg.Metadata["locale"]
+	if locale == "" {
+		locale = "auto"
+	}
+	runtime := channels.DeliveryRuntime{
+		Locale:    locale,
+		Inbound:   msg.Content,
+		PeerKind:  peerKind,
+		Channel:   channelType,
+		AgentName: agentKey,
+	}
+	if behavior.Enabled && behavior.QuickAck.Enabled {
+		switch behavior.QuickAck.Mode {
+		case channels.QuickAckModeLLMGenerated, channels.QuickAckModeSidecar, "":
+			runtime.QuickAckGenerator = buildDeliveryGenerator(ctx, deps, agentLoop, msg.TenantID, behavior.QuickAck.Provider, behavior.QuickAck.Model)
+		}
+	}
+	if behavior.Enabled && behavior.IntermediateReplies.Enabled {
+		switch behavior.IntermediateReplies.Mode {
+		case channels.IntermediateModeSidecar, channels.QuickAckModeLLMGenerated, "":
+			runtime.ProgressGenerator = buildDeliveryGenerator(ctx, deps, agentLoop, msg.TenantID, behavior.IntermediateReplies.Provider, behavior.IntermediateReplies.Model)
+		}
+	}
+	return runtime
+}
+
+func buildDeliveryGenerator(ctx context.Context, deps *ConsumerDeps, agentLoop agent.Agent, tenantID uuid.UUID, providerName, model string) channels.DeliveryMessageGenerator {
+	provider := agentLoop.Provider()
+	resolvedProviderName := agentLoop.ProviderName()
+	if providerName != "" && deps.ProviderReg != nil {
+		if p, err := deps.ProviderReg.Get(ctx, providerName); err == nil {
+			provider = p
+			resolvedProviderName = providerName
+		} else {
+			slog.Warn("channel delivery: configured provider unavailable, falling back to agent provider", "provider", providerName, "error", err)
+		}
+	}
+	if provider == nil {
+		return nil
+	}
+	if model == "" {
+		model = agentLoop.Model()
+	}
+	return channels.ProviderDeliveryMessageGenerator{
+		Provider:     provider,
+		ProviderName: resolvedProviderName,
+		Model:        model,
+		UsageCaps:    deps.UsageCaps,
+		TenantID:     tenantID,
+		AgentID:      agentLoop.UUID(),
+	}
 }
 
 // isSafeBitrixEntityToken validates a webhook-sourced Bitrix entity token before

@@ -309,7 +309,6 @@
     "media_max_mb": { "label": "Kích thước media tối đa (MB)" },
     "link_preview": { "label": "Xem trước liên kết" },
     "allow_from": { "label": "Người dùng được phép" },
-    "block_reply": { "label": "Phản hồi khối", "help": "Gửi thông báo dùng công cụ và văn bản trung gian quanh các vòng gọi công cụ" },
     "domain": { "label": "Tên miền" },
     "connection_mode": { "label": "Chế độ kết nối", "help": "WebSocket không cần IP công khai — chỉ kết nối ra ngoài" },
     "webhook_port": { "label": "Cổng webhook", "help": "0 = chia sẻ cổng gateway chính (khuyến nghị)" },
@@ -337,11 +336,6 @@
     }
   },
   "fieldOptions": {
-    "block_reply": {
-      "inherit": "Kế thừa từ gateway",
-      "true": "Bật",
-      "false": "Tắt"
-    },
     "dm_policy": {
       "pairing": "Ghép nối (yêu cầu mã)",
       "open": "Mở (chấp nhận tất cả)",

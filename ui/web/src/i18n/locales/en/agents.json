@@ -1121,6 +1121,20 @@
     "changeFile": "Change File",
     "startImport": "Start Import"
   },
+  "delivery": {
+    "title": "Delivery Behavior",
+    "description": "Agent-level override for Quick Acknowledgement and Intermediate Replies. Channel settings still win over this.",
+    "inherit": "Inherit",
+    "custom": "Custom",
+    "quickAck": "Quick acknowledgement",
+    "intermediate": "Intermediate replies",
+    "provider": "Provider",
+    "providerPlaceholder": "Use agent provider",
+    "model": "Model",
+    "modelPlaceholder": "Use agent model",
+    "quickAckDelay": "Ack delay (ms)",
+    "timeoutMs": "Timeout (ms)"
+  },
   "toast": {
     "created": "Agent created",
     "createFailed": "Failed to create agent",
