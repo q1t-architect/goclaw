@@ -48,7 +48,7 @@ export interface ChatBehaviorValues {
 }
 
 interface PreviewResponse {
-  ack?: { shouldSend?: boolean; content?: string; fallbackContent?: string; source?: string };
+  ack?: { shouldSend?: boolean; content?: string; source?: string };
   split?: { parts?: string[] };
 }
 
@@ -94,6 +94,7 @@ export function BehaviorChatCard({ value, onChange }: Props) {
     patch({ intermediate_replies: { ...(value.intermediate_replies ?? {}), ...updates } });
   const patchSplit = (updates: NonNullable<ChatBehaviorValues["final_split"]>) =>
     patch({ final_split: { ...(value.final_split ?? {}), ...updates } });
+  const quickAckMode = value.quick_ack?.mode ?? "llm_generated";
 
   return (
     <Card>
@@ -129,7 +130,7 @@ export function BehaviorChatCard({ value, onChange }: Props) {
             <div className="grid gap-1.5">
               <Label htmlFor="chat-behavior-ack-mode">{t("behavior.quickAckMode")}</Label>
               <Select
-                value={value.quick_ack?.mode ?? "llm_generated"}
+                value={quickAckMode}
                 onValueChange={(mode) => patchAck({ mode: mode as QuickAckMode })}
                 disabled={!value.enabled}
               >
@@ -172,17 +173,19 @@ export function BehaviorChatCard({ value, onChange }: Props) {
               <NumberField label={t("behavior.maxTokens")} value={value.quick_ack?.max_tokens ?? 40} disabled={!value.enabled} onChange={(max_tokens) => patchAck({ max_tokens })} />
               <NumberField label={t("behavior.maxChars")} value={value.quick_ack?.max_chars ?? 120} disabled={!value.enabled} onChange={(max_chars) => patchAck({ max_chars })} />
             </div>
-            <div className="grid gap-1.5">
-              <Label htmlFor="chat-behavior-ack-templates">{t("behavior.quickAckTemplates")}</Label>
-              <Textarea
-                id="chat-behavior-ack-templates"
-                className="text-base md:text-sm"
-                rows={3}
-                value={templatesText}
-                onChange={(e) => patchAck({ templates: e.target.value.split("\n").map((v) => v.trim()).filter(Boolean) })}
-                disabled={!value.enabled}
-              />
-            </div>
+            {quickAckMode === "fixed_template" ? (
+              <div className="grid gap-1.5">
+                <Label htmlFor="chat-behavior-ack-templates">{t("behavior.quickAckTemplates")}</Label>
+                <Textarea
+                  id="chat-behavior-ack-templates"
+                  className="text-base md:text-sm"
+                  rows={3}
+                  value={templatesText}
+                  onChange={(e) => patchAck({ templates: e.target.value.split("\n").map((v) => v.trim()).filter(Boolean) })}
+                  disabled={!value.enabled}
+                />
+              </div>
+            ) : null}
           </div>
 
           <div className="space-y-3 rounded-md border p-3">
@@ -272,7 +275,7 @@ function formatAckPreview(preview: PreviewResponse | null, t: (key: string, opti
   const ack = preview?.ack;
   if (!ack?.shouldSend) return t("behavior.previewNoAck");
   if (ack.source === "generated") {
-    return t("behavior.previewGeneratedAck", { fallback: ack.fallbackContent ?? "" });
+    return t("behavior.previewGeneratedAck");
   }
   return `${t("behavior.previewAck")}: ${ack.content ?? ""}`;
 }

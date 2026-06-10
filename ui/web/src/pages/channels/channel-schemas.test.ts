@@ -33,7 +33,9 @@ describe("telegram configSchema", () => {
     expect(keys.has("chat_behavior.quick_ack.model")).toBe(true);
     const quickMode = telegramConfig.find((field) => field.key === "chat_behavior.quick_ack.mode")!;
     expect(quickMode.help).not.toMatch(/main LLM block reply/i);
+    expect(quickMode.help).not.toMatch(/fallback/i);
     expect(quickMode.options!.map((option) => option.value)).toContain("sidecar_generated");
+    expect(quickMode.options!.map((option) => option.label).join(" ")).not.toMatch(/fallback/i);
   });
 
   it("groups delivery provider and model fields for dropdown rendering", () => {

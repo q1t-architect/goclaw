@@ -4,6 +4,7 @@ import (
 	"context"
 	"reflect"
 	"testing"
+	"time"
 
 	"github.com/nextlevelbuilder/goclaw/internal/bus"
 	"github.com/nextlevelbuilder/goclaw/internal/config"
@@ -122,6 +123,103 @@ func TestResolveChatBehaviorWithAgent_ChannelBeatsAgentBeatsWorkspace(t *testing
 	}
 	if got.QuickAck.Enabled || got.QuickAck.Provider != "channel-provider" {
 		t.Fatalf("quick ack = %+v, want channel override", got.QuickAck)
+	}
+}
+
+func TestResolveChatBehaviorWithAgent_FieldLevelPrecedence(t *testing.T) {
+	quickMode := QuickAckModeSidecar
+	fixedMode := QuickAckModeFixedTemplate
+	intermediateMode := IntermediateModeSidecar
+	offMode := IntermediateModeOff
+	global := &config.ChatBehaviorConfig{
+		Enabled: new(true),
+		IntermediateReplies: &config.IntermediateRepliesConfig{
+			Enabled:   new(false),
+			Mode:      &offMode,
+			Provider:  "global-intermediate-provider",
+			Model:     "global-intermediate-model",
+			TimeoutMs: new(1000),
+			MaxTokens: new(10),
+			MaxChars:  new(100),
+		},
+		QuickAck: &config.QuickAckConfig{
+			Enabled:    new(false),
+			Mode:       &fixedMode,
+			MinDelayMs: new(100),
+			Provider:   "global-ack-provider",
+			Model:      "global-ack-model",
+			TimeoutMs:  new(1100),
+			MaxTokens:  new(11),
+			MaxChars:   new(111),
+			Templates:  []string{"global template"},
+		},
+	}
+	agentOverride := &config.ChatBehaviorConfig{
+		IntermediateReplies: &config.IntermediateRepliesConfig{
+			Enabled:   new(true),
+			Mode:      &intermediateMode,
+			Provider:  "agent-intermediate-provider",
+			Model:     "agent-intermediate-model",
+			TimeoutMs: new(2000),
+			MaxTokens: new(20),
+			MaxChars:  new(200),
+		},
+		QuickAck: &config.QuickAckConfig{
+			Enabled:    new(true),
+			Mode:       &quickMode,
+			MinDelayMs: new(200),
+			Provider:   "agent-ack-provider",
+			Model:      "agent-ack-model",
+			TimeoutMs:  new(2200),
+			MaxTokens:  new(22),
+			MaxChars:   new(222),
+			Templates:  []string{"agent template"},
+		},
+	}
+	channelOverride := &config.ChatBehaviorConfig{
+		IntermediateReplies: &config.IntermediateRepliesConfig{
+			Provider:  "channel-intermediate-provider",
+			TimeoutMs: new(3000),
+		},
+		QuickAck: &config.QuickAckConfig{
+			Enabled:    new(false),
+			Model:      "channel-ack-model",
+			MaxTokens:  new(33),
+			MinDelayMs: new(300),
+		},
+	}
+
+	got := ResolveChatBehaviorWithAgent(global, agentOverride, channelOverride)
+
+	if !got.Enabled {
+		t.Fatal("Enabled = false, want global enabled")
+	}
+	if !got.IntermediateReplies.Enabled {
+		t.Fatal("Intermediate enabled = false, want agent override true")
+	}
+	if got.IntermediateReplies.Mode != IntermediateModeSidecar {
+		t.Fatalf("Intermediate mode = %q, want agent sidecar", got.IntermediateReplies.Mode)
+	}
+	if got.IntermediateReplies.Provider != "channel-intermediate-provider" || got.IntermediateReplies.Model != "agent-intermediate-model" {
+		t.Fatalf("Intermediate provider/model = %q/%q, want channel provider + agent model", got.IntermediateReplies.Provider, got.IntermediateReplies.Model)
+	}
+	if got.IntermediateReplies.Timeout != 3*time.Second || got.IntermediateReplies.MaxTokens != 20 || got.IntermediateReplies.MaxChars != 200 {
+		t.Fatalf("Intermediate limits = %+v, want channel timeout + agent token/char limits", got.IntermediateReplies)
+	}
+	if got.QuickAck.Enabled {
+		t.Fatal("QuickAck enabled = true, want channel override false")
+	}
+	if got.QuickAck.Mode != QuickAckModeSidecar {
+		t.Fatalf("QuickAck mode = %q, want agent sidecar", got.QuickAck.Mode)
+	}
+	if got.QuickAck.Provider != "agent-ack-provider" || got.QuickAck.Model != "channel-ack-model" {
+		t.Fatalf("QuickAck provider/model = %q/%q, want agent provider + channel model", got.QuickAck.Provider, got.QuickAck.Model)
+	}
+	if got.QuickAck.MinDelayMs != 300 || got.QuickAck.Timeout != 2200*time.Millisecond || got.QuickAck.MaxTokens != 33 || got.QuickAck.MaxChars != 222 {
+		t.Fatalf("QuickAck limits = %+v, want merged channel/agent limits", got.QuickAck)
+	}
+	if !reflect.DeepEqual(got.QuickAck.Templates, []string{"agent template"}) {
+		t.Fatalf("QuickAck templates = %#v, want agent template", got.QuickAck.Templates)
 	}
 }
 
@@ -274,7 +372,7 @@ func TestPreviewChatBehavior_NoSideEffects(t *testing.T) {
 	}
 }
 
-func TestPreviewChatBehavior_GeneratedModeReportsFallback(t *testing.T) {
+func TestPreviewChatBehavior_GeneratedModeReportsLLMOnly(t *testing.T) {
 	global := &config.ChatBehaviorConfig{
 		Enabled:  new(true),
 		QuickAck: &config.QuickAckConfig{Enabled: new(true), Templates: []string{"Fallback."}},
@@ -289,12 +387,12 @@ func TestPreviewChatBehavior_GeneratedModeReportsFallback(t *testing.T) {
 	if !got.Ack.ShouldSend || got.Ack.Mode != QuickAckModeLLMGenerated || got.Ack.Source != QuickAckSourceGenerated {
 		t.Fatalf("Ack preview = %+v, want generated-first send decision", got.Ack)
 	}
-	if got.Ack.Content != "" || got.Ack.FallbackContent != "Fallback." {
-		t.Fatalf("Ack preview content/fallback = %q/%q, want empty/Fallback.", got.Ack.Content, got.Ack.FallbackContent)
+	if got.Ack.Content != "" {
+		t.Fatalf("Ack preview content = %q, want empty value for generated mode", got.Ack.Content)
 	}
 }
 
-func TestPreviewChatBehavior_GeneratedModeWithoutToolCallsReportsTemplateFallback(t *testing.T) {
+func TestPreviewChatBehavior_GeneratedModeWithoutToolCallsStillReportsLLMOnly(t *testing.T) {
 	global := &config.ChatBehaviorConfig{
 		Enabled:  new(true),
 		QuickAck: &config.QuickAckConfig{Enabled: new(true), Templates: []string{"Fallback."}},
@@ -306,11 +404,11 @@ func TestPreviewChatBehavior_GeneratedModeWithoutToolCallsReportsTemplateFallbac
 		HasToolCalls: false,
 	})
 
-	if !got.Ack.ShouldSend || got.Ack.Mode != QuickAckModeLLMGenerated || got.Ack.Source != QuickAckSourceTemplate {
-		t.Fatalf("Ack preview = %+v, want template fallback decision", got.Ack)
+	if !got.Ack.ShouldSend || got.Ack.Mode != QuickAckModeLLMGenerated || got.Ack.Source != QuickAckSourceGenerated {
+		t.Fatalf("Ack preview = %+v, want generated send decision", got.Ack)
 	}
-	if got.Ack.Content != "Fallback." || got.Ack.FallbackContent != "" {
-		t.Fatalf("Ack preview content/fallback = %q/%q, want Fallback./empty", got.Ack.Content, got.Ack.FallbackContent)
+	if got.Ack.Content != "" {
+		t.Fatalf("Ack preview content = %q, want empty value for generated mode", got.Ack.Content)
 	}
 }
 

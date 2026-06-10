@@ -82,11 +82,10 @@ type ChatBehaviorPreview struct {
 }
 
 type AckPreview struct {
-	ShouldSend      bool   `json:"shouldSend"`
-	Content         string `json:"content,omitempty"`
-	FallbackContent string `json:"fallbackContent,omitempty"`
-	Mode            string `json:"mode,omitempty"`
-	Source          string `json:"source,omitempty"`
+	ShouldSend bool   `json:"shouldSend"`
+	Content    string `json:"content,omitempty"`
+	Mode       string `json:"mode,omitempty"`
+	Source     string `json:"source,omitempty"`
 }
 
 type SplitPreview struct {
@@ -353,7 +352,7 @@ func effectiveIntermediateMode(mode string) string {
 	return normalizeIntermediateMode(mode)
 }
 
-func buildAckPreview(behavior ResolvedChatBehavior, streaming, hasToolCalls bool) AckPreview {
+func buildAckPreview(behavior ResolvedChatBehavior, streaming, _ bool) AckPreview {
 	mode := effectiveQuickAckMode(behavior.QuickAck.Mode)
 	preview := AckPreview{Mode: mode}
 	if !behavior.Enabled || !behavior.QuickAck.Enabled || streaming {
@@ -364,23 +363,17 @@ func buildAckPreview(behavior ResolvedChatBehavior, streaming, hasToolCalls bool
 		preview.Source = QuickAckSourceOff
 		return preview
 	}
-	if len(behavior.QuickAck.Templates) == 0 {
-		return preview
-	}
 	if mode == QuickAckModeFixedTemplate {
+		if len(behavior.QuickAck.Templates) == 0 {
+			return preview
+		}
 		preview.ShouldSend = true
 		preview.Source = QuickAckSourceTemplate
 		preview.Content = behavior.QuickAck.Templates[0]
 		return preview
 	}
 	preview.ShouldSend = true
-	if hasToolCalls {
-		preview.Source = QuickAckSourceGenerated
-		preview.FallbackContent = behavior.QuickAck.Templates[0]
-		return preview
-	}
-	preview.Source = QuickAckSourceTemplate
-	preview.Content = behavior.QuickAck.Templates[0]
+	preview.Source = QuickAckSourceGenerated
 	return preview
 }
 

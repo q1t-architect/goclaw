@@ -339,6 +339,7 @@ function DeliveryBehaviorSection({
             onModel={(model) => patchQuick({ model })}
           />
           <NumberField label={t("delivery.quickAckDelay")} value={value.quick_ack?.min_delay_ms ?? 1000} disabled={disabled} onChange={(min_delay_ms) => patchQuick({ min_delay_ms })} />
+          <NumberField label={t("delivery.timeoutMs")} value={value.quick_ack?.timeout_ms ?? 2500} disabled={disabled} onChange={(timeout_ms) => patchQuick({ timeout_ms })} />
         </div>
         <div className="space-y-3">
           <div className="flex items-center justify-between gap-3">

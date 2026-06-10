@@ -29,8 +29,8 @@ const inheritToggleOptions = [
 
 const quickAckModeOptions = [
   { value: "inherit", label: "Inherit from gateway" },
-  { value: "sidecar_generated", label: "Sidecar-generated with fallback" },
-  { value: "llm_generated", label: "Legacy generated with fallback" },
+  { value: "sidecar_generated", label: "Sidecar-generated" },
+  { value: "llm_generated", label: "LLM-generated" },
   { value: "fixed_template", label: "Fixed template" },
   { value: "off", label: "Off" },
 ];
@@ -45,7 +45,7 @@ const chatBehaviorOverrideFields: FieldDef[] = [
   { key: "chat_behavior.intermediate_replies.max_tokens", label: "Intermediate Max Tokens", type: "number", defaultValue: 60 },
   { key: "chat_behavior.intermediate_replies.max_chars", label: "Intermediate Max Chars", type: "number", defaultValue: 180 },
   { key: "chat_behavior.quick_ack.enabled", label: "Quick Acknowledgement", type: "select", options: inheritToggleOptions, defaultValue: "inherit", help: "Override quick acknowledgement for this channel." },
-  { key: "chat_behavior.quick_ack.mode", label: "Quick Ack Mode", type: "select", options: quickAckModeOptions, defaultValue: "inherit", help: "Generated acknowledgement uses a sidecar provider/model; templates are fallback only." },
+  { key: "chat_behavior.quick_ack.mode", label: "Quick Ack Mode", type: "select", options: quickAckModeOptions, defaultValue: "inherit", help: "Generated acknowledgement uses the configured sidecar provider/model. Fixed template mode is the only mode that sends template text." },
   { key: "chat_behavior.quick_ack.provider", label: "Quick Ack Provider", type: "text", placeholder: "Use agent provider", help: "Optional cheap provider for quick acknowledgements." },
   { key: "chat_behavior.quick_ack.model", label: "Quick Ack Model", type: "text", placeholder: "Use agent model" },
   { key: "chat_behavior.quick_ack.timeout_ms", label: "Quick Ack Timeout (ms)", type: "number", defaultValue: 2500 },

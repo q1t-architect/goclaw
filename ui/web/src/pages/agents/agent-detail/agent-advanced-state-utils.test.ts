@@ -44,8 +44,8 @@ describe("agent advanced delivery behavior payload", () => {
   it("saves custom delivery behavior without overwriting unrelated other_config", () => {
     const deliveryBehavior: DeliveryBehaviorConfig = {
       enabled: true,
-      intermediate_replies: { enabled: true, mode: "sidecar_generated", provider: "groq" },
-      quick_ack: { enabled: true, mode: "sidecar_generated", provider: "groq" },
+      intermediate_replies: { enabled: true, mode: "sidecar_generated", provider: "groq", model: "llama-progress", timeout_ms: 5000 },
+      quick_ack: { enabled: true, mode: "sidecar_generated", provider: "groq", model: "llama-ack", timeout_ms: 3500 },
     };
 
     const payload = buildPayload("custom", deliveryBehavior);

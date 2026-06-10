@@ -2,6 +2,7 @@ package channels
 
 import (
 	"context"
+	"errors"
 	"testing"
 	"time"
 
@@ -162,7 +163,7 @@ func TestHandleAgentEvent_ToolStatusMessagesRetired(t *testing.T) {
 	}
 }
 
-func TestHandleAgentEvent_GeneratedModeFallsBackWithoutBlockReply(t *testing.T) {
+func TestHandleAgentEvent_GeneratedQuickAckDoesNotUseTemplateWithoutGenerator(t *testing.T) {
 	behavior := ResolvedChatBehavior{
 		Enabled: true,
 		QuickAck: ResolvedQuickAckConfig{
@@ -180,14 +181,10 @@ func TestHandleAgentEvent_GeneratedModeFallsBackWithoutBlockReply(t *testing.T) 
 
 	mgr.HandleAgentEvent(protocol.AgentEventRunStarted, "run-1", nil)
 
-	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), 25*time.Millisecond)
 	defer cancel()
-	got, ok := mb.SubscribeOutbound(ctx)
-	if !ok {
-		t.Fatal("expected fallback quick acknowledgement")
-	}
-	if got.Content != "Fallback." {
-		t.Fatalf("fallback content = %q, want Fallback.", got.Content)
+	if got, ok := mb.SubscribeOutbound(ctx); ok {
+		t.Fatalf("generated quick ack used template without generator: %+v", got)
 	}
 }
 
@@ -200,7 +197,6 @@ func TestHandleAgentEvent_GeneratedQuickAckUsesSidecarGenerator(t *testing.T) {
 			MinDelayMs: 0,
 			MaxTokens:  20,
 			MaxChars:   80,
-			Templates:  []string{"Fallback."},
 		},
 	}
 
@@ -223,6 +219,70 @@ func TestHandleAgentEvent_GeneratedQuickAckUsesSidecarGenerator(t *testing.T) {
 	}
 	if got.Content != "Mình nhận rồi, để mình xử lý." {
 		t.Fatalf("quick ack content = %q, want generated content", got.Content)
+	}
+}
+
+func TestHandleAgentEvent_GeneratedQuickAckDoesNotUseTemplateWhenGeneratorFails(t *testing.T) {
+	behavior := ResolvedChatBehavior{
+		Enabled: true,
+		QuickAck: ResolvedQuickAckConfig{
+			Enabled:    true,
+			Mode:       QuickAckModeSidecar,
+			MinDelayMs: 0,
+			MaxTokens:  20,
+			MaxChars:   120,
+			Templates:  []string{defaultAckTemplate},
+		},
+	}
+
+	mb := bus.New()
+	mgr := NewManager(mb)
+	mgr.RegisterChannel("test", &chatBehaviorTestChannel{name: "test"})
+	mgr.RegisterRunWithDelivery("run-1", "test", "chat-1", "msg-1", nil, uuid.Nil, false, false, true, behavior, DeliveryRuntime{
+		QuickAckGenerator: fakeDeliveryGenerator{err: errors.New("sidecar timeout")},
+		Inbound:           "kiểm tra giúp tôi",
+		Locale:            "vi",
+	})
+
+	mgr.HandleAgentEvent(protocol.AgentEventRunStarted, "run-1", nil)
+
+	ctx, cancel := context.WithTimeout(context.Background(), 25*time.Millisecond)
+	defer cancel()
+	if got, ok := mb.SubscribeOutbound(ctx); ok {
+		t.Fatalf("generated quick ack used template after generator failure: %+v", got)
+	}
+}
+
+func TestHandleAgentEvent_IntermediateProgressDoesNotUseFallbackWhenGeneratorFails(t *testing.T) {
+	behavior := ResolvedChatBehavior{
+		Enabled: true,
+		IntermediateReplies: ResolvedIntermediateRepliesConfig{
+			Enabled:   true,
+			Mode:      IntermediateModeSidecar,
+			MaxTokens: 20,
+			MaxChars:  120,
+		},
+		QuickAck: ResolvedQuickAckConfig{
+			Enabled: false,
+		},
+	}
+
+	mb := bus.New()
+	mgr := NewManager(mb)
+	mgr.RegisterChannel("test", &chatBehaviorTestChannel{name: "test"})
+	mgr.RegisterRunWithDelivery("run-1", "test", "chat-1", "msg-1", map[string]string{"local_key": "chat-1/topic"}, uuid.Nil, false, false, true, behavior, DeliveryRuntime{
+		ProgressGenerator: fakeDeliveryGenerator{err: errors.New("sidecar timeout")},
+		Inbound:           "kiểm tra giúp tôi",
+		Locale:            "vi",
+	})
+
+	mgr.HandleAgentEvent(protocol.AgentEventRunStarted, "run-1", nil)
+	mgr.HandleAgentEvent(protocol.AgentEventToolCall, "run-1", map[string]string{"name": "skill_search"})
+
+	ctx, cancel := context.WithTimeout(context.Background(), 25*time.Millisecond)
+	defer cancel()
+	if got, ok := mb.SubscribeOutbound(ctx); ok {
+		t.Fatalf("intermediate progress used fallback after generator failure: %+v", got)
 	}
 }
 

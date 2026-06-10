@@ -464,21 +464,44 @@ func (m *Manager) cancelQuickAck(rc *RunContext) {
 
 func (m *Manager) sendQuickAck(rc *RunContext) {
 	rc.mu.Lock()
-	if rc.ackCancelled || rc.ackSent || rc.blockReplySent || !ShouldSendQuickAck(rc.ChatBehavior, rc.Streaming) || len(rc.ChatBehavior.QuickAck.Templates) == 0 {
+	if rc.ackCancelled || rc.ackSent || rc.blockReplySent || !ShouldSendQuickAck(rc.ChatBehavior, rc.Streaming) {
 		rc.mu.Unlock()
 		return
 	}
-	content := rc.ChatBehavior.QuickAck.Templates[0]
 	mode := effectiveQuickAckMode(rc.ChatBehavior.QuickAck.Mode)
 	generator := rc.Delivery.QuickAckGenerator
 	request := rc.deliveryRequestLocked(DeliveryPurposeQuickAck, "")
+	templates := append([]string(nil), rc.ChatBehavior.QuickAck.Templates...)
 	rc.ackSent = true
 	rc.ackTimer = nil
 	rc.mu.Unlock()
 
-	if generator != nil && (mode == QuickAckModeLLMGenerated || mode == QuickAckModeSidecar) {
-		if generated, err := generator.GenerateDeliveryMessage(context.Background(), request); err == nil && generated != "" {
-			content = generated
+	content := ""
+	if mode == QuickAckModeLLMGenerated || mode == QuickAckModeSidecar {
+		if generator == nil {
+			slog.Warn("channel delivery quick ack generator unavailable",
+				"channel", rc.ChannelName, "purpose", request.Purpose)
+			return
+		}
+		generated, err := generator.GenerateDeliveryMessage(context.Background(), request)
+		if err != nil {
+			slog.Warn("channel delivery quick ack generation failed",
+				"channel", rc.ChannelName, "purpose", request.Purpose, "error", err)
+			return
+		}
+		if generated == "" {
+			slog.Warn("channel delivery quick ack generation empty",
+				"channel", rc.ChannelName, "purpose", request.Purpose)
+			return
+		}
+		content = generated
+	} else {
+		if len(templates) == 0 {
+			return
+		}
+		content = sanitizeDeliveryMessage(templates[0], request.MaxChars)
+		if content == "" {
+			return
 		}
 	}
 
@@ -508,12 +531,21 @@ func (m *Manager) sendIntermediateProgress(rc *RunContext, toolName string) {
 	request := rc.deliveryRequestLocked(DeliveryPurposeProgress, toolName)
 	rc.mu.Unlock()
 
+	content := ""
 	if generator == nil {
+		slog.Warn("channel delivery progress generator unavailable",
+			"channel", rc.ChannelName, "purpose", request.Purpose)
 		return
-	}
-	content, err := generator.GenerateDeliveryMessage(context.Background(), request)
-	if err != nil || content == "" {
+	} else if generated, err := generator.GenerateDeliveryMessage(context.Background(), request); err != nil {
+		slog.Warn("channel delivery progress generation failed",
+			"channel", rc.ChannelName, "purpose", request.Purpose, "error", err)
 		return
+	} else if generated == "" {
+		slog.Warn("channel delivery progress generation empty",
+			"channel", rc.ChannelName, "purpose", request.Purpose)
+		return
+	} else {
+		content = generated
 	}
 
 	rc.mu.Lock()
