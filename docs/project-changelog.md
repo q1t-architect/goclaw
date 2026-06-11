@@ -4,6 +4,25 @@ Significant changes, features, and fixes in reverse chronological order.
 
 ---
 
+## 2026-06-11
+
+### Secure CLI GitHub credential runtime diagnostics (issues #138, #151)
+
+**Fixes**
+
+- Git remote commands now fail closed before raw `git` auth prompts when no
+  typed host-scoped PAT/SSH credential is selected.
+- Required SecureCLI env validation now applies to preset env vars such as
+  `GH_TOKEN`, so credentialed `gh` commands report missing credential config
+  instead of raw `gh auth login` guidance.
+
+**Tests**
+
+- Added regressions for `git push` without typed credentials and `gh` without
+  `GH_TOKEN`.
+
+---
+
 ## 2026-06-09
 
 ### Behavior UX sidecar delivery overrides (issue #144)
