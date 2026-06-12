@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"log/slog"
+	"strings"
 	"time"
 
 	"github.com/google/uuid"
@@ -58,6 +59,9 @@ func (l *Loop) makeExecuteToolCall(req *RunRequest, bridgeRS *runState) func(ctx
 
 		// v3 evolution metrics: record tool execution non-blocking (best-effort).
 		l.recordToolMetric(ctx, req.SessionKey, registryName, !result.IsError, toolDuration)
+		if registryName == "use_skill" {
+			l.recordSkillUsageFromTool(ctx, req, tc, result, toolDuration)
+		}
 
 		toolMsg, warningMsgs, action := l.processToolResult(ctx, bridgeRS, req, emitRun, tc, registryName, result, state.Context.HadBootstrap)
 		syncBridgeToState(bridgeRS, state, action)
@@ -168,6 +172,9 @@ func (l *Loop) makeProcessToolResult(req *RunRequest, bridgeRS *runState) func(c
 
 		// Record tool metrics (non-blocking, best-effort).
 		l.recordToolMetric(ctx, req.SessionKey, registryName, !result.IsError, dur)
+		if registryName == "use_skill" {
+			l.recordSkillUsageFromTool(ctx, req, tc, result, dur)
+		}
 
 		toolMsg, warningMsgs, action := l.processToolResult(ctx, bridgeRS, req, emitRun, tc, registryName, result, state.Context.HadBootstrap)
 		syncBridgeToState(bridgeRS, state, action)
@@ -242,6 +249,68 @@ func (l *Loop) recordToolMetric(ctx context.Context, sessionKey, toolName string
 			Value:      value,
 		}); err != nil {
 			slog.Debug("evolution.metric.record_failed", "tool", toolName, "error", err)
+		}
+	}()
+}
+
+func (l *Loop) recordSkillUsageFromTool(ctx context.Context, req *RunRequest, tc providers.ToolCall, result *tools.Result, duration time.Duration) {
+	name, _ := tc.Arguments["name"].(string)
+	name = strings.TrimSpace(name)
+	if name == "" {
+		return
+	}
+	status := store.SkillUsageStatusSucceeded
+	reason := ""
+	if result != nil && result.IsError {
+		status = store.SkillUsageStatusFailed
+		reason = strings.TrimSpace(result.ForLLM)
+		if len(reason) > 500 {
+			reason = reason[:500]
+		}
+	}
+	l.recordSkillUsage(ctx, req, name, tc.ID, "use_skill", status, reason, duration)
+}
+
+func (l *Loop) recordSkillUsage(ctx context.Context, req *RunRequest, skillName, invocationID, source, status, reason string, duration time.Duration) {
+	if l.skillEvolutionStore == nil || l.skillStore == nil {
+		return
+	}
+	info, ok := l.skillStore.GetSkill(ctx, skillName)
+	if !ok || info == nil || info.ID == "" {
+		return
+	}
+	skillID, err := uuid.Parse(info.ID)
+	if err != nil {
+		return
+	}
+	tenantID := store.TenantIDFromContext(ctx)
+	if tenantID == uuid.Nil {
+		tenantID = l.tenantID
+	}
+	metric := store.SkillUsageMetric{
+		ID:               uuid.New(),
+		SkillID:          skillID,
+		SkillSlug:        info.Slug,
+		SkillVersion:     info.Version,
+		AgentID:          l.agentUUID,
+		InvocationID:     invocationID,
+		InvocationSource: source,
+		Status:           status,
+		FailureReason:    reason,
+		DurationMs:       duration.Milliseconds(),
+	}
+	if req != nil {
+		metric.UserID = req.UserID
+		metric.SessionKey = req.SessionKey
+		if req.RunID != "" {
+			metric.TraceID = req.RunID
+		}
+	}
+	go func() {
+		bgCtx, cancel := context.WithTimeout(store.WithTenantID(context.Background(), tenantID), 5*time.Second)
+		defer cancel()
+		if err := l.skillEvolutionStore.RecordUsage(bgCtx, metric); err != nil {
+			slog.Debug("skill.metric.record_failed", "skill", skillName, "source", source, "error", err)
 		}
 	}()
 }

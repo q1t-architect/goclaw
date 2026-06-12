@@ -362,7 +362,62 @@ All endpoints require authentication (`authMiddleware`). Mutation endpoints requ
 | `POST` | `/v1/skills/install-deps` | Install all missing deps |
 | `GET` | `/v1/skills/runtimes` | Check python3/node availability |
 
-### 3.5 WebSocket RPC
+### 3.5 Skill Self-Evolution
+
+Skill self-evolution tracks how each existing skill performs over time. It is
+separate from agent-level `skill_evolve`, which teaches agents when to create or
+patch reusable skills.
+
+**Runtime recording**
+
+- `use_skill` tool calls record tenant-scoped usage with status `succeeded` or
+  `failed`, duration, session key, run/trace ID, agent ID, and user scope.
+- Slash-command activation records a `started` event when `/<slug>` or
+  `/use <skill>` resolves to a skill.
+- Usage writes are internal only. v1 intentionally has no public
+  `POST /v1/skills/{id}/usage` endpoint, so clients cannot forge success rates.
+
+**Persistent tables**
+
+| Table | Purpose |
+|-------|---------|
+| `skill_evolution_settings` | Per-tenant, per-skill enabled flag and mode |
+| `skill_usage_metrics` | Runtime usage events and status counts |
+| `skill_improvement_suggestions` | Skill-scoped suggestions with evidence and draft patches |
+| `skill_versions` | Immutable applied-version records linked to changed files and suggestions |
+
+**HTTP and CLI controls**
+
+- HTTP: `GET/PATCH /v1/skills/{id}/evolution`,
+  `GET /v1/skills/{id}/metrics`,
+  `GET /v1/skills/{id}/activity`, and suggestion approve/reject/apply endpoints.
+- CLI: `goclaw skills evolve`, `goclaw skills metrics`,
+  `goclaw skills suggestions`, and `goclaw skills activity`.
+- Web UI: Skill detail has an `evolution` tab for settings, metrics,
+  suggestions, and admin-visible activity.
+
+**Guardrails**
+
+- Default mode is `suggest_only`; no automatic patching happens in v1.
+- Applying a suggestion to a custom skill copies the current skill directory to
+  the next version, validates the target path, runs the SKILL.md guard scanner
+  when needed, updates the active skill, records `skill_versions`, and writes an
+  activity log entry.
+- System/bundled skill mutation is refused by the apply path.
+- Viewer surfaces are sanitized. Failure evidence, draft patches, actor IDs,
+  and activity details require admin visibility.
+
+**Relationship to self-improving skills**
+
+This v1 is the control-plane foundation for self-improving skills: runtime usage
+events, evidence-backed suggestions, reference-file patches, version records,
+and approval/audit surfaces. It does not yet run a consolidation extractor that
+turns repeated corrections into learning notes or auto-applies user-scoped
+reference overlays. That higher-level learning loop belongs above this
+foundation and must keep scope separation, private-content filtering, evidence
+thresholds, and owner/admin approval policies explicit.
+
+### 3.6 WebSocket RPC
 
 | Method | Description |
 |--------|-------------|
@@ -370,7 +425,7 @@ All endpoints require authentication (`authMiddleware`). Mutation endpoints requ
 | `skills.get` | Get skill content by name |
 | `skills.update` | Update metadata (ownership-protected) |
 
-### 3.6 Grants & Visibility
+### 3.7 Grants & Visibility
 
 ```mermaid
 stateDiagram-v2

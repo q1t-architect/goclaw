@@ -24,6 +24,33 @@ Significant changes, features, and fixes in reverse chronological order.
 - Added command/client regressions for gateway URL and token overrides, trace
   query serialization, follow scope validation, and timeline run ID handling.
 
+### Skill self-evolution metrics and upgrades (issue #161, issue #142 foundation)
+
+**Features**
+
+- Added per-skill self-evolution settings, usage metrics, suggestions, immutable
+  applied-version records, and activity logs.
+- Added trusted runtime usage recording for `use_skill` and slash skill
+  activations without exposing a public usage-write endpoint.
+- Added skill evolution HTTP, CLI, and Web UI surfaces for settings, metrics,
+  suggestions, approval/apply actions, and admin-visible activity.
+- Added the shared foundation needed by self-improving skills: usage evidence,
+  reference-file patches, versioned apply, and approval/audit surfaces. The
+  consolidation learning extractor and auto user-scoped overlays remain out of
+  this v1 scope.
+
+**Safety**
+
+- Blocked direct system skill mutation in the suggestion apply path.
+- Reused a shared target-path validator for skill companion/reference patches.
+- Sanitized failure evidence, draft patches, actor IDs, and activity details
+  away from non-admin surfaces.
+
+**Tests**
+
+- Added focused skill path validator coverage and deep-link coverage for the new
+  Web UI evolution tab.
+
 ### Skill lifecycle API and CLI (issue #159)
 
 **Changes**

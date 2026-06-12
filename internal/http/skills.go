@@ -36,10 +36,17 @@ type SkillsHandler struct {
 	msgBus         *bus.MessageBus
 	tenantCfgStore store.SkillTenantConfigStore
 	tenantStore    store.TenantStore
+	evolutionStore store.SkillEvolutionStore
+	activityStore  store.ActivityStore
 	db             *sql.DB  // for export/import direct queries
 	uploadLocks    sync.Map // per-slug mutex; bounded by validated slug set, entries are tiny (*sync.Mutex)
 	uploadLimitCfg config.SkillsConfig
 	systemConfigs  store.SystemConfigStore
+}
+
+func (h *SkillsHandler) SetEvolutionStore(evolution store.SkillEvolutionStore, activity store.ActivityStore) {
+	h.evolutionStore = evolution
+	h.activityStore = activity
 }
 
 // NewSkillsHandler creates a handler for skill management endpoints.
@@ -88,10 +95,19 @@ func (h *SkillsHandler) RegisterRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("GET /v1/skills/{id}/versions", h.authMiddleware(h.handleListVersions))
 	mux.HandleFunc("GET /v1/skills/{id}/files/{path...}", h.authMiddleware(h.handleReadFile))
 	mux.HandleFunc("GET /v1/skills/{id}/files", h.authMiddleware(h.handleListFiles))
+	mux.HandleFunc("GET /v1/skills/{id}/evolution", h.authMiddleware(h.handleGetEvolution))
+	mux.HandleFunc("GET /v1/skills/{id}/metrics", h.authMiddleware(h.handleGetSkillMetrics))
+	mux.HandleFunc("GET /v1/skills/{id}/activity", h.adminMiddleware(h.handleGetSkillActivity))
+	mux.HandleFunc("GET /v1/skills/{id}/evolution/suggestions", h.authMiddleware(h.handleListSkillSuggestions))
 	// Skill writes (admin+)
 	mux.HandleFunc("POST /v1/skills/upload", h.adminMiddleware(h.handleUpload))
 	mux.HandleFunc("PUT /v1/skills/{id}", h.adminMiddleware(h.handleUpdate))
 	mux.HandleFunc("DELETE /v1/skills/{id}", h.adminMiddleware(h.handleDelete))
+	mux.HandleFunc("PATCH /v1/skills/{id}/evolution", h.tenantAdminMiddleware(h.handlePatchEvolution))
+	mux.HandleFunc("POST /v1/skills/{id}/evolution/suggestions", h.tenantAdminMiddleware(h.handleCreateSkillSuggestion))
+	mux.HandleFunc("POST /v1/skills/{id}/evolution/suggestions/{suggestionID}/approve", h.tenantAdminMiddleware(h.handleApproveSkillSuggestion))
+	mux.HandleFunc("POST /v1/skills/{id}/evolution/suggestions/{suggestionID}/reject", h.tenantAdminMiddleware(h.handleRejectSkillSuggestion))
+	mux.HandleFunc("POST /v1/skills/{id}/evolution/suggestions/{suggestionID}/apply", h.tenantAdminMiddleware(h.handleApplySkillSuggestion))
 	mux.HandleFunc("GET /v1/skills/{id}/dependencies", h.adminMiddleware(h.handleSkillDependenciesStatus))
 	mux.HandleFunc("POST /v1/skills/{id}/dependencies/scan", h.adminMiddleware(h.handleSkillDependenciesStatus))
 	mux.HandleFunc("POST /v1/skills/{id}/dependencies/check", h.adminMiddleware(h.handleSkillDependenciesStatus))
@@ -136,6 +152,19 @@ func (h *SkillsHandler) authMiddleware(next http.HandlerFunc) http.HandlerFunc {
 // (rescan deps, install packages, toggle skills) that affect the entire server.
 func (h *SkillsHandler) adminMiddleware(next http.HandlerFunc) http.HandlerFunc {
 	return requireAuth(permissions.RoleAdmin, next)
+}
+
+func (h *SkillsHandler) tenantAdminMiddleware(next http.HandlerFunc) http.HandlerFunc {
+	return h.adminMiddleware(func(w http.ResponseWriter, r *http.Request) {
+		if store.IsMasterScope(r.Context()) {
+			next(w, r)
+			return
+		}
+		if !requireTenantAdmin(w, r, h.tenantStore) {
+			return
+		}
+		next(w, r)
+	})
 }
 
 // requireMasterTenant rejects requests from non-master tenants.

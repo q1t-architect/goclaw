@@ -141,9 +141,17 @@ func init() {
 		MsgCannotRemoveLastWriter:  "cannot remove the last file writer",
 
 		// Skills
-		MsgSkillsUpdateNotSupported: "skills.update not supported for file-based skills",
-		MsgCannotResolveSkillID:     "cannot resolve skill ID for file-based skill",
-		MsgInvalidVisibility:        "invalid visibility %q: must be one of private, public",
+		MsgSkillsUpdateNotSupported:    "skills.update not supported for file-based skills",
+		MsgCannotResolveSkillID:        "cannot resolve skill ID for file-based skill",
+		MsgInvalidVisibility:           "invalid visibility %q: must be one of private, public",
+		MsgSkillEvolutionNotConfigured: "skill evolution store is not configured",
+		MsgActivityStoreNotConfigured:  "activity store is not configured",
+		MsgInvalidEvolutionMode:        "invalid evolution mode",
+		MsgSystemSkillMutationBlocked:  "system skill mutation is blocked",
+		MsgSuggestionMustBeApproved:    "suggestion must be approved before apply",
+		MsgInvalidDraftPatch:           "invalid draft_patch: %s",
+		MsgDraftPatchRequired:          "draft_patch requires content or find/replace",
+		MsgFindTextNotFound:            "find text not found in target file",
 
 		// Logs
 		MsgInvalidLogAction: "action must be 'start' or 'stop'",

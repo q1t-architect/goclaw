@@ -141,9 +141,17 @@ func init() {
 		MsgCannotRemoveLastWriter:  "không thể xóa người quản lý cuối cùng",
 
 		// Skills
-		MsgSkillsUpdateNotSupported: "skills.update không được hỗ trợ với skill dựa trên tệp",
-		MsgCannotResolveSkillID:     "không thể xác định ID skill dựa trên tệp",
-		MsgInvalidVisibility:        "visibility không hợp lệ %q: phải là private hoặc public",
+		MsgSkillsUpdateNotSupported:    "skills.update không được hỗ trợ với skill dựa trên tệp",
+		MsgCannotResolveSkillID:        "không thể xác định ID skill dựa trên tệp",
+		MsgInvalidVisibility:           "visibility không hợp lệ %q: phải là private hoặc public",
+		MsgSkillEvolutionNotConfigured: "kho lưu skill evolution chưa được cấu hình",
+		MsgActivityStoreNotConfigured:  "kho lưu activity chưa được cấu hình",
+		MsgInvalidEvolutionMode:        "evolution mode không hợp lệ",
+		MsgSystemSkillMutationBlocked:  "không được phép sửa skill hệ thống",
+		MsgSuggestionMustBeApproved:    "phải duyệt suggestion trước khi apply",
+		MsgInvalidDraftPatch:           "draft_patch không hợp lệ: %s",
+		MsgDraftPatchRequired:          "draft_patch cần content hoặc find/replace",
+		MsgFindTextNotFound:            "không tìm thấy đoạn cần thay trong tệp đích",
 
 		// Logs
 		MsgInvalidLogAction: "action phải là 'start' hoặc 'stop'",

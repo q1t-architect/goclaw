@@ -329,6 +329,36 @@ Use `direct_selection_count` plus the `selected_provider` sequence to verify rea
 | `PUT` | `/v1/skills/{id}/tenant-config` | Set tenant-level skill config |
 | `DELETE` | `/v1/skills/{id}/tenant-config` | Delete tenant-level skill config |
 
+### Skill Self-Evolution
+
+Skill self-evolution is tenant-scoped and off by default per skill. Usage
+metrics are written only by trusted runtime paths such as `use_skill` tool
+execution and slash-command activation. There is no public usage-write endpoint.
+
+| Method | Path | Description |
+|--------|------|-------------|
+| `GET` | `/v1/skills/{id}/evolution` | Read self-evolution settings for a skill |
+| `PATCH` | `/v1/skills/{id}/evolution` | Update enabled state or mode |
+| `GET` | `/v1/skills/{id}/metrics` | Read aggregate usage metrics and status counts |
+| `GET` | `/v1/skills/{id}/activity` | Read admin-only skill evolution activity |
+| `GET` | `/v1/skills/{id}/evolution/suggestions` | List skill-scoped improvement suggestions |
+| `POST` | `/v1/skills/{id}/evolution/suggestions` | Create a suggestion with evidence and draft patch |
+| `POST` | `/v1/skills/{id}/evolution/suggestions/{suggestionID}/approve` | Approve a suggestion |
+| `POST` | `/v1/skills/{id}/evolution/suggestions/{suggestionID}/reject` | Reject a suggestion |
+| `POST` | `/v1/skills/{id}/evolution/suggestions/{suggestionID}/apply` | Apply an approved suggestion to a new skill version |
+
+Supported modes:
+
+| Mode | Behavior |
+|------|----------|
+| `suggest_only` | Collect metrics and manage suggestions; no automatic patching |
+| `auto_analyze` | Reserved for analysis automation; patch application still requires explicit approval |
+
+Viewer/operator callers can read aggregate metrics. Raw activity details,
+actor IDs, failure evidence, draft patches, and suggestion apply actions remain
+admin-controlled. System skill mutation is blocked; custom skill suggestions
+write a new versioned directory and `skill_versions` record when applied.
+
 ### Skill Grants
 
 Skill upload size is enforced per ZIP file. The effective limit resolves in this order:

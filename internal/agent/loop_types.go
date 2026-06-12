@@ -254,6 +254,10 @@ type Loop struct {
 	// v3 evolution metrics store (nil = disabled)
 	evolutionMetricsStore store.EvolutionMetricsStore
 
+	// Skill self-evolution metrics store (nil = disabled)
+	skillEvolutionStore store.SkillEvolutionStore
+	skillStore          store.SkillStore
+
 	// User identity resolver: maps channel contacts to merged tenant users for credential lookups.
 	userResolver UserIdentityResolver
 
@@ -454,6 +458,10 @@ type LoopConfig struct {
 	// V3 evolution metrics store for recording tool/retrieval/feedback metrics
 	EvolutionMetricsStore store.EvolutionMetricsStore
 
+	// Skill self-evolution metrics store for use_skill/slash activation metrics
+	SkillEvolutionStore store.SkillEvolutionStore
+	SkillStore          store.SkillStore
+
 	// User identity resolver for credential lookups (maps channel contacts → tenant users)
 	UserResolver UserIdentityResolver
 }
@@ -586,6 +594,8 @@ func NewLoop(cfg LoopConfig) *Loop {
 		orchMode:               cfg.OrchMode,
 		delegateTargets:        cfg.DelegateTargets,
 		evolutionMetricsStore:  cfg.EvolutionMetricsStore,
+		skillEvolutionStore:    cfg.SkillEvolutionStore,
+		skillStore:             cfg.SkillStore,
 		userResolver:           cfg.UserResolver,
 	}
 }

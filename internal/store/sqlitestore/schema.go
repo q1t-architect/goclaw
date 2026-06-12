@@ -16,7 +16,7 @@ var schemaSQL string
 
 // SchemaVersion is the current SQLite schema version.
 // Bump this when adding new migration steps below.
-const SchemaVersion = 47
+const SchemaVersion = 48
 
 // migrations maps version → SQL to apply when upgrading FROM that version.
 // schema.sql always represents the LATEST full schema (for fresh DBs).
@@ -848,7 +848,97 @@ DROP TABLE skill_user_grants;
 ALTER TABLE skill_user_grants_new RENAME TO skill_user_grants;
 CREATE INDEX IF NOT EXISTS idx_skill_user_grants_user ON skill_user_grants(user_id);
 CREATE INDEX IF NOT EXISTS idx_skill_user_grants_tenant ON skill_user_grants(tenant_id);`,
+	// Version 47 → 48: skill self-evolution settings, metrics, suggestions, and immutable version records.
+	47: addSkillSelfEvolutionTables,
 }
+
+const addSkillSelfEvolutionTables = `
+CREATE TABLE IF NOT EXISTS skill_evolution_settings (
+    tenant_id        TEXT NOT NULL REFERENCES tenants(id) ON DELETE CASCADE,
+    skill_id         TEXT NOT NULL REFERENCES skills(id) ON DELETE CASCADE,
+    enabled          INTEGER NOT NULL DEFAULT 0,
+    mode             VARCHAR(32) NOT NULL DEFAULT 'suggest_only',
+    last_analyzed_at TEXT,
+    created_at       TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+    updated_at       TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+    PRIMARY KEY (tenant_id, skill_id),
+    CHECK (mode IN ('suggest_only', 'auto_analyze'))
+);
+CREATE INDEX IF NOT EXISTS idx_skill_evolution_settings_skill ON skill_evolution_settings(skill_id);
+
+CREATE TABLE IF NOT EXISTS skill_usage_metrics (
+    id                TEXT PRIMARY KEY,
+    tenant_id         TEXT NOT NULL REFERENCES tenants(id) ON DELETE CASCADE,
+    skill_id          TEXT NOT NULL REFERENCES skills(id) ON DELETE CASCADE,
+    skill_slug        VARCHAR(255) NOT NULL,
+    skill_version     INTEGER NOT NULL DEFAULT 1,
+    agent_id          TEXT,
+    user_id           VARCHAR(255),
+    session_key       TEXT,
+    trace_id          TEXT,
+    invocation_id     TEXT,
+    invocation_source VARCHAR(32) NOT NULL DEFAULT 'runtime',
+    status            VARCHAR(32) NOT NULL DEFAULT 'started',
+    failure_reason    TEXT,
+    tool_calls_count  INTEGER NOT NULL DEFAULT 0,
+    duration_ms       INTEGER NOT NULL DEFAULT 0,
+    created_at        TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+    CHECK (status IN ('started', 'succeeded', 'failed', 'abandoned'))
+);
+CREATE INDEX IF NOT EXISTS idx_skill_usage_metrics_skill_created ON skill_usage_metrics(skill_id, created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_skill_usage_metrics_tenant_created ON skill_usage_metrics(tenant_id, created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_skill_usage_metrics_status ON skill_usage_metrics(skill_id, status, created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_skill_usage_metrics_invocation ON skill_usage_metrics(invocation_id);
+
+CREATE TABLE IF NOT EXISTS skill_improvement_suggestions (
+    id                     TEXT PRIMARY KEY,
+    tenant_id              TEXT NOT NULL REFERENCES tenants(id) ON DELETE CASCADE,
+    skill_id               TEXT NOT NULL REFERENCES skills(id) ON DELETE CASCADE,
+    skill_slug             VARCHAR(255) NOT NULL,
+    suggestion_type        VARCHAR(64) NOT NULL,
+    status                 VARCHAR(32) NOT NULL DEFAULT 'pending',
+    reason                 TEXT NOT NULL DEFAULT '',
+    evidence               TEXT NOT NULL DEFAULT '{}',
+    draft_patch            TEXT NOT NULL DEFAULT '{}',
+    target_file            TEXT NOT NULL DEFAULT '',
+    created_by_actor_type  VARCHAR(32) NOT NULL DEFAULT '',
+    created_by_actor_id    VARCHAR(255) NOT NULL DEFAULT '',
+    reviewed_by_actor_type VARCHAR(32) NOT NULL DEFAULT '',
+    reviewed_by_actor_id   VARCHAR(255) NOT NULL DEFAULT '',
+    reviewed_at            TEXT,
+    applied_version        INTEGER,
+    created_at             TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+    updated_at             TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+    CHECK (status IN ('pending', 'approved', 'rejected', 'applied'))
+);
+CREATE INDEX IF NOT EXISTS idx_skill_suggestions_skill_status_created ON skill_improvement_suggestions(skill_id, status, created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_skill_suggestions_tenant_created ON skill_improvement_suggestions(tenant_id, created_at DESC);
+
+CREATE TABLE IF NOT EXISTS skill_versions (
+    id                         TEXT PRIMARY KEY,
+    tenant_id                  TEXT NOT NULL REFERENCES tenants(id) ON DELETE CASCADE,
+    skill_id                   TEXT NOT NULL REFERENCES skills(id) ON DELETE CASCADE,
+    version                    INTEGER NOT NULL,
+    content_hash               VARCHAR(64) NOT NULL DEFAULT '',
+    changed_files              TEXT NOT NULL DEFAULT '[]',
+    created_by_actor_type      VARCHAR(32) NOT NULL DEFAULT '',
+    created_by_actor_id        VARCHAR(255) NOT NULL DEFAULT '',
+    created_from_suggestion_id TEXT REFERENCES skill_improvement_suggestions(id) ON DELETE SET NULL,
+    created_at                 TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+    UNIQUE(skill_id, version)
+);
+CREATE INDEX IF NOT EXISTS idx_skill_versions_tenant_skill ON skill_versions(tenant_id, skill_id, version DESC);
+
+INSERT OR IGNORE INTO skill_versions (
+    id, tenant_id, skill_id, version, content_hash, changed_files,
+    created_by_actor_type, created_by_actor_id, created_at
+)
+SELECT lower(hex(randomblob(4))) || '-' || lower(hex(randomblob(2))) || '-' || lower(hex(randomblob(2))) || '-' ||
+       lower(hex(randomblob(2))) || '-' || lower(hex(randomblob(6))),
+       tenant_id, id, version, COALESCE(file_hash, ''), '[]',
+       'system', 'migration', COALESCE(created_at, strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
+FROM skills
+WHERE status != 'deleted';`
 
 const addChannelMemoryExtractionTables = `
 CREATE TABLE IF NOT EXISTS channel_memory_extraction_runs (

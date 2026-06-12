@@ -951,6 +951,9 @@ func (s *skillManageStoreStub) seedCustomSkill(slug, dir, status string, missing
 
 func (s *skillManageStoreStub) seedCustomSkillForTenant(tenantID uuid.UUID, slug, dir, status string, missing []string) uuid.UUID {
 	id := uuid.New()
+	if s.nextBySlug[slug] < 1 {
+		s.nextBySlug[slug] = 1
+	}
 	s.skills[id] = store.SkillInfo{
 		ID:          id.String(),
 		TenantID:    tenantID.String(),
@@ -1057,6 +1060,16 @@ func (s *skillManageStoreStub) UpdateSkill(ctx context.Context, id uuid.UUID, up
 	}
 	if visibility, ok := updates["visibility"].(string); ok {
 		skill.Visibility = visibility
+	}
+	if version, ok := updates["version"].(int); ok {
+		skill.Version = version
+		if version > s.nextBySlug[skill.Slug] {
+			s.nextBySlug[skill.Slug] = version
+		}
+	}
+	if filePath, ok := updates["file_path"].(string); ok {
+		skill.BaseDir = filePath
+		skill.Path = filepath.Join(filePath, "SKILL.md")
 	}
 	s.lastUpdates[id] = maps.Clone(updates)
 	s.skills[id] = skill
@@ -1242,8 +1255,12 @@ func (s *skillManageStoreStub) ListUserGrantsForSkill(_ context.Context, skillID
 func (s *skillManageStoreStub) AgentCanManageSkill(context.Context, uuid.UUID, uuid.UUID) (bool, error) {
 	return false, nil
 }
-func (s *skillManageStoreStub) GetSkillFilePath(context.Context, uuid.UUID) (string, string, int, bool, bool) {
-	return "", "", 0, false, false
+func (s *skillManageStoreStub) GetSkillFilePath(ctx context.Context, id uuid.UUID) (string, string, int, bool, bool) {
+	skill, ok := s.skills[id]
+	if !ok || !s.canAccessSkill(ctx, skill) {
+		return "", "", 0, false, false
+	}
+	return skill.BaseDir, skill.Slug, skill.Version, skill.IsSystem, true
 }
 
 // ---------------------------------------------------------------------------

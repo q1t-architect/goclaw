@@ -85,8 +85,10 @@ type ResolverDeps struct {
 	MCPGrantChecker mcpbridge.GrantChecker
 
 	// Skill access store — for per-agent skill visibility filtering
-	SkillAccessStore   store.SkillAccessStore
-	SkillSlashCommands config.SkillSlashCommandConfig
+	SkillAccessStore    store.SkillAccessStore
+	SkillStore          store.SkillStore
+	SkillEvolutionStore store.SkillEvolutionStore
+	SkillSlashCommands  config.SkillSlashCommandConfig
 
 	// Config permission store for group file writer checks
 	ConfigPermStore store.ConfigPermissionStore
@@ -542,6 +544,8 @@ func NewManagedResolver(deps ResolverDeps) ResolverFunc {
 			OrchMode:               orchMode,
 			DelegateTargets:        delegateTargets,
 			EvolutionMetricsStore:  evoMetricsStore,
+			SkillEvolutionStore:    deps.SkillEvolutionStore,
+			SkillStore:             deps.SkillStore,
 			UserResolver:           newContactResolver(deps.ContactStore),
 		})
 

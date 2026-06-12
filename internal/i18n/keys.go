@@ -142,9 +142,17 @@ const (
 	MsgCannotRemoveLastWriter  = "error.cannot_remove_last_writer"  // "cannot remove the last file writer"
 
 	// --- Skills ---
-	MsgSkillsUpdateNotSupported = "error.skills_update_not_supported" // "skills.update not supported for file-based skills"
-	MsgCannotResolveSkillID     = "error.cannot_resolve_skill_id"     // "cannot resolve skill ID for file-based skill"
-	MsgInvalidVisibility        = "error.invalid_visibility"          // "invalid visibility %q: must be one of private, public"
+	MsgSkillsUpdateNotSupported    = "error.skills_update_not_supported"    // "skills.update not supported for file-based skills"
+	MsgCannotResolveSkillID        = "error.cannot_resolve_skill_id"        // "cannot resolve skill ID for file-based skill"
+	MsgInvalidVisibility           = "error.invalid_visibility"             // "invalid visibility %q: must be one of private, public"
+	MsgSkillEvolutionNotConfigured = "error.skill_evolution_not_configured" // "skill evolution store is not configured"
+	MsgActivityStoreNotConfigured  = "error.activity_store_not_configured"  // "activity store is not configured"
+	MsgInvalidEvolutionMode        = "error.invalid_evolution_mode"         // "invalid evolution mode"
+	MsgSystemSkillMutationBlocked  = "error.system_skill_mutation_blocked"  // "system skill mutation is blocked"
+	MsgSuggestionMustBeApproved    = "error.suggestion_must_be_approved"    // "suggestion must be approved before apply"
+	MsgInvalidDraftPatch           = "error.invalid_draft_patch"            // "invalid draft_patch: %s"
+	MsgDraftPatchRequired          = "error.draft_patch_required"           // "draft_patch requires content or find/replace"
+	MsgFindTextNotFound            = "error.find_text_not_found"            // "find text not found in target file"
 
 	// --- Package updates (Phase 4+5) ---
 	MsgPackageNotInstalled  = "packages.update.not_installed"     // "Package {name} is not installed"

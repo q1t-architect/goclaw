@@ -141,9 +141,17 @@ func init() {
 		MsgCannotRemoveLastWriter:  "无法移除最后一个文件管理员",
 
 		// Skills
-		MsgSkillsUpdateNotSupported: "基于文件的Skill不支持 skills.update",
-		MsgCannotResolveSkillID:     "无法解析基于文件的Skill ID",
-		MsgInvalidVisibility:        "无效的 visibility %q：必须为 private 或 public",
+		MsgSkillsUpdateNotSupported:    "基于文件的Skill不支持 skills.update",
+		MsgCannotResolveSkillID:        "无法解析基于文件的Skill ID",
+		MsgInvalidVisibility:           "无效的 visibility %q：必须为 private 或 public",
+		MsgSkillEvolutionNotConfigured: "技能演进存储未配置",
+		MsgActivityStoreNotConfigured:  "活动存储未配置",
+		MsgInvalidEvolutionMode:        "无效的 evolution mode",
+		MsgSystemSkillMutationBlocked:  "禁止修改系统Skill",
+		MsgSuggestionMustBeApproved:    "应用前必须先批准建议",
+		MsgInvalidDraftPatch:           "无效的 draft_patch：%s",
+		MsgDraftPatchRequired:          "draft_patch 需要 content 或 find/replace",
+		MsgFindTextNotFound:            "在目标文件中未找到要替换的文本",
 
 		// Logs
 		MsgInvalidLogAction: "action 必须是 'start' 或 'stop'",

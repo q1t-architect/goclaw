@@ -46,6 +46,7 @@ func wireHTTP(stores *store.Stores, defaultWorkspace, dataDir, bundledSkillsDir 
 			if len(dirs) > 0 {
 				skillsH = httpapi.NewSkillsHandler(manageStore, dirs[0], dataDir, bundledSkillsDir, msgBus, stores.SkillTenantCfgs, stores.Tenants)
 				skillsH.SetDB(stores.DB)
+				skillsH.SetEvolutionStore(stores.SkillEvolution, stores.Activity)
 				skillsH.SetUploadLimitConfig(skillUploadConfig)
 				if stores.SystemConfigs != nil {
 					skillsH.SetSystemConfigStore(stores.SystemConfigs)

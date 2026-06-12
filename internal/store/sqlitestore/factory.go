@@ -48,6 +48,7 @@ func NewSQLiteStores(cfg store.StoreConfig) (*store.Stores, error) {
 		Tenants:                NewSQLiteTenantStore(db),
 		BuiltinToolTenantCfgs:  NewSQLiteBuiltinToolTenantConfigStore(db),
 		SkillTenantCfgs:        NewSQLiteSkillTenantConfigStore(db),
+		SkillEvolution:         NewSQLiteSkillEvolutionStore(db),
 		SystemConfigs:          NewSQLiteSystemConfigStore(db),
 		Snapshots:              NewSQLiteSnapshotStore(db),
 		Cron:                   NewSQLiteCronStore(db),
