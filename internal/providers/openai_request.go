@@ -58,8 +58,20 @@ func (p *OpenAIProvider) buildRequestBody(model string, req ChatRequest, stream 
 
 		// Echo reasoning_content only for APIs/models that accept it on assistant history.
 		// Together Qwen and many OpenAI-compat gateways reject unknown message fields → HTTP 400.
-		if m.Thinking != "" && m.Role == "assistant" && openAIWireAssistantReasoningContent(model) {
-			msg["reasoning_content"] = m.Thinking
+		//
+		// Kimi Coding is stricter: when its server-side thinking is on (always-on for
+		// kimi-k2-turbo-preview), assistant tool-call messages MUST carry
+		// reasoning_content even if empty — otherwise upstream returns 400 "thinking
+		// is enabled but reasoning_content is missing in assistant tool call message".
+		if m.Role == "assistant" && openAIWireAssistantReasoningContent(model) {
+			switch {
+			case m.Thinking != "":
+				msg["reasoning_content"] = m.Thinking
+			case p.providerType == "kimi_coding":
+				// Send empty string rather than omit the field — satisfies Kimi's
+				// "must be present" check without inventing reasoning content.
+				msg["reasoning_content"] = ""
+			}
 		}
 
 		// Include content; omit empty content for assistant messages with tool_calls
@@ -204,6 +216,12 @@ func (p *OpenAIProvider) buildRequestBody(model string, req ChatRequest, stream 
 		// Note: gpt-5.X flagship models (gpt-5.1, gpt-5.4, gpt-5.5) DO support temperature;
 		// only the mini/nano reasoning variants reject it.
 		skipTemp := strings.HasPrefix(capabilityModel, "gpt-5-mini") || strings.HasPrefix(capabilityModel, "gpt-5-nano") || strings.HasPrefix(capabilityModel, "o1") || strings.HasPrefix(capabilityModel, "o3") || strings.HasPrefix(capabilityModel, "o4")
+		// Kimi Coding rejects any temperature override — `invalid temperature: only
+		// 1 is allowed for this model`. Skip sending so the upstream applies its
+		// own default (1). Matches the model-locked behavior of o1/o3/o4.
+		if p.providerType == "kimi_coding" {
+			skipTemp = true
+		}
 		if !skipTemp {
 			body["temperature"] = v
 		}
