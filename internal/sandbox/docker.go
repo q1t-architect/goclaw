@@ -454,6 +454,7 @@ func sanitizeKey(key string) string {
 		"/", "-",
 		" ", "-",
 		".", "-",
+		"@", "-",
 	).Replace(key)
 
 	if len(safe) > 50 {
