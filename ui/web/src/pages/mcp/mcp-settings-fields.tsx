@@ -49,7 +49,7 @@ export function McpSettingsFields({ form, isEditing }: McpSettingsFieldsProps) {
         <Label>{t("form.env")}</Label>
         <KeyValueEditor
           value={env}
-          onChange={(v) => setValue("env", v)}
+          onChange={(v) => setValue("env", v, { shouldDirty: true, shouldValidate: true })}
           keyPlaceholder={t("form.envKeyPlaceholder")}
           valuePlaceholder={t("form.envValuePlaceholder")}
           addLabel={t("form.addVariable")}
@@ -246,7 +246,7 @@ export function McpSettingsFields({ form, isEditing }: McpSettingsFieldsProps) {
           id="mcp-timeout"
           type="number"
           value={timeout}
-          onChange={(e) => setValue("timeout", Number(e.target.value))}
+          onChange={(e) => setValue("timeout", parseInt(e.target.value, 10) || 60, { shouldValidate: true })}
           min={1}
         />
       </div>

@@ -46,6 +46,7 @@ export function MCPFormDialog({ open, onOpenChange, server, onSubmit, onTest, on
   const [createdServer, setCreatedServer] = useState<MCPServerData | null>(null);
 
   const form = useForm<MCPFormData>({
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     resolver: zodResolver(mcpFormSchema),
     mode: "onChange",
     defaultValues: {
@@ -286,6 +287,11 @@ export function MCPFormDialog({ open, onOpenChange, server, onSubmit, onTest, on
           <McpConnectionFields form={form} />
           <McpSettingsFields form={form} isEditing={!!server} />
           {error && <p className="text-sm text-destructive">{error}</p>}
+          {Object.keys(form.formState.errors).length > 0 && !error && (
+            <p className="text-sm text-destructive">
+              {Object.values(form.formState.errors).map(e => e?.message).filter(Boolean).join(", ")}
+            </p>
+          )}
         </div>
 
         <DialogFooter className="flex-col sm:flex-row gap-2">
@@ -321,7 +327,7 @@ export function MCPFormDialog({ open, onOpenChange, server, onSubmit, onTest, on
             <Button variant="outline" onClick={() => onOpenChange(false)} disabled={loading}>
               {t("form.cancel")}
             </Button>
-            <Button onClick={handleSubmit} disabled={loading}>
+            <Button type="button" onClick={handleSubmit} disabled={loading}>
               {loading ? t("form.saving") : (server || createdServer) ? t("form.update") : t("form.create")}
             </Button>
           </div>
