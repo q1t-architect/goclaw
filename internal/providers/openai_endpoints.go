@@ -46,6 +46,32 @@ func (p *OpenAIProvider) dashScopePassthroughKeys() bool {
 	return p.isDashScope()
 }
 
+// isOllamaEndpoint returns true for local or cloud Ollama inference endpoints.
+// Ollama requires options.num_ctx in the request body to control the context window
+// (prevents context-window errors on long conversations).
+// Uses 3-source detection (URL + providerType + name) to handle reverse-proxied endpoints.
+func (p *OpenAIProvider) isOllamaEndpoint() bool {
+	if strings.Contains(strings.ToLower(p.apiBase), "ollama") {
+		return true
+	}
+	if strings.Contains(strings.ToLower(strings.TrimSpace(p.providerType)), "ollama") {
+		return true
+	}
+	if strings.Contains(strings.ToLower(p.name), "ollama") {
+		return true
+	}
+	return false
+}
+
+// ollamaNativeURL returns the full URL for Ollama's native /api/chat endpoint.
+// Ollama's OpenAI-compat shim at /v1/chat/completions silently ignores options.num_ctx,
+// while the native /api/chat endpoint honors it. The apiBase may include a /v1 suffix
+// (e.g. "http://localhost:11434/v1") — it is stripped before appending /api/chat.
+func (p *OpenAIProvider) ollamaNativeURL() string {
+	base := strings.TrimRight(strings.TrimSuffix(strings.TrimRight(p.apiBase, "/"), "/v1"), "/")
+	return base + "/api/chat"
+}
+
 // isDashScope returns true when this provider routes requests to DashScope/Bailian
 // (supports cache_control:ephemeral wire format - verified live 2026-05-08).
 // Uses 3-source detection (URL + providerType + name) to handle reverse-proxied

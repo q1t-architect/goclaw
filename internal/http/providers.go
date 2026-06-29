@@ -14,6 +14,7 @@ import (
 	"regexp"
 	"strings"
 	"sync"
+	"time"
 
 	"github.com/google/uuid"
 
@@ -247,13 +248,15 @@ func (h *ProvidersHandler) registerInMemory(p *store.LLMProviderData) providerRu
 	}
 	// Ollama doesn't need an API key — handle before the key guard (same as startup).
 	// In Docker, swap localhost → host.docker.internal so the container can reach the host.
-	// api_base is stored with /v1 (normalized at write time), so no suffix appending needed.
 	if p.ProviderType == store.ProviderOllama {
 		host := p.APIBase
 		if host == "" {
-			host = "http://localhost:11434/v1"
+			host = "http://localhost:11434"
 		}
-		h.providerReg.RegisterForTenant(p.TenantID, providers.NewOpenAIProvider(p.Name, "ollama", config.DockerLocalhost(host), "llama3.3"))
+		dockerHost := config.DockerLocalhost(host)
+		numCtx := h.resolveOllamaNumCtx(p, dockerHost, "")
+		prov := providers.NewOllamaProvider(p.Name, dockerHost, "llama3.3", numCtx, nil)
+		h.providerReg.RegisterForTenant(p.TenantID, prov)
 		return providerRuntimeRegistered
 	}
 	// Vertex supports ADC (empty api_key) — handle before the generic key guard.
@@ -339,12 +342,38 @@ func (h *ProvidersHandler) registerInMemory(p *store.LLMProviderData) providerRu
 			"User-Agent": store.KimiCodingRequiredUserAgent,
 		})
 		h.providerReg.RegisterForTenant(p.TenantID, prov)
+	case store.ProviderOllamaCloud:
+		base := apiBase
+		if base == "" {
+			base = "https://ollama.com"
+		}
+		numCtx := h.resolveOllamaNumCtx(p, base, p.APIKey)
+		prov := providers.NewOllamaProvider(p.Name, base, "llama3.3", numCtx, nil)
+		h.providerReg.RegisterForTenant(p.TenantID, prov)
 	default:
 		base, model := openAIProviderDefaults(p.ProviderType, apiBase)
 		prov := providers.NewOpenAIProvider(p.Name, p.APIKey, base, model)
 		h.providerReg.RegisterForTenant(p.TenantID, prov)
 	}
 	return providerRuntimeRegistered
+}
+
+// resolveOllamaNumCtx returns the num_ctx to pass to NewOllamaProvider. Priority:
+//  1. User-configured num_ctx from provider settings JSONB.
+//  2. Value queried from Ollama /api/show.
+//  3. OllamaDefaultNumCtx (131072) — never nil, so Ollama always uses a large context window.
+func (h *ProvidersHandler) resolveOllamaNumCtx(p *store.LLMProviderData, apiBase, apiKey string) *int {
+	slog.Debug("ollama.startup: resolveOllamaNumCtx called", "provider", p.Name, "api_base", apiBase)
+	if s := store.ParseOllamaSettings(p.Settings); s != nil {
+		slog.Info("ollama.startup: using num_ctx from provider settings", "provider", p.Name, "num_ctx", *s.NumCtx)
+		return s.NumCtx
+	}
+	slog.Debug("ollama.startup: no settings num_ctx, querying /api/show", "provider", p.Name)
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	numCtx := providers.FetchOllamaModelContext(ctx, apiBase, "llama3.3", apiKey)
+	slog.Info("ollama.startup: applying num_ctx from /api/show (or default fallback)", "provider", p.Name, "num_ctx", numCtx)
+	return &numCtx
 }
 
 func openAIProviderDefaults(providerType, apiBase string) (string, string) {
@@ -359,9 +388,9 @@ func openAIProviderDefaults(providerType, apiBase string) (string, string) {
 	}
 }
 
-// normalizeOllamaAPIBase ensures Ollama and OllamaCloud api_base values include the
-// /v1 suffix required for OpenAI-compatible endpoints. Normalizing at write time means
-// resolveAPIBase() always returns a ready-to-use base URL.
+// normalizeOllamaAPIBase normalizes the api_base stored for Ollama providers.
+// The /v1 suffix is added at write time for backward compatibility; NewOllamaProvider
+// strips it automatically before constructing the native Ollama client URL.
 func normalizeOllamaAPIBase(p *store.LLMProviderData) {
 	if p.ProviderType != store.ProviderOllama && p.ProviderType != store.ProviderOllamaCloud {
 		return
