@@ -2,6 +2,7 @@ package agent
 
 import (
 	"context"
+	"log/slog"
 	"path/filepath"
 	"slices"
 	"strings"
@@ -14,6 +15,21 @@ import (
 	"github.com/nextlevelbuilder/goclaw/internal/tokencount"
 	"github.com/nextlevelbuilder/goclaw/internal/tools"
 )
+
+// MCPPreviewLister returns MCP tool info from store configuration without
+// requiring live MCP server connections. Satisfied by *mcp.Manager.
+type MCPPreviewLister interface {
+	ListToolsForAgent(ctx context.Context, agentID uuid.UUID, userID string) ([]MCPToolPreviewInfo, error)
+}
+
+// MCPToolPreviewInfo describes an MCP tool for preview purposes.
+// Mirrors mcp.MCPToolPreviewInfo but declared here to avoid an import cycle.
+type MCPToolPreviewInfo struct {
+	// RegisteredName is the tool name including mcp_ prefix.
+	RegisteredName string
+	// Description is the tool description from server tool hints, if any.
+	Description string
+}
 
 // PreviewDeps holds optional dependencies for building a preview system prompt.
 // All fields are nil-safe — missing deps simply skip resolution for that section.
@@ -32,7 +48,11 @@ type PreviewDeps struct {
 		BuildPinnedSummary(ctx context.Context, names []string) string
 		BuildSummary(ctx context.Context, allowList []string) string
 	}
-	DataDir string // for team workspace path construction
+	// MCPLister provides store-based MCP tool info for preview (nil = skip).
+	// When set, MCP tool descriptions are populated from configured servers
+	// even if those servers are not currently loaded in the tool registry.
+	MCPLister MCPPreviewLister
+	DataDir   string // for team workspace path construction
 }
 
 // PreviewResult holds the output of BuildPreviewPrompt.
@@ -118,6 +138,7 @@ func BuildPreviewPrompt(ctx context.Context, ag *store.AgentData, mode PromptMod
 	}
 
 	// --- MCP tool descriptions (matches loop_history_supplement.go:44-58) ---
+	// First populate from live registry (tools currently loaded in active sessions).
 	var mcpToolDescs map[string]string
 	if deps.ToolLister != nil {
 		descs := make(map[string]string)
@@ -133,6 +154,31 @@ func BuildPreviewPrompt(ctx context.Context, ag *store.AgentData, mode PromptMod
 			mcpToolDescs = descs
 		}
 	}
+	slog.Debug("preview_prompt.mcp_from_registry", "agent_id", ag.ID, "live_mcp_tools", len(mcpToolDescs))
+
+	// Then supplement (or replace) with store-based MCP tools so that configured
+	// MCP servers appear in the preview even when not currently loaded in the registry.
+	slog.Debug("preview_prompt.mcp_lister_check", "agent_id", ag.ID, "mcp_lister_nil", deps.MCPLister == nil)
+	if deps.MCPLister != nil {
+		storeMCPTools, err := deps.MCPLister.ListToolsForAgent(ctx, ag.ID, userID)
+		slog.Debug("preview_prompt.mcp_lister_result", "agent_id", ag.ID, "user_id", userID, "store_tools_count", len(storeMCPTools), "error", err)
+		if err == nil && len(storeMCPTools) > 0 {
+			if mcpToolDescs == nil {
+				mcpToolDescs = make(map[string]string, len(storeMCPTools))
+			}
+			for _, mt := range storeMCPTools {
+				if _, alreadyPresent := mcpToolDescs[mt.RegisteredName]; !alreadyPresent {
+					mcpToolDescs[mt.RegisteredName] = mt.Description
+					slog.Debug("preview_prompt.mcp_tool_added", "tool", mt.RegisteredName, "has_desc", mt.Description != "")
+				} else {
+					slog.Debug("preview_prompt.mcp_tool_already_present", "tool", mt.RegisteredName)
+				}
+			}
+		} else if err != nil {
+			slog.Info("preview_prompt.mcp_lister_error", "agent_id", ag.ID, "error", err)
+		}
+	}
+	slog.Info("preview_prompt.mcp_tool_descs_final", "agent_id", ag.ID, "total_mcp_tools", len(mcpToolDescs))
 
 	// --- Sandbox ---
 	sandboxCfg := ag.ParseSandboxConfig()
