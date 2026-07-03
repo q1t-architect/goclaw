@@ -6,6 +6,7 @@ import (
 	"encoding/hex"
 	"fmt"
 	"log/slog"
+	"slices"
 	"strings"
 	"time"
 
@@ -301,7 +302,7 @@ func (l *Loop) makeAuthorizeToolCall() func(ctx context.Context, state *pipeline
 		if l.tools != nil && l.tools.TryActivateDeferred(name) {
 			// Re-check deny policy to prevent a lazy-activated tool from bypassing
 			// an explicit deny rule.
-			if l.toolPolicy != nil && l.toolPolicy.IsDenied(name, l.agentToolPolicy) {
+			if l.toolPolicy != nil && l.toolPolicy.IsDenied(tools.ResolveConcreteRegistry(l.tools), name, l.agentToolPolicy) {
 				return false, "tool not allowed by policy: " + name
 			}
 			allowed[name] = true
@@ -310,6 +311,18 @@ func (l *Loop) makeAuthorizeToolCall() func(ctx context.Context, state *pipeline
 
 		return false, "tool not allowed by policy: " + name
 	}
+}
+
+// allowedToolNamesSlice converts a policy-filtered allowed-tool set into a
+// sorted slice for deterministic downstream consumption (e.g. Claude CLI
+// --disallowedTools derivation).
+func allowedToolNamesSlice(allowed map[string]bool) []string {
+	names := make([]string, 0, len(allowed))
+	for name := range allowed {
+		names = append(names, name)
+	}
+	slices.Sort(names)
+	return names
 }
 
 func (l *Loop) makeCallLLM(req *RunRequest, emitRun func(AgentEvent)) func(ctx context.Context, state *pipeline.RunState, chatReq providers.ChatRequest) (*providers.ChatResponse, error) {
@@ -330,6 +343,16 @@ func (l *Loop) makeCallLLM(req *RunRequest, emitRun func(AgentEvent)) func(ctx c
 		chatReq.Options[providers.OptPeerKind] = req.PeerKind
 		chatReq.Options[providers.OptLocalKey] = req.LocalKey
 		chatReq.Options[providers.OptWorkspace] = tools.ToolWorkspaceFromCtx(ctx)
+		// Pass the policy-filtered allowed tool set so the Claude CLI provider
+		// can restrict its native built-in tools (Bash, Edit, Write, Read,
+		// WebFetch, WebSearch) to what the agent's tool policy actually allows.
+		// A nil state.Tool.AllowedTools means BuildFilteredTools didn't run
+		// (not wired) — do NOT set the option in that case, so the CLI
+		// provider's own fail-closed default (nil -> no tools allowed) applies
+		// rather than silently omitting the flag.
+		if state.Tool.AllowedTools != nil {
+			chatReq.Options[providers.OptAllowedToolNames] = allowedToolNamesSlice(state.Tool.AllowedTools)
+		}
 		tenantID := store.TenantIDFromContext(ctx)
 		if tenantID != uuid.Nil {
 			chatReq.Options[providers.OptTenantID] = tenantID.String()

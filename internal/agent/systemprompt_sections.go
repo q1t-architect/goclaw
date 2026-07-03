@@ -20,11 +20,6 @@ const mcpOptionalParamInstruction = "**Optional parameters:** Only include param
 	"WRONG: {\"url\": \"https://example.com\", \"debug\": true, \"timeout\": 10000, \"format\": \"bullet\"}\n" +
 	"RIGHT: {\"url\": \"https://example.com\"}"
 
-// mcpToolDescMaxLen is the max character length for MCP tool descriptions
-// in the system prompt inline section. ~200 chars ≈ ~50 tokens, balancing
-// discoverability with prompt budget.
-const mcpToolDescMaxLen = 200
-
 // buildCRMFreshnessSection emits a Bitrix24-specific data-freshness reminder.
 // LLMs tend to recall CRM record fields from earlier conversation turns;
 // when admin changes the user's CRM permission mid-session, the LLM may
@@ -139,32 +134,21 @@ func buildMCPToolsSearchSection() []string {
 	}
 }
 
-// buildMCPToolsInlineSection generates the MCP tools section for inline mode.
-// Lists each MCP tool with its real description (truncated to mcpToolDescMaxLen).
+// buildMCPToolsInlineSection generates the MCP tools behavioral note for inline mode.
+// Per-tool name+description enumeration was removed — the `tools:` API parameter
+// now carries the real, complete MCP tool schemas (name, description, JSON schema),
+// so repeating name+description in prose was pure duplication. Only the behavioral
+// instructions that aren't expressible in a JSON schema (prefer-MCP-over-core,
+// optional-parameter guidance) are kept here.
 func buildMCPToolsInlineSection(descs map[string]string) []string {
-	lines := []string{
+	return []string{
 		"## MCP Tools (prefer over core tools)",
 		"",
-		"External tool integrations (MCP servers). **When an MCP tool overlaps with a core tool, always prefer the MCP tool.**",
+		"External tool integrations (MCP servers) are available — see their schemas in the tools list. **When an MCP tool overlaps with a core tool, always prefer the MCP tool.**",
 		"",
 		mcpOptionalParamInstruction,
 		"",
 	}
-	// Sort MCP tool names for deterministic ordering — critical for prompt caching.
-	sortedNames := make([]string, 0, len(descs))
-	for name := range descs {
-		sortedNames = append(sortedNames, name)
-	}
-	slices.Sort(sortedNames)
-	for _, name := range sortedNames {
-		desc := descs[name]
-		if len(desc) > mcpToolDescMaxLen {
-			desc = desc[:mcpToolDescMaxLen] + "…"
-		}
-		lines = append(lines, fmt.Sprintf("- %s: %s", name, desc))
-	}
-	lines = append(lines, "")
-	return lines
 }
 
 // buildSafetySlimSection generates a 2-line safety section for task mode.
@@ -267,6 +251,9 @@ func buildSkillsHybridSection(pinnedSummary string, hasSearch, hasManage bool) [
 		lines = append(lines,
 			"Pinned skills (always available — scan these first):",
 			pinnedSummary,
+			"",
+			"Pinned skills shown as `<skill_instructions name=\"...\">` already contain their full SKILL.md content inline — use it directly, no `use_skill`/`read_file` round trip needed. "+
+				"Pinned skills shown as `<skill>` (pointer only, too large to inline) still need `use_skill` then `read_file` with the exact `<location>`.",
 			"",
 		)
 	}
@@ -807,37 +794,6 @@ func buildTeamWorkspaceSection(teamWsPath string) []string {
 		"[Auto-status] messages are informational — relay naturally. Do NOT create, retry, or reassign tasks from them.",
 		"",
 	}
-}
-
-// buildTeamMembersSection lists team members so the agent knows who to assign tasks to.
-// teamGuidance is injected from TeamActionPolicy.MemberGuidance() — varies by edition.
-func buildTeamMembersSection(members []store.TeamMemberData, teamGuidance string) []string {
-	lines := []string{
-		"## Team Members",
-		"",
-		"Your team (use agent_key as assignee in team_tasks):",
-	}
-	for _, m := range members {
-		entry := fmt.Sprintf("- %s (%s) [%s]", m.AgentKey, m.DisplayName, m.Role)
-		if m.Frontmatter != "" {
-			fm := m.Frontmatter
-			if len([]rune(fm)) > 80 {
-				fm = string([]rune(fm)[:80]) + "…"
-			}
-			entry += " — " + fm
-		}
-		lines = append(lines, entry)
-	}
-	lines = append(lines,
-		"",
-		"When creating tasks with team_tasks, set assignee to the agent_key of the best-suited member.",
-		"Do NOT invent agent keys — only use the keys listed above.",
-	)
-	if teamGuidance != "" {
-		lines = append(lines, teamGuidance)
-	}
-	lines = append(lines, "")
-	return lines
 }
 
 // buildVoiceResponseSection generates guidance for triggering auto TTS in "tagged" mode.
