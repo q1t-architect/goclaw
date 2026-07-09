@@ -27,14 +27,24 @@ func (s *SQLiteEpisodicStore) Search(ctx context.Context, query string, agentID,
 	tenantID := tenantIDForInsert(ctx)
 	pattern := "%" + escapeLike(query) + "%"
 
-	rows, err := s.db.QueryContext(ctx, `
-		SELECT id, l0_abstract, key_topics, created_at, session_key
+	q := `
+		SELECT id, COALESCE(NULLIF(l0_abstract, ''), substr(summary, 1, 500)) AS l0_abstract, key_topics, created_at, session_key
 		FROM episodic_summaries
-		WHERE agent_id = ? AND user_id = ? AND tenant_id = ?
-		  AND (summary LIKE ? ESCAPE '\' OR key_topics LIKE ? ESCAPE '\')
-		ORDER BY created_at DESC
-		LIMIT ?`,
-		agentID, userID, tenantID.String(), pattern, pattern, maxResults*3)
+		WHERE agent_id = ? AND tenant_id = ?
+		  AND (summary LIKE ? ESCAPE '\' OR key_topics LIKE ? ESCAPE '\')`
+	args := []any{agentID, tenantID.String(), pattern, pattern}
+	if store.IsSharedMemory(ctx) {
+		// Shared memory searches all user scopes for the agent.
+	} else if userID != "" {
+		q += " AND (user_id = ? OR user_id = '')"
+		args = append(args, userID)
+	} else {
+		q += " AND user_id = ''"
+	}
+	q += " ORDER BY created_at DESC LIMIT ?"
+	args = append(args, maxResults*3)
+
+	rows, err := s.db.QueryContext(ctx, q, args...)
 	if err != nil {
 		return nil, err
 	}
@@ -94,6 +104,7 @@ func (s *SQLiteEpisodicStore) Search(ctx context.Context, query string, agentID,
 		results = append(results, store.EpisodicSearchResult{
 			EpisodicID: sr.raw.id,
 			L0Abstract: sr.raw.l0Abstract,
+			KeyTopics:  searchKeyTopics(sr.raw.keyTopics),
 			Score:      sr.score,
 			CreatedAt:  sr.raw.createdAt.Time,
 			SessionKey: sr.raw.sessionKey,
@@ -103,6 +114,12 @@ func (s *SQLiteEpisodicStore) Search(ctx context.Context, query string, agentID,
 		}
 	}
 	return results, nil
+}
+
+func searchKeyTopics(raw string) []string {
+	var topics []string
+	scanJSONStringArray([]byte(raw), &topics)
+	return topics
 }
 
 // Ensure SQLiteEpisodicStore implements store.EpisodicStore.

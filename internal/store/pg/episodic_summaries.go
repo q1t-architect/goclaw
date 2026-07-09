@@ -31,6 +31,9 @@ func (s *PGEpisodicStore) Close() error                                   { retu
 func (s *PGEpisodicStore) Create(ctx context.Context, ep *store.EpisodicSummary) error {
 	id := uuid.Must(uuid.NewV7())
 	ep.ID = id
+	if ep.L0Abstract == "" {
+		ep.L0Abstract = fallbackEpisodicL0(ep.Summary)
+	}
 
 	topics := pq.Array(ep.KeyTopics)
 	now := time.Now().UTC()
@@ -61,6 +64,15 @@ func (s *PGEpisodicStore) Create(ctx context.Context, ep *store.EpisodicSummary)
 	}
 	ep.CreatedAt = now
 	return nil
+}
+
+func fallbackEpisodicL0(summary string) string {
+	const maxRunes = 500
+	runes := []rune(summary)
+	if len(runes) <= maxRunes {
+		return summary
+	}
+	return string(runes[:maxRunes])
 }
 
 // Get retrieves an episodic summary by ID.
@@ -163,7 +175,7 @@ func (s *PGEpisodicStore) Search(ctx context.Context, query, agentID, userID str
 			continue
 		}
 		results = append(results, store.EpisodicSearchResult{
-			EpisodicID: m.id, L0Abstract: m.l0, Score: m.score,
+			EpisodicID: m.id, L0Abstract: m.l0, KeyTopics: m.keyTopics, Score: m.score,
 			CreatedAt: m.createdAt, SessionKey: m.sessionKey,
 		})
 	}

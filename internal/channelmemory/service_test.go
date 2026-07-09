@@ -170,13 +170,15 @@ func (f *fakeChannelStore) Get(context.Context, uuid.UUID) (*store.ChannelInstan
 
 type fakeEpisodicStore struct {
 	store.EpisodicStore
-	exists    bool
-	bySource  *store.EpisodicSummary
-	created   []*store.EpisodicSummary
-	getCalls  int
-	createErr error
-	existsErr error
-	getByErr  error
+	exists       bool
+	bySource     *store.EpisodicSummary
+	created      []*store.EpisodicSummary
+	getCalls     int
+	existsUserID string
+	getUserID    string
+	createErr    error
+	existsErr    error
+	getByErr     error
 }
 
 type fakeDomainEventBus struct {
@@ -207,12 +209,14 @@ func (f *fakeEpisodicStore) Create(_ context.Context, ep *store.EpisodicSummary)
 	return nil
 }
 
-func (f *fakeEpisodicStore) ExistsBySourceID(context.Context, string, string, string) (bool, error) {
+func (f *fakeEpisodicStore) ExistsBySourceID(_ context.Context, _, userID, _ string) (bool, error) {
+	f.existsUserID = userID
 	return f.exists, f.existsErr
 }
 
-func (f *fakeEpisodicStore) GetBySourceID(context.Context, string, string, string) (*store.EpisodicSummary, error) {
+func (f *fakeEpisodicStore) GetBySourceID(_ context.Context, _, userID, _ string) (*store.EpisodicSummary, error) {
 	f.getCalls++
+	f.getUserID = userID
 	if f.getByErr != nil {
 		return nil, f.getByErr
 	}
@@ -621,6 +625,12 @@ func TestApproveUsesConfiguredRetentionHours(t *testing.T) {
 	if len(episodic.created) != 1 {
 		t.Fatalf("created episodic count = %d, want 1", len(episodic.created))
 	}
+	if episodic.created[0].UserID != "" {
+		t.Fatalf("channel episodic user_id = %q, want shared scope", episodic.created[0].UserID)
+	}
+	if episodic.created[0].L0Abstract != extractions.items[itemID].Summary {
+		t.Fatalf("channel episodic L0Abstract = %q, want summary", episodic.created[0].L0Abstract)
+	}
 	expires := episodic.created[0].ExpiresAt
 	if expires == nil {
 		t.Fatal("episodic ExpiresAt is nil")
@@ -667,7 +677,10 @@ func TestApprovePublishesTopicsAndEntitiesForSemanticHints(t *testing.T) {
 	if len(episodic.created) != 1 {
 		t.Fatalf("created episodic count = %d, want 1", len(episodic.created))
 	}
-	if got := episodic.created[0].KeyTopics; strings.Join(got, ",") != "collaboration,planning" {
+	if episodic.existsUserID != "" {
+		t.Fatalf("ExistsBySourceID user_id = %q, want shared scope", episodic.existsUserID)
+	}
+	if got := strings.Join(episodic.created[0].KeyTopics, ","); got != "collaboration,planning,Project Orion,ExampleCo" {
 		t.Fatalf("episodic key_topics = %#v", got)
 	}
 	if len(eventBus.published) != 1 {
@@ -677,7 +690,7 @@ func TestApprovePublishesTopicsAndEntitiesForSemanticHints(t *testing.T) {
 	if !ok {
 		t.Fatalf("published payload type = %T", eventBus.published[0].Payload)
 	}
-	if got := strings.Join(payload.KeyTopics, ","); got != "collaboration,planning" {
+	if got := strings.Join(payload.KeyTopics, ","); got != "collaboration,planning,Project Orion,ExampleCo" {
 		t.Fatalf("payload KeyTopics = %q", got)
 	}
 	if got := strings.Join(payload.KeyEntities, ","); got != "Project Orion,ExampleCo" {
@@ -715,6 +728,9 @@ func TestApproveExistingSourceWritesExistingEpisodicID(t *testing.T) {
 	}
 	if episodic.getCalls != 1 {
 		t.Fatalf("GetBySourceID calls = %d, want 1", episodic.getCalls)
+	}
+	if episodic.getUserID != "" {
+		t.Fatalf("GetBySourceID user_id = %q, want shared scope", episodic.getUserID)
 	}
 	if item.EpisodicID != existingID.String() {
 		t.Fatalf("item episodic_id = %q, want %q", item.EpisodicID, existingID)
