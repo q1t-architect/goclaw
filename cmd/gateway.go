@@ -278,6 +278,10 @@ func runGateway() {
 		browserMgr.SetCookieProvider(newStoreBrowserCookieProvider(pgStores.BrowserCookies))
 	}
 
+	if ttsTool != nil && pgStores.SystemConfigs != nil {
+		ttsTool.SetSystemConfigStore(pgStores.SystemConfigs)
+	}
+
 	// Recover from crashes: flip ghost 'summoning' rows to 'summon_failed'.
 	// Summon goroutines don't survive process restart; stale DB rows would trap the UI.
 	if pgStores.Agents != nil {
