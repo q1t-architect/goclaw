@@ -101,6 +101,10 @@ func (c *Channel) handleMessageEventFrom(ctx context.Context, event *MessageEven
 
 	// 3. Resolve sender name (cached)
 	senderName := c.resolveSenderName(ctx, mc.SenderID)
+	senderLabel := senderName
+	if senderLabel == "" {
+		senderLabel = mc.SenderID
+	}
 
 	// 4. Resolve media BEFORE mention gate so non-mentioned messages
 	// also have their files downloaded and stored in pending history.
@@ -166,7 +170,7 @@ func (c *Channel) handleMessageEventFrom(ctx context.Context, event *MessageEven
 				historyKey = fmt.Sprintf("%s:topic:%s", mc.ChatID, mc.RootID)
 			}
 			c.GroupHistory().Record(historyKey, channels.HistoryEntry{
-				Sender:    senderName,
+				Sender:    senderLabel,
 				SenderID:  mc.SenderID,
 				Body:      mc.Content,
 				Media:     earlyMediaPaths,
@@ -307,9 +311,12 @@ func (c *Channel) handleMessageEventFrom(ctx context.Context, event *MessageEven
 	}
 
 	// Annotate content with sender identity so the agent knows who is messaging.
-	if senderName != "" {
+	if mc.ChatType == "group" || senderName != "" {
 		if mc.ChatType == "group" {
-			annotated := fmt.Sprintf("[From: %s]\n%s", senderName, content)
+			annotated := content
+			if senderLabel != "" {
+				annotated = fmt.Sprintf("[From: %s]\n%s", senderLabel, content)
+			}
 			if c.HistoryLimit() > 0 {
 				content = c.GroupHistory().BuildContext(chatID, annotated, c.HistoryLimit())
 			} else {
