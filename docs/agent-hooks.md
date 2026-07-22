@@ -87,6 +87,18 @@ Hooks resolve in priority order, highest first. A single `block` decision short-
   ```
 - Non-JSON 2xx → allow.
 
+### script
+
+Custom ES5.1 scripts may return `additionalContext` with an `allow` decision.
+For `user_prompt_submit`, GoClaw appends that text to the current run's extra
+system prompt without changing the original user message.
+
+```javascript
+function handle(event) {
+    return { decision: "allow", additionalContext: "Call the required tool before answering." };
+}
+```
+
 ### prompt
 
 ```json
