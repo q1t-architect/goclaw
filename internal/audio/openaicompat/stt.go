@@ -16,15 +16,10 @@ import (
 	"github.com/nextlevelbuilder/goclaw/internal/audio"
 )
 
-const (
-	// sttMaxBytes matches the OpenAI upload limit, which compatible engines
-	// generally adopt. Enforced before the request so an oversized file fails
-	// locally instead of after a full upload.
-	sttMaxBytes = 25 << 20 // 25 MB
-	// sttDefaultTimeout is the floor for transcription, which is slower than
-	// synthesis and routinely exceeds the shared 30 s default.
-	sttDefaultTimeout = 120 * time.Second
-)
+// sttMaxBytes matches the OpenAI upload limit, which compatible engines
+// generally adopt. Enforced before the request so an oversized file fails
+// locally instead of after a full upload.
+const sttMaxBytes = 25 << 20 // 25 MB
 
 // STTProvider transcribes audio via an OpenAI-compatible
 // POST /audio/transcriptions.
@@ -67,7 +62,7 @@ func (p *STTProvider) Transcribe(ctx context.Context, in audio.STTInput, opts au
 		req.Header.Set("Authorization", "Bearer "+p.cfg.APIKey)
 	}
 
-	timeout := sttDefaultTimeout
+	timeout := time.Duration(p.cfg.TimeoutMs) * time.Millisecond
 	if opts.TimeoutMs > 0 {
 		timeout = time.Duration(opts.TimeoutMs) * time.Millisecond
 	}

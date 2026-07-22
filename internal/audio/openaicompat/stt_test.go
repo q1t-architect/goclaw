@@ -8,6 +8,7 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -200,6 +201,100 @@ func TestSTTOptionsModelOverridesConfig(t *testing.T) {
 		audio.STTOptions{ModelID: "opts-model"})
 	require.NoError(t, err)
 	assert.Equal(t, "opts-model", got.model)
+}
+
+func TestSTTConfiguredTimeoutAppliesWithoutPerCallOverride(t *testing.T) {
+	requestStarted := make(chan struct{})
+	releaseServer := make(chan struct{})
+	srv := httptest.NewServer(http.HandlerFunc(func(_ http.ResponseWriter, r *http.Request) {
+		close(requestStarted)
+		select {
+		case <-releaseServer:
+		case <-r.Context().Done():
+		}
+	}))
+	t.Cleanup(srv.Close)
+	t.Cleanup(func() { close(releaseServer) })
+
+	provider, err := openaicompat.NewSTTProvider(openaicompat.Config{
+		APIBase:   srv.URL,
+		TimeoutMs: 25,
+	})
+	require.NoError(t, err)
+
+	ctx, cancel := context.WithCancel(context.Background())
+	t.Cleanup(cancel)
+	result := make(chan error, 1)
+	go func() {
+		_, err := provider.Transcribe(ctx,
+			audio.STTInput{Bytes: []byte("x"), MimeType: "audio/wav"},
+			audio.STTOptions{})
+		result <- err
+	}()
+
+	select {
+	case <-requestStarted:
+	case <-time.After(time.Second):
+		t.Fatal("transcription request did not reach the test server")
+	}
+
+	select {
+	case err := <-result:
+		require.Error(t, err)
+		assert.ErrorIs(t, err, context.DeadlineExceeded)
+	case <-time.After(500 * time.Millisecond):
+		cancel()
+		<-result
+		t.Fatal("Transcribe did not honor Config.TimeoutMs")
+	}
+}
+
+func TestSTTOptionsTimeoutOverridesConfig(t *testing.T) {
+	requestStarted := make(chan struct{})
+	releaseResponse := make(chan struct{})
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		close(requestStarted)
+		select {
+		case <-releaseResponse:
+			_, _ = io.WriteString(w, `{"text":"ok"}`)
+		case <-r.Context().Done():
+		}
+	}))
+	t.Cleanup(srv.Close)
+
+	provider, err := openaicompat.NewSTTProvider(openaicompat.Config{
+		APIBase:   srv.URL,
+		TimeoutMs: 25,
+	})
+	require.NoError(t, err)
+
+	result := make(chan error, 1)
+	go func() {
+		_, err := provider.Transcribe(context.Background(),
+			audio.STTInput{Bytes: []byte("x"), MimeType: "audio/wav"},
+			audio.STTOptions{TimeoutMs: 1000})
+		result <- err
+	}()
+
+	select {
+	case <-requestStarted:
+	case <-time.After(time.Second):
+		t.Fatal("transcription request did not reach the test server")
+	}
+
+	select {
+	case err := <-result:
+		t.Fatalf("Transcribe used Config.TimeoutMs instead of opts.TimeoutMs: %v", err)
+	case <-time.After(100 * time.Millisecond):
+	}
+
+	close(releaseResponse)
+	select {
+	case err := <-result:
+		require.NoError(t, err)
+	case <-time.After(time.Second):
+		t.Fatal("Transcribe did not return after the test server responded")
+	}
 }
 
 // TestSTTLanguageFallsBackToHint covers a plain (non-verbose) json response,
