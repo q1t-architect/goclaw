@@ -411,14 +411,43 @@ func TestNoopDispatcher_AlwaysAllows(t *testing.T) {
 // the dispatcher's source-tier gate can be exercised without invoking the
 // real goja runtime.
 type mutatingHandler struct {
-	updated map[string]any
+	updated           map[string]any
+	additionalContext string
 }
 
 func (h *mutatingHandler) Execute(ctx context.Context, _ hooks.HookConfig, _ hooks.Event) (hooks.Decision, error) {
 	if r := hooks.ScriptResultFrom(ctx); r != nil {
 		r.UpdatedInput = h.updated
+		r.AdditionalContext = h.additionalContext
 	}
 	return hooks.DecisionAllow, nil
+}
+
+func TestDispatcher_UIScriptAdditionalContextAllowedWithoutInputMutation(t *testing.T) {
+	cfg := newBaseHook(hooks.HandlerScript, hooks.EventUserPromptSubmit)
+	cfg.Source = "ui"
+	fs := &fakeStore{hooks: []hooks.HookConfig{cfg}}
+	h := &mutatingHandler{
+		updated:           map[string]any{"rawInput": "must-not-apply"},
+		additionalContext: "Call the required workflow tool.",
+	}
+	d := hooks.NewStdDispatcher(hooks.StdDispatcherOpts{
+		Store: fs, Audit: hooks.NewAuditWriter(fs, ""),
+		Handlers: map[hooks.HandlerType]hooks.Handler{hooks.HandlerScript: h},
+	})
+
+	r, err := d.Fire(context.Background(), hooks.Event{
+		EventID: "e-context", HookEvent: hooks.EventUserPromptSubmit, RawInput: "original",
+	})
+	if err != nil || r.Decision != hooks.DecisionAllow {
+		t.Fatalf("decision=%q err=%v", r.Decision, err)
+	}
+	if r.AdditionalContext != "Call the required workflow tool." {
+		t.Fatalf("additional context=%q", r.AdditionalContext)
+	}
+	if r.UpdatedRawInput != nil {
+		t.Fatalf("UI source mutated raw input: %q", *r.UpdatedRawInput)
+	}
 }
 
 // TestDispatcher_ScriptMutation_BuiltinSourceApplies verifies the source-tier

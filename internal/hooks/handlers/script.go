@@ -187,7 +187,7 @@ func (h *ScriptHandler) Execute(ctx context.Context, cfg hooks.HookConfig, ev ho
 		return hooks.DecisionError, sanitizeError(execErr)
 	}
 
-	dec, reason, updated, parseErr := parseReturn(rt, result)
+	dec, reason, additionalContext, updated, parseErr := parseReturn(rt, result)
 	if parseErr != nil {
 		return hooks.DecisionError, parseErr
 	}
@@ -208,6 +208,7 @@ func (h *ScriptHandler) Execute(ctx context.Context, cfg hooks.HookConfig, ev ho
 	}
 	if r := hooks.ScriptResultFrom(ctx); r != nil {
 		r.Reason = reason
+		r.AdditionalContext = additionalContext
 		r.UpdatedInput = updated
 		r.Stdout = stdout.String()
 	}

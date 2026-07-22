@@ -60,8 +60,16 @@ func (s *ContextStage) Execute(ctx context.Context, state *RunState) error {
 		HookEvent: hooks.EventUserPromptSubmit,
 	}); r.Decision == hooks.DecisionBlock {
 		return fmt.Errorf("hook blocked user_prompt_submit")
-	} else if r.UpdatedRawInput != nil {
-		state.Input.Message = *r.UpdatedRawInput
+	} else {
+		if r.UpdatedRawInput != nil {
+			state.Input.Message = *r.UpdatedRawInput
+		}
+		if r.AdditionalContext != "" {
+			if state.Input.ExtraSystemPrompt != "" {
+				state.Input.ExtraSystemPrompt += "\n\n"
+			}
+			state.Input.ExtraSystemPrompt += r.AdditionalContext
+		}
 	}
 
 	// 0. Inject context values (agent/tenant/user/workspace scoping, input guard, truncation).
