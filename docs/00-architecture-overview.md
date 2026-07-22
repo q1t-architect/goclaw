@@ -282,8 +282,8 @@ sequenceDiagram
     PG-->>GW: PG stores created
     GW->>GW: 5. Start tracing collector
     GW->>PG: 6. Register providers from DB
-    GW->>PG: 7. Wire embedding provider to PGMemoryStore
-    GW->>PG: 8. Backfill memory embeddings (background)
+    GW->>PG: 7. Wire embedding provider to vector-enabled PG stores
+    GW->>PG: 8. Backfill missing embeddings in bounded background batches
 
     GW->>GW: 9. Register config-based providers
     GW->>GW: 10. Create tool registry (filesystem, exec, web, memory, browser, TTS, subagent, MCP)
@@ -302,6 +302,15 @@ sequenceDiagram
     GW->>Engine: 21. Start skills watcher + inbound consumer
     GW->>Engine: 22. Listen on host:port
 ```
+
+Embedding recovery covers memory chunks, knowledge graph entities, active
+skills, non-cancelled team tasks, active agents, episodic summaries, and vault
+documents. The process-wide provider is resolved from the master tenant because
+startup recovery may process semantic content from multiple tenants. Agent,
+episodic, and vault backfills run sequentially with independent deadlines and
+bounded batches. They only select rows whose embedding is `NULL`, re-check the
+source fields before writing, isolate malformed rows, and can retry remaining
+rows on the next startup.
 
 ---
 

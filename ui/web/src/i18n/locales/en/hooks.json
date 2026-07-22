@@ -72,6 +72,7 @@
     "headers": "Headers",
     "bodyTemplate": "Body Template",
     "promptTemplate": "Prompt Template",
+    "provider": "Provider",
     "model": "Model",
     "maxInvocationsPerTurn": "Max Invocations per Turn",
     "scriptSource": "Script source (ES5.1 JavaScript)",
@@ -144,6 +145,8 @@
     "promptRequiresMatcher": "Prompt hooks require a matcher or if_expr",
     "invalidRegex": "Invalid regex",
     "promptTemplateRequired": "Prompt template is required",
+    "promptProviderRequired": "Provider is required",
+    "promptModelRequired": "Model is required",
     "scriptSourceRequired": "Script source is required"
   },
   "decision": {

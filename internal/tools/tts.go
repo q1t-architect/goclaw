@@ -235,8 +235,8 @@ func (t *TtsTool) resolveTenantProvider(ctx context.Context, mgr *tts.Manager, r
 // resolveAgentGenericTTSParams reads the per-agent TTSParams generic map from
 // the dispatcher-injected AgentAudioSnapshot. Returns nil when no snapshot
 // is present or no tts_params are configured. The caller is responsible for
-// calling audio.AdaptAgentParams(generic, providerName) PER-ATTEMPT to convert
-// generic keys to provider-specific keys (Finding #1 CRITICAL).
+// calling audio.AdaptAgentParams(generic, providerName) for each provider attempt
+// so generic keys are converted to the correct provider-specific keys.
 func (t *TtsTool) resolveAgentGenericTTSParams(ctx context.Context) map[string]any {
 	snap, ok := store.AgentAudioFromCtx(ctx)
 	if !ok || len(snap.OtherConfig) == 0 {
@@ -275,7 +275,7 @@ func (t *TtsTool) Execute(ctx context.Context, args map[string]any) *Result {
 	argModel, _ := args["model"].(string)
 	providerName, _ := args["provider"].(string)
 
-	// Read generic agent TTS params once; adapt PER-ATTEMPT below (Finding #1 CRITICAL).
+	// Read generic agent TTS params once; adapt them for each provider attempt below.
 	// Storing generic keys here so each fallback provider gets its own adapted copy.
 	genericAgentParams := t.resolveAgentGenericTTSParams(ctx)
 
@@ -284,17 +284,16 @@ func (t *TtsTool) Execute(ctx context.Context, args map[string]any) *Result {
 	mgr := t.manager
 	t.mu.RUnlock()
 
-	effectiveProvider := providerName
-	if effectiveProvider == "" {
-		effectiveProvider = t.resolvePrimary(ctx, mgr)
-	}
-	voice, model, voiceFromAgent := t.resolveVoiceAndModel(ctx, effectiveProvider, argVoice, argModel)
-
 	// Determine format based on channel (read from ctx — thread-safe)
 	channel := ToolChannelFromCtx(ctx)
-	opts := tts.Options{Voice: voice, Model: model}
-	if channel == "telegram" {
-		opts.Format = "opus"
+	resolveProviderOpts := func(name string) tts.Options {
+		voice, model, voiceFromAgent := t.resolveVoiceAndModel(ctx, name, argVoice, argModel)
+		opts := tts.Options{Voice: voice, Model: model}
+		if channel == "telegram" {
+			opts.Format = "opus"
+		}
+		opts.Voice = applyVoiceCompat(name, opts.Voice, voiceFromAgent)
+		return opts
 	}
 
 	var result *tts.SynthResult
@@ -312,7 +311,7 @@ func (t *TtsTool) Execute(ctx context.Context, args map[string]any) *Result {
 			}
 			providerName = tenantName
 		}
-		opts.Voice = applyVoiceCompat(providerName, opts.Voice, voiceFromAgent)
+		opts := resolveProviderOpts(providerName)
 		if adapted := audio.AdaptAgentParams(genericAgentParams, providerName); len(adapted) > 0 {
 			opts.Params = mergeParams(opts.Params, adapted)
 		}
@@ -320,37 +319,20 @@ func (t *TtsTool) Execute(ctx context.Context, args map[string]any) *Result {
 	} else {
 		// Prefer the DB-configured tenant provider used by /tts and auto-TTS.
 		if p, tenantName, ok := t.resolveTenantProvider(ctx, mgr, ""); ok {
-			tenantOpts := opts
-			tenantOpts.Voice = applyVoiceCompat(tenantName, tenantOpts.Voice, voiceFromAgent)
+			tenantOpts := resolveProviderOpts(tenantName)
 			if adapted := audio.AdaptAgentParams(genericAgentParams, tenantName); len(adapted) > 0 {
-				tenantOpts.Params = mergeParams(opts.Params, adapted)
+				tenantOpts.Params = mergeParams(tenantOpts.Params, adapted)
 			}
 			result, err = p.Synthesize(ctx, text, tenantOpts)
 			if err != nil {
 				slog.Warn("tts tenant provider failed, trying fallback", "provider", tenantName, "error", err)
-				result, err = mgr.SynthesizeWithFallbackAdapted(ctx, text, opts, genericAgentParams)
+				primary := t.resolvePrimary(ctx, mgr)
+				result, err = mgr.SynthesizeWithFallbackResolved(ctx, text, primary, resolveProviderOpts, genericAgentParams)
 			}
 		} else {
 			// Resolve primary from tenant settings or default.
 			primary := t.resolvePrimary(ctx, mgr)
-			if p, ok := mgr.GetProvider(primary); ok {
-				// Adapt for the primary provider attempt specifically.
-				primaryOpts := opts
-				primaryOpts.Voice = applyVoiceCompat(primary, primaryOpts.Voice, voiceFromAgent)
-				if adapted := audio.AdaptAgentParams(genericAgentParams, primary); len(adapted) > 0 {
-					primaryOpts.Params = mergeParams(opts.Params, adapted)
-				}
-				result, err = p.Synthesize(ctx, text, primaryOpts)
-				if err != nil {
-					slog.Warn("tts primary provider failed, trying fallback", "provider", primary, "error", err)
-					// SynthesizeWithFallbackAdapted adapts genericAgentParams per-attempt
-					// (Finding #1 CRITICAL): each fallback provider receives its own
-					// provider-native keys, not the primary's adapted map.
-					result, err = mgr.SynthesizeWithFallbackAdapted(ctx, text, opts, genericAgentParams)
-				}
-			} else {
-				result, err = mgr.SynthesizeWithFallbackAdapted(ctx, text, opts, genericAgentParams)
-			}
+			result, err = mgr.SynthesizeWithFallbackResolved(ctx, text, primary, resolveProviderOpts, genericAgentParams)
 		}
 	}
 

@@ -151,12 +151,12 @@ func (d Decision) IsBlock() bool {
 // DecisionReason carries a human-readable explanation when Decision is
 // DecisionBlock (or DecisionAsk/DecisionDefer treated as block). This is
 // injected as a user message to trigger a retry iteration.
-//
 type FireResult struct {
-	Decision         Decision
-	DecisionReason   string
-	UpdatedToolInput map[string]any
-	UpdatedRawInput  *string
+	Decision          Decision
+	DecisionReason    string
+	AdditionalContext string
+	UpdatedToolInput  map[string]any
+	UpdatedRawInput   *string
 }
 
 // ─── Config & execution structs ──────────────────────────────────────────────
@@ -233,7 +233,7 @@ type Event struct {
 	HookEvent HookEvent
 
 	// PostModelResponse fields (populated when HookEvent == EventPostModelResponse).
-	ModelResponse string            // the generated response content
-	Thinking      string            // reasoning content (if any)
+	ModelResponse string               // the generated response content
+	Thinking      string               // reasoning content (if any)
 	ToolCalls     []providers.ToolCall // empty for final response, populated if tool calls present
 }

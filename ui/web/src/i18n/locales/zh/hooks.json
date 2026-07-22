@@ -72,6 +72,7 @@
     "headers": "请求头",
     "bodyTemplate": "请求体模板",
     "promptTemplate": "Prompt 模板",
+    "provider": "提供商",
     "model": "模型",
     "maxInvocationsPerTurn": "每轮最大调用次数",
     "scriptSource": "脚本源码（ES5.1 JavaScript）",
@@ -144,6 +145,8 @@
     "promptRequiresMatcher": "Prompt 钩子需要 matcher 或 if_expr",
     "invalidRegex": "无效的正则表达式",
     "promptTemplateRequired": "Prompt 模板为必填项",
+    "promptProviderRequired": "提供商为必填项",
+    "promptModelRequired": "模型为必填项",
     "scriptSourceRequired": "脚本源码为必填项"
   },
   "decision": {

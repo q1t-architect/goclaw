@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"log/slog"
 	"maps"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -198,6 +199,7 @@ func (d *stdDispatcher) runSync(ctx context.Context, ev Event, chain []HookConfi
 		evMut.ToolInput = cloneMap(ev.ToolInput)
 	}
 	mutated := false
+	additionalContexts := make([]string, 0, len(chain))
 
 	for _, cfg := range chain {
 		if !cfg.Enabled {
@@ -259,6 +261,9 @@ func (d *stdDispatcher) runSync(ctx context.Context, ev Event, chain []HookConfi
 				)
 			}
 		}
+		if dec == DecisionAllow && scriptRes.AdditionalContext != "" {
+			additionalContexts = append(additionalContexts, scriptRes.AdditionalContext)
+		}
 
 		switch dec {
 		case DecisionBlock:
@@ -282,6 +287,7 @@ func (d *stdDispatcher) runSync(ctx context.Context, ev Event, chain []HookConfi
 	}
 
 	result := FireResult{Decision: DecisionAllow}
+	result.AdditionalContext = strings.Join(additionalContexts, "\n\n")
 	if mutated {
 		if evMut.ToolInput != nil {
 			result.UpdatedToolInput = evMut.ToolInput

@@ -72,6 +72,7 @@
     "headers": "Заголовки",
     "bodyTemplate": "Шаблон тела",
     "promptTemplate": "Шаблон промпта",
+    "provider": "Провайдер",
     "model": "Модель",
     "maxInvocationsPerTurn": "Макс. вызовов за ход",
     "scriptSource": "Исходный код скрипта (ES5.1 JavaScript)",
@@ -138,6 +139,8 @@
     "promptRequiresMatcher": "Хуки prompt требуют матчер или if_expr",
     "invalidRegex": "Недопустимый regex",
     "promptTemplateRequired": "Шаблон промпта обязателен",
+    "promptProviderRequired": "Провайдер обязателен",
+    "promptModelRequired": "Модель обязательна",
     "scriptSourceRequired": "Исходный код скрипта обязателен"
   },
   "decision": {

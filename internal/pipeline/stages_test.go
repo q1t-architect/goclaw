@@ -2631,6 +2631,32 @@ func TestFinalizeStage_PopulatesFileSizes_SkipsNonexistent(t *testing.T) {
 
 // --- ContextStage tests ---
 
+func TestContextStage_AppendsHookAdditionalContextToSystemPromptInput(t *testing.T) {
+	t.Parallel()
+	var capturedExtra string
+	deps := &PipelineDeps{
+		Hooks: toolStageHookDispatcher{fire: func(_ context.Context, ev hooks.Event) (hooks.FireResult, error) {
+			if ev.HookEvent == hooks.EventUserPromptSubmit {
+				return hooks.FireResult{Decision: hooks.DecisionAllow, AdditionalContext: "mandatory workflow"}, nil
+			}
+			return hooks.FireResult{Decision: hooks.DecisionAllow}, nil
+		}},
+		BuildMessages: func(_ context.Context, input *RunInput, _ []providers.Message, _ string) ([]providers.Message, error) {
+			capturedExtra = input.ExtraSystemPrompt
+			return []providers.Message{{Role: "system", Content: input.ExtraSystemPrompt}}, nil
+		},
+	}
+	state := defaultState()
+	state.Input.ExtraSystemPrompt = "existing context"
+	stage := NewContextStage(deps)
+	if err := stage.Execute(context.Background(), state); err != nil {
+		t.Fatalf("Execute() error: %v", err)
+	}
+	if capturedExtra != "existing context\n\nmandatory workflow" {
+		t.Fatalf("extra system prompt=%q", capturedExtra)
+	}
+}
+
 func TestContextStage_ResolveWorkspace(t *testing.T) {
 	t.Parallel()
 	wantWS := &workspace.WorkspaceContext{ActivePath: "/resolved"}
