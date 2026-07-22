@@ -72,6 +72,7 @@
     "headers": "Headers",
     "bodyTemplate": "Mẫu body",
     "promptTemplate": "Mẫu prompt",
+    "provider": "Nhà cung cấp",
     "model": "Mô hình",
     "maxInvocationsPerTurn": "Số lần gọi tối đa mỗi lượt",
     "scriptSource": "Mã nguồn script (ES5.1 JavaScript)",
@@ -144,6 +145,8 @@
     "promptRequiresMatcher": "Hook prompt yêu cầu matcher hoặc if_expr",
     "invalidRegex": "Regex không hợp lệ",
     "promptTemplateRequired": "Mẫu prompt là bắt buộc",
+    "promptProviderRequired": "Nhà cung cấp là bắt buộc",
+    "promptModelRequired": "Mô hình là bắt buộc",
     "scriptSourceRequired": "Mã nguồn script là bắt buộc"
   },
   "decision": {

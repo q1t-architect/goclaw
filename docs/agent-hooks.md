@@ -107,7 +107,8 @@ function handle(event) {
   "matcher": "^(exec|shell|write_file)$",
   "config": {
     "prompt_template": "Evaluate safety of this tool call.",
-    "model": "haiku",
+    "provider": "openai",
+    "model": "gpt-4.1-mini",
     "max_invocations_per_turn": 5
   }
 }
@@ -116,6 +117,7 @@ function handle(event) {
 Required:
 - `prompt_template` — system-level instruction the evaluator receives.
 - `matcher` or `if_expr` — runaway-cost guard; prevents firing the LLM on every event.
+- `provider` and `model` — required for prompt hooks created or edited in the dashboard; select the pair from the configured provider catalog. Legacy model-only hooks remain supported at runtime.
 
 Safeguards:
 - **Structured output**: evaluator MUST call a `decide(decision, reason, injection_detected, updated_input)` tool. Free-text responses fail-closed.
