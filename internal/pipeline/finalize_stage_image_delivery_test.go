@@ -23,7 +23,7 @@ func TestFinalizeStage_GeneratedImageReachesMediaResults(t *testing.T) {
 
 	deps := &PipelineDeps{
 		FlushMessages:  func(context.Context, string, []providers.Message) error { return nil },
-		UpdateMetadata: func(context.Context, string, providers.Usage, int) error { return nil },
+		UpdateMetadata: func(context.Context, string, providers.Usage, providers.Usage, int) error { return nil },
 		// Simulates persistAssistantImages: real implementation decodes base64,
 		// writes to workspace/media/, and appends MediaRefs to msg.
 		PersistAssistantImages: func(msg *providers.Message, _ string) {
@@ -73,7 +73,7 @@ func TestFinalizeStage_NoGeneratedImagesNoMediaResults(t *testing.T) {
 
 	deps := &PipelineDeps{
 		FlushMessages:  func(context.Context, string, []providers.Message) error { return nil },
-		UpdateMetadata: func(context.Context, string, providers.Usage, int) error { return nil },
+		UpdateMetadata: func(context.Context, string, providers.Usage, providers.Usage, int) error { return nil },
 	}
 
 	stage := NewFinalizeStage(deps)

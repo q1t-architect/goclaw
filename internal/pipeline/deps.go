@@ -121,9 +121,13 @@ type PipelineDeps struct {
 	DeduplicateMediaSuffix func(content, suffix string) string
 	IsSilentReply          func(content string) bool
 	EmitSessionCompleted   func(ctx context.Context, sessionKey string, msgCount, tokensUsed, compactionCount int)
-	UpdateMetadata         func(ctx context.Context, sessionKey string, usage providers.Usage, msgCount int) error
-	BootstrapCleanup       func(ctx context.Context, state *RunState) error
-	MaybeSummarize         func(ctx context.Context, sessionKey string)
+	// UpdateMetadata persists run token accounting: usage is the run-cumulative
+	// total (billing/AccumulateTokens); lastUsage is the final iteration's own
+	// usage — its ContextTokens() is the session's current context size
+	// (SetLastPromptTokens → sessions context display + compaction calibration).
+	UpdateMetadata   func(ctx context.Context, sessionKey string, usage, lastUsage providers.Usage, msgCount int) error
+	BootstrapCleanup func(ctx context.Context, state *RunState) error
+	MaybeSummarize   func(ctx context.Context, sessionKey string)
 }
 
 // FireHook is nil-safe. Returns FireResult{Decision: DecisionAllow} when no

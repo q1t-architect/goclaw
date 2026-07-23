@@ -32,6 +32,19 @@ func SumCallUsage(calls []CallUsage) Usage {
 	return total
 }
 
+// ContextTokens returns the full prompt-side size of a single LLM call —
+// the actual context the model saw — normalizing provider cache accounting.
+// Anthropic-style usage reports input_tokens EXCLUDING cached segments, so
+// cache read/creation tokens must be added back; OpenAI-style usage
+// (PromptTokensIncludeCachedSegments=true) already includes them.
+// Only meaningful for per-call usage, not run-cumulative totals.
+func (u Usage) ContextTokens() int {
+	if u.PromptTokensIncludeCachedSegments {
+		return u.PromptTokens
+	}
+	return u.PromptTokens + u.CacheReadTokens + u.CacheCreationTokens
+}
+
 // SumCallCost totals the per-call USD cost (0 when pricing was unavailable).
 func SumCallCost(calls []CallUsage) float64 {
 	var total float64

@@ -95,6 +95,12 @@ func (s *ThinkStage) Execute(ctx context.Context, state *RunState) error {
 		if resp.Usage.PromptTokensIncludeCachedSegments {
 			state.Think.TotalUsage.PromptTokensIncludeCachedSegments = true
 		}
+		// Snapshot per-call usage: the LAST iteration's prompt size IS the
+		// session's current context. Keep the previous snapshot when a response
+		// carries no prompt tokens (e.g. providers that omit usage on some turns).
+		if resp.Usage.PromptTokens > 0 {
+			state.Think.LastUsage = *resp.Usage
+		}
 	}
 
 	if isEmptyLengthResponse(resp) {
